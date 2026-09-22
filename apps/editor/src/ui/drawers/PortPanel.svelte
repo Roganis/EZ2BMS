@@ -5,6 +5,7 @@
 
   const s = app.settings;
   const port = app.port;
+  const skin = app.skin;
   const web = app.backend.kind === 'web';
 
   async function pick(key: 'gameRoot' | 'songsRoot', title: string) {
@@ -89,6 +90,38 @@
     </div>
   </div>
 
+  <h3>Play field</h3>
+  <label class="check"
+    ><input
+      type="checkbox"
+      checked={s.data.gameSkin}
+      disabled={!s.data.gameRoot}
+      onchange={(e) => s.set('gameSkin', e.currentTarget.checked)}
+    /> Draw with the game's own panel</label
+  >
+  <p class="hint" data-testid="skin-status">
+    {#if skin.status.kind === 'ready'}
+      <span class="okay">✓</span>
+      {skin.status.text}{#if skin.status.missing.length}
+        · <span class="warn">{skin.status.missing.length} textures not found</span>{/if}
+    {:else if skin.status.kind === 'none' || skin.status.kind === 'error'}
+      <span class="warn">{skin.status.text}</span> - drawing the neon skin
+    {:else}
+      {skin.status.text}
+    {/if}
+  </p>
+  {#if skin.status.kind === 'ready' && skin.status.missing.length}
+    <details>
+      <summary>Not found</summary>
+      <ul class="missing-list">
+        {#each skin.status.missing as m (m)}<li><code>{m}</code></li>{/each}
+      </ul>
+    </details>
+  {/if}
+  {#if s.data.gameRoot}
+    <button class="ez-btn" onclick={() => skin.reload()}>Reload the panel</button>
+  {/if}
+
   {#if port.probe}
     <h3>This ez2play</h3>
     <p class="hint">
@@ -160,5 +193,16 @@
   }
   small {
     color: var(--ink-faint);
+  }
+  .okay {
+    color: var(--ok);
+  }
+  .missing-list {
+    margin: 4px 0 0;
+    padding-left: 16px;
+    font-size: 11.5px;
+  }
+  .missing-list code {
+    direction: ltr;
   }
 </style>

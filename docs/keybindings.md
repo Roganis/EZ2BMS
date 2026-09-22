@@ -73,6 +73,7 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 | EZ2PORT log               |                   |                |
 | EZ2PORT settings          |                   |                |
 | Finer snap                | `]`               |                |
+| Game skin on / off        |                   |                |
 | Go to last note           | `End`             |                |
 | Go to measure…            |                   | `goto measure` |
 | Go to start               | `Home`            |                |

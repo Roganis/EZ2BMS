@@ -6,7 +6,7 @@ judgement of the game, not a spreadsheet of channels - hit Tab to play what you
 just wrote the way the engine will play it, and publish a song package the
 engine loads as-is.
 
-> Work in progress. Milestone 1 ("chart & play core") is nearly complete; the
+> Work in progress. Milestone 1 ("chart & play core") is written; the
 > checklist below is the source of truth for what exists, and
 > [AI-DISCLOSURE.md](AI-DISCLOSURE.md) says what has and has not been checked
 > on real machines.
@@ -49,6 +49,7 @@ still works, with a procedural skin and plaintext packages.
 pnpm install
 pnpm tauri dev          # the desktop app (Linux: libwebkit2gtk-4.1-dev, libasound2-dev)
 pnpm dev                # or just the editor in a browser, with a demo song and silent audio
+                        # (add ?skin to the URL for a made-up game folder: the game-skin path)
 pnpm fixtures           # writes fixtures-out/: one playable test song per EZ2PORT mode,
                         # with synthesized WAV sounds - open one, press Space, Tab, F5
 ```
@@ -92,7 +93,7 @@ pnpm tauri dev          # the desktop app
 - [x] M1.10 Tauri shell + IPC (files, settings, audio, clock stream, publish, test runs)
 - [x] M1.11 Editor shell: backend bridge (Tauri + in-browser mock), state, command registry, palette, song select, drawers
 - [x] M1.12 Playfield renderer: EZ2PORT's lanes and scroll in Pixi, neon skin, every mode on both sides, background rack, minimap
-- [ ] M1.12b The game's own skin from `.pvi`/`.abm`
+- [x] M1.12b The game's own skin from `.pvi`/`.abm` (lanes, note art, holds, beams, key panel, target bar, press glow - [compat](docs/ez2port-compat.md))
 - [x] M1.13 Tools and drawers (draw, drag-to-hold, move, resize, rubber band, erase, step input; sounds, inspector, chart info, timing)
 - [x] M1.14 Audio in the editor (the publish compiler feeds the engine, play from cursor on the audio clock, audition, mute background, solo)
 - [x] M1.15 Play mode (autoplay and test play judged by the port of `score.c`, your `keys.ini`, HUD, result card)

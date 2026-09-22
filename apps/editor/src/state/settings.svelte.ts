@@ -21,6 +21,8 @@ export interface SettingsData {
   inputOffsetMs: number;
   /** Key rebinds: command id -> keys. */
   keys: Record<string, string[]>;
+  /** Draw the playfield with the game folder's own panel when it has one. */
+  gameSkin: boolean;
 }
 
 export const DEFAULT_SETTINGS: SettingsData = {
@@ -35,6 +37,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   visualOffsetMs: 0,
   inputOffsetMs: 0,
   keys: {},
+  gameSkin: true,
 };
 
 export class Settings {

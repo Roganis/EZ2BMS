@@ -18,9 +18,10 @@ cargo clippy --all-targets -- -D warnings
 ```
 
 In the cloud container Chromium is preinstalled under `/opt/pw-browsers`
-(Playwright 1.56.1 matches it). webkit2gtk and ALSA headers are NOT installed,
-so `src-tauri` and the `cpal` feature build only in CI or on a desktop; every
-other crate builds with `--no-default-features` / the `null` audio backend.
+(Playwright 1.56.1 matches it). webkit2gtk and ALSA headers are not in the base
+image: install the CI `tauri` job's apt list to build `src-tauri` and the
+`cpal` feature here; every other crate builds without them (the `null` audio
+backend).
 
 ## Rules
 

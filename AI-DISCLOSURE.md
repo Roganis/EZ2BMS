@@ -79,6 +79,25 @@ probe against the owner's build 1582 `ez2play.exe` locally; nothing from that
 file is in the repository, and the tests use a synthetic stand-in and a shell
 script in place of the game.
 
+### Publish, pre-flight check, new charts and hardening (M1.16-M1.18), 2026-09-22
+
+The assistant wrote chart-core's lint rules and the editor's Issues tab,
+Publish and Test in EZ2PORT, the new-chart dialog, autosave and crash
+recovery, the synthetic test songs (`pnpm fixtures`), the 50k-note benchmarks
+and the release workflow. Publish was exercised against the in-browser backend
+and its files are read back by the oracle; publishing into a real songs
+folder, F5 on a real EZ2PORT and the release workflow (it runs on a tag) have
+not been run.
+
+### The game's own play field (M1.12b), 2026-09-22
+
+The assistant wrote the reader for a mode's panel (`.pvi`, its `.abm` art and
+the `.gds`) and the renderer's game-skin path, transcribed from EZ2PORT's
+`scene/skin.c`. That file is outside the vendored core, so there is no oracle
+for it: it was tested on a panel drawn in code for the purpose
+(`apps/editor/src/bridge/demo-skin.ts`). No real panel has been loaded, so how
+close it looks to the port with real art is unchecked.
+
 ---
 
 ## Verification status
@@ -102,3 +121,7 @@ script in place of the game.
 | Editing: place, hold, move, resize, erase, undo, save byte-stable  | Playwright on the real playfield          | Yes, in the container |
 | Playback follows the clock; Play mode judges and shows a result    | Playwright, silent clock                  | Yes, in the container |
 | Test play feels right: latency, key response, sound on press       | not run                                   | **No** - owner        |
+| Lint catches what EZ2PORT would hide, reject or mis-play           | unit tests, rules taken from the port     | Yes, in the container |
+| The release workflow builds the installers                         | not run (needs a tag)                     | **No**                |
+| Game skin: lane boxes, note variants, holds, beams, target bar     | unit + Playwright tests, synthetic panel  | Yes, in the container |
+| The game skin on real panels looks like EZ2PORT's field            | not run (no game data here)               | **No** - owner        |

@@ -44,6 +44,16 @@ crates/
 third_party/ez2port-core/  vendored snapshot of EZ2PORT's ez2core (GPL-3.0-or-later)
 ```
 
+## Two skins, one playfield
+
+The playfield draws with a procedural neon skin, or, when a game folder is set
+and holds a panel for the chart's mode and side, with the game's own
+`.pvi`/`.abm` art: `skin/game.ts` finds and decodes it, `render/gameskin.ts`
+turns it into textures once, and the renderer draws with it. The game skin
+only changes the lane boxes, the judge line and how things look; scrolling,
+hit testing and the tools are the same code. What is reproduced from the
+port's `scene/skin.c`, and what is not, is in `ez2port-compat.md`.
+
 ## One compiler for playback and publishing
 
 `chart-core/src/publish/plan.ts` turns a chart into exactly what the package

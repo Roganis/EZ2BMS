@@ -11,6 +11,7 @@ import { Autosave, formatWhen } from './autosave';
 import { Commands } from '../commands/registry';
 import { Project, type ChartSlot } from './project.svelte';
 import { Settings } from './settings.svelte';
+import { SkinState } from './skin.svelte';
 import { ask, toast } from './toasts.svelte';
 import { View } from './view.svelte';
 
@@ -22,6 +23,7 @@ export class App {
   readonly play: PlayController;
   readonly port: PortState;
   readonly autosave: Autosave;
+  readonly skin: SkinState;
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
@@ -34,6 +36,7 @@ export class App {
     this.play = new PlayController(this);
     this.port = new PortState(this);
     this.autosave = new Autosave(backend);
+    this.skin = new SkinState(backend);
     this.commands.onError = (e, c) =>
       toast(`${c.title}: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }

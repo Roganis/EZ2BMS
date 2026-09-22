@@ -51,6 +51,19 @@ export interface Layout {
   gutter: { left: number; right: number };
   /** Background sounds, packed into sub-columns. */
   rack: { left: number; cols: number; colWidth: number };
+  /**
+   * With a game skin: the design x drawn at field.left and the skin's judge
+   * line, so skin coordinates map to the screen as
+   * x = field.left + (dx - x0) * scale, y = judgeY + (dy - skinJudgeY) * scale.
+   */
+  design: { x0: number; judgeY: number } | null;
+}
+
+/** Lane boxes from the game's skin, design units. */
+export interface SkinGeometry {
+  /** By bmson lane x. */
+  boxes: ReadonlyMap<number, { x: number; w: number }>;
+  judgeY: number;
 }
 
 export interface LayoutInput {
@@ -63,11 +76,17 @@ export interface LayoutInput {
   rackCols: number;
   /** 0..1: how much of the rack and off-mode gutter to show (Play hides them). */
   extras: number;
+  /** Lay the lanes out as the game's skin does (every column must have a box). */
+  skin?: SkinGeometry | null;
 }
 
 export function computeLayout(i: LayoutInput): Layout {
   const scale = Math.max(0.6, Math.min(4, i.height / DESIGN_H));
-  const laneUnits = i.columns.reduce((w, c) => w + LANE_W[c.kind] + GAP, -GAP);
+  const boxes = i.skin && i.columns.every((c) => i.skin!.boxes.has(c.x)) ? i.skin.boxes : null;
+  const x0 = boxes ? Math.min(...i.columns.map((c) => boxes.get(c.x)!.x)) : 0;
+  const laneUnits = boxes
+    ? Math.max(...i.columns.map((c) => boxes.get(c.x)!.x + boxes.get(c.x)!.w)) - x0
+    : i.columns.reduce((w, c) => w + LANE_W[c.kind] + GAP, -GAP);
   const offUnits = i.offModeXs.length * (OFF_W + GAP) * i.extras;
   const rackUnits = (i.rackCols * RACK_COL + (i.rackCols ? 12 : 0)) * i.extras;
   const need = GUTTER + laneUnits + 12 + offUnits + rackUnits + 16;
@@ -81,12 +100,13 @@ export function computeLayout(i: LayoutInput): Layout {
   fieldLeft = Math.min(fieldLeft, Math.max(GUTTER * s, i.width - extrasW - fieldW - 8 * s));
   let x = fieldLeft;
   const lanes = i.columns.map((c) => {
+    const b = boxes?.get(c.x);
     const g: LaneGeom = {
       x: c.x,
       kind: c.kind,
       short: c.short,
-      left: x,
-      width: LANE_W[c.kind] * s,
+      left: b ? fieldLeft + (b.x - x0) * s : x,
+      width: (b ? b.w : LANE_W[c.kind]) * s,
       offMode: false,
     };
     x += (LANE_W[c.kind] + GAP) * s;
@@ -112,12 +132,14 @@ export function computeLayout(i: LayoutInput): Layout {
     width: i.width,
     height: i.height,
     scale: s,
-    judgeY: i.height - JUDGE_FROM_BOTTOM * s,
+    // The game's judge line sits as far above the bottom as it does on its 480-line screen.
+    judgeY: i.height - (boxes ? DESIGN_H - i.skin!.judgeY : JUDGE_FROM_BOTTOM) * s,
     field: { left: fieldLeft, right: fieldRight },
     lanes,
     offLanes,
     gutter: { left: Math.max(0, fieldLeft - GUTTER * s), right: fieldLeft - 6 * s },
     rack: { left: x, cols: i.rackCols, colWidth: RACK_COL * s * i.extras },
+    design: boxes ? { x0, judgeY: i.skin!.judgeY } : null,
   };
 }
 

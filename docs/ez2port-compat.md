@@ -54,6 +54,45 @@ Two deliberate differences: EZ2BMS resamples with a proper filter (the port
 steps through a non-44.1 kHz sample nearest-neighbour), and it publishes every
 keysound at 44.1 kHz so the port never has to resample one.
 
+## The game's own play field (scene/skin.c, not in the oracle)
+
+With a game folder set, the playfield draws with the mode's own panel, the way
+EZ2PORT's `scene/skin.c` does. That file is outside the vendored core, so this
+is transcribed and checked with unit and Playwright tests on a synthetic panel
+(`apps/editor/src/bridge/demo-skin.ts`), not compared against C.
+
+- **Which files.** `system/<Mode>/panel/STYLE_<Mode>1_<player>.pvi` - style 1,
+  the plain panel. Every path component matches in any case; a texture
+  reference is tried as `.abm` first (the name up to its first dot), then as
+  written, in the panel folder and then under the game root; a numbered series
+  stops at the first gap; exact black is transparent, as on the cabinet. A
+  texture the folder lacks is not drawn and is listed in the EZ2PORT tab.
+- **Which track is which lane.** Lane _i_ of the mode's `.gds` (player one's
+  slot, in file order) draws with `[Track`_i+1_`]`. Without a `.gds` the
+  bundled order is used, in which 5KeyMix's and ScratchMix's keys are
+  Track2-Track6 (their descriptors open on the turntable).
+- **Drawn as the port draws them:** one black gradient (alpha 0x96 to 0xff)
+  under every Track box, only when Track1's colours are set - `BkColor1/2` are
+  not lane fills; the border lines, outside the lane; each note at its
+  texture's own size, centred in the lane, in the colour variant picked by the
+  position in the beat (variant 0 for a third of the beat, then 1-4 a sixth
+  each); holds as the three-slice bar (top half, one stretched middle row,
+  bottom half); the beam lines above and below each note (a fourteenth of the
+  lane's height at the scroll rate, `BkColor1`'s alpha, each channel scaled
+  255/200); the key panel at its texture's size; the target bar, its frame
+  cycling with the beat, additive, swaying a pixel or two while playing; the
+  measure-line texture; the press glow and press beam while a key is down.
+- **Different on purpose.** The field is centred in the window rather than at
+  the panel's x, with the judge line as far above the bottom as on the
+  480-line screen. The press beam is drawn at full height while the key is
+  down (the port grows and shrinks it). The gauge, score, combo, judgement
+  clips, bombs and groove lights are not drawn; the editor's HUD shows those.
+  D3D blend pairs are reduced to normal or additive. Black, CV2Mix and the
+  other styles and note skins are not offered yet.
+- **2P.** The game's 2P panel keeps 1P's lane order, moved to the right (the
+  port measured the original doing so), and the editor follows the panel. The
+  neon skin still mirrors 2P, as BmsTWO's P2 skins do.
+
 ## Port behaviour worth knowing
 
 - **Some hold kinds make 100% unreachable, or pass it.** The maximum score

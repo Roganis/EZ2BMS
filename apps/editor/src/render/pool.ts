@@ -26,6 +26,8 @@ export class SpritePool {
     s.visible = true;
     s.alpha = 1;
     s.tint = 0xffffff;
+    // A sprite sized for one texture keeps that scale on the next; start from natural size.
+    if (s.scale.x !== 1 || s.scale.y !== 1) s.scale.set(1, 1);
     this.used++;
     return s;
   }

@@ -19,7 +19,11 @@ const AUDIO = /\.(wav|ogg|flac|mp3|ssf|ezw|oga)$/i;
 const IMAGE = /\.(png|jpe?g|bmp)$/i;
 const SETTINGS_KEY = 'ez2bms.settings';
 
-export function webBackend(seed: Map<string, Uint8Array> = demoFiles()): Backend {
+/** `defaults` are settings used where the stored ones say nothing (the demo's game folder). */
+export function webBackend(
+  seed: Map<string, Uint8Array> = demoFiles(),
+  defaults: Record<string, unknown> = {},
+): Backend {
   const files = new Map(seed);
   const mtimes = new Map<string, number>();
   const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '');
@@ -107,9 +111,15 @@ export function webBackend(seed: Map<string, Uint8Array> = demoFiles()): Backend
     },
     loadSettings: async () => {
       try {
-        return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') as Record<string, unknown>;
+        const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') as Record<
+          string,
+          unknown
+        >;
+        // A default stands in for a setting stored empty, too (settings are saved whole).
+        for (const [k, v] of Object.entries(defaults)) stored[k] ??= v;
+        return stored;
       } catch {
-        return {};
+        return { ...defaults };
       }
     },
     saveSettings: async (v) => {

@@ -97,6 +97,18 @@ body {
   background: transparent;
   accent-color: var(--neon);
 }
+.ez-form label.check {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12.5px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink-dim);
+}
+.ez-form label.check input {
+  width: auto;
+}
 .ez-form .hint {
   color: var(--ink-dim);
   font-size: 12px;

@@ -203,6 +203,18 @@ export function registerBuiltins(app: App): void {
       },
     },
     {
+      id: 'view.gameSkin',
+      title: 'Game skin on / off',
+      group: 'View',
+      enabled: () => !!app.settings.data.gameRoot,
+      run: () => {
+        const on = !app.settings.data.gameSkin;
+        app.settings.set('gameSkin', on);
+        if (on && app.skin.status.kind !== 'ready' && app.skin.status.kind !== 'loading')
+          toast(app.skin.status.text, 'warn');
+      },
+    },
+    {
       id: 'view.left',
       title: 'Show / hide sounds',
       group: 'View',

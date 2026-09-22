@@ -158,6 +158,12 @@
     };
   });
 
+  // The game's own panel for this mode and side, when there is a game folder.
+  $effect(() => {
+    void app.skin.rev;
+    void app.skin.show(app.settings.data.gameRoot, slot.mode, v.side, app.settings.data.gameSkin);
+  });
+
   $effect(() => {
     renderer?.set({
       doc: slot.doc,
@@ -175,6 +181,7 @@
       pressed: app.play.pressed,
       hidden: app.play.hidden,
       live: v.playing,
+      skin: app.skin.current,
     });
   });
 
