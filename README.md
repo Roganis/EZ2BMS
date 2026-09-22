@@ -65,7 +65,7 @@ pnpm tauri dev          # the desktop app
 - [x] M1.2 Chart model + bmson read/write ([dialect](docs/bmson-dialect.md))
 - [x] M1.3 Timing (bmson view + the engine's tick/f32 tempo map, bit-identical to EZ2PORT; EZFF read/write)
 - [x] M1.4 Modes + EZ2 data parsers (`.gds`, `.pvi`, `.abm`, key tables, cipher) - [compat](docs/ez2port-compat.md)
-- [ ] M1.5 Editing core
+- [x] M1.5 Editing core (ops with inverses, transactions, drafts, history, lane rules, commands)
 - [ ] M1.6 Publish plan + package writers
 - [ ] M1.7 Engine emulation (judge, holds, gauge, score)
 - [ ] M1.8 Rust audio engine
