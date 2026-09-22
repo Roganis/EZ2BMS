@@ -4,5 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+description = "EZ2BMS: find EZ2PORT's ez2play, learn what it supports, and run a chart in it"
 
 [dependencies]
+thiserror.workspace = true

@@ -39,7 +39,7 @@ still works, with a procedural skin and plaintext packages.
 | `crates/ez2bms-launch`  | Rust: find and launch `ez2play`                                                            |
 | `crates/ez2port-oracle` | Rust + C, **tests only**: EZ2PORT's own core, used to prove parity                         |
 | `src-tauri`             | the desktop host                                                                           |
-| `docs/`                 | architecture, the bmson dialect, the EZ2PORT contract, performance log                     |
+| `docs/`                 | architecture, the bmson dialect, the EZ2PORT contract and requests, performance log        |
 
 ## Building
 
@@ -69,7 +69,7 @@ pnpm tauri dev          # the desktop app
 - [x] M1.6 Publish plan + package writers (oracle: identical to the port importer on lanes and background)
 - [x] M1.7 Engine emulation (judge, holds, gauge, score) (oracle: random scripts and the synthetic player agree number for number)
 - [x] M1.8 Rust audio engine (voice rules, mid-sample start, allocation-free renderer; oracle: published `.ssf` files)
-- [ ] M1.9 `ez2play` launcher
+- [x] M1.9 `ez2play` launcher (feature probe without running it, isolated songs folder, log capture) - [requests to the port](docs/ez2port-requests.md)
 - [ ] M1.10 Tauri shell
 - [ ] M1.11-15 Editor: UI, renderer + skins, tools, audio, Play mode
 - [ ] M1.16-18 Test in EZ2PORT, new chart, lint, hardening

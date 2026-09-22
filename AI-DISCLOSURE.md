@@ -52,6 +52,16 @@ backends, offline rendering and `.ssf` cutting. It was built and tested in a
 container with no sound card: the cpal backend compiles here but has never
 produced sound.
 
+### Launcher and requests to the port (M1.9), 2026-09-22
+
+The assistant wrote `crates/ez2bms-launch` (it reads `ez2play`'s options from
+the executable, writes packages into a songs folder by staging and renaming,
+and runs ez2play with its output captured) and `docs/ez2port-requests.md`, the
+spec for the port-side features EZ2BMS will use when they exist. It checked the
+probe against the owner's build 1582 `ez2play.exe` locally; nothing from that
+file is in the repository, and the tests use a synthetic stand-in and a shell
+script in place of the game.
+
 ---
 
 ## Verification status
@@ -68,3 +78,5 @@ produced sound.
 | The renderer never allocates                                       | a counting allocator in a test            | Yes, in the container |
 | Published `.ssf` files load in EZ2PORT's parser                    | oracle                                    | Yes, in the container |
 | Sound on a real device (cpal), latency, no glitches                | not run (no audio device here)            | **No** - owner        |
+| The probe reads build 1582's options and commit                    | run on the owner's `ez2play.exe` locally  | Yes, in the container |
+| F5 plays a chart in EZ2PORT (Windows, path with spaces)            | a fake ez2play on Linux only              | **No** - owner        |

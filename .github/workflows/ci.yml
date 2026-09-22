@@ -49,3 +49,14 @@ jobs:
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test
       - run: cargo build -p ez2bms-audio --features cpal
+
+  # The two crates that run on the owner's Windows machines: audio (WASAPI
+  # through cpal) and the ez2play launcher (CREATE_NO_WINDOW).
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p ez2bms-audio -p ez2bms-launch
+      - run: cargo build -p ez2bms-audio --features cpal
