@@ -101,7 +101,7 @@ export function registerBuiltins(app: App): void {
       id: 'view.palette',
       title: 'Command palette',
       group: 'View',
-      keys: ['Mod+K', 'Mod+Shift+P'],
+      keys: ['Mod+K'],
       global: true,
       run: () => (v.paletteOpen = !v.paletteOpen),
     },

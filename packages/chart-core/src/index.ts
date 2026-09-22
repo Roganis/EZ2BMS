@@ -42,3 +42,4 @@ export * from './engine/songini';
 export * from './engine/score';
 export * from './engine/session';
 export * from './engine/judge-sim';
+export * from './lint/lint';

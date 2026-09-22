@@ -6,6 +6,7 @@ import { AudioClient } from '../audio/client.svelte';
 import { createBackend, joinPath, type AudioInfo, type Backend } from '../bridge';
 import { laneKeysFromIni } from '../input/lanekeys';
 import { PlayController } from '../play/controller.svelte';
+import { PortState } from './port.svelte';
 import { Commands } from '../commands/registry';
 import { Project, type ChartSlot } from './project.svelte';
 import { Settings } from './settings.svelte';
@@ -18,6 +19,7 @@ export class App {
   readonly commands = new Commands();
   readonly audio: AudioClient;
   readonly play: PlayController;
+  readonly port: PortState;
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
@@ -28,6 +30,7 @@ export class App {
     this.settings = new Settings(backend);
     this.audio = new AudioClient(backend, this.view, this.settings);
     this.play = new PlayController(this);
+    this.port = new PortState(this);
     this.commands.onError = (e, c) =>
       toast(`${c.title}: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }

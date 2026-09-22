@@ -3,6 +3,7 @@
   import { registerBuiltins } from '../commands/builtin';
   import { registerNoteCommands } from '../commands/notes';
   import { registerPlayCommands } from '../commands/play';
+  import { registerPortCommands } from '../commands/port';
   import { app } from '../state/app.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import Editor from './Editor.svelte';
@@ -12,6 +13,7 @@
   registerBuiltins(app);
   registerNoteCommands(app);
   registerPlayCommands(app);
+  registerPortCommands(app);
 
   onMount(() => {
     void app.init();

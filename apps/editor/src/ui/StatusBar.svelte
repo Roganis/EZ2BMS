@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { songFindings } from '../port/lint';
   import { app } from '../state/app.svelte';
   import type { Project } from '../state/project.svelte';
 
@@ -17,6 +18,13 @@
     };
   });
   const audio = $derived(app.audioInfo);
+  const lint = $derived.by(() => {
+    const f = songFindings(app);
+    return {
+      errors: f.filter((x) => x.severity === 'error').length,
+      warnings: f.filter((x) => x.severity === 'warning').length,
+    };
+  });
 </script>
 
 <footer class="status">
@@ -29,6 +37,20 @@
     {#if stats.undo}<span class="dim">last: {stats.undo}</span>{/if}
   {/if}
   <span class="right">
+    <button
+      class="lint"
+      class:bad={lint.errors > 0}
+      onclick={() => app.commands.run('view.issues')}
+      data-testid="lint"
+    >
+      {#if lint.errors || lint.warnings}
+        {#if lint.errors}<b>{lint.errors} error{lint.errors === 1 ? '' : 's'}</b>{/if}
+        {#if lint.warnings}<i>{lint.warnings} warning{lint.warnings === 1 ? '' : 's'}</i>{/if}
+      {:else}ready for EZ2PORT{/if}
+    </button>
+    {#if app.port.runId !== null}<button class="lint" onclick={() => (app.port.logOpen = true)}
+        >EZ2PORT running</button
+      >{/if}
     {#if audio}
       <span class="audio {audio.backend}"
         >{audio.backend === 'cpal'
@@ -69,6 +91,24 @@
     margin-left: auto;
     display: flex;
     gap: 12px;
+  }
+  .lint {
+    all: unset;
+    cursor: pointer;
+    display: flex;
+    gap: 8px;
+    color: var(--ok);
+  }
+  .lint b {
+    color: var(--err);
+    font-weight: 600;
+  }
+  .lint i {
+    color: var(--warn);
+    font-style: normal;
+  }
+  .lint:hover {
+    text-decoration: underline;
   }
   .audio.null,
   .audio.web {

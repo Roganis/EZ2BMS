@@ -5,7 +5,7 @@ import type { ChannelId } from '@ez2bms/chart-core';
 
 export type ViewMode = 'edit' | 'play';
 export type Tool = 'draw' | 'select';
-export type RightDrawer = 'inspector' | 'chart' | 'timing' | 'port';
+export type RightDrawer = 'inspector' | 'chart' | 'timing' | 'issues' | 'port';
 
 /** EZ2PORT scrolls 1.6 px per tick at 100 %: 76.8 px per beat in its 480-line design space. */
 export const ENGINE_PX_PER_BEAT = 76.8;

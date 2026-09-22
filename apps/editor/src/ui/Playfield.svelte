@@ -12,6 +12,7 @@
   import Minimap from './Minimap.svelte';
   import PlayHud from './PlayHud.svelte';
   import ResultCard from './ResultCard.svelte';
+  import RunLog from './RunLog.svelte';
 
   let { slot }: { slot: ChartSlot } = $props();
   const v = app.view;
@@ -228,6 +229,9 @@
   <Minimap {slot} {lo} {hi} />
   {#if app.play.hud && (app.play.active || v.mode === 'play')}
     <PlayHud hud={app.play.hud} box={fieldBox} active={!!app.play.active} />
+  {/if}
+  {#if app.port.logOpen}
+    <RunLog />
   {/if}
   {#if app.play.result}
     <ResultCard

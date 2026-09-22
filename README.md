@@ -77,7 +77,9 @@ pnpm tauri dev          # the desktop app
 - [x] M1.13 Tools and drawers (draw, drag-to-hold, move, resize, rubber band, erase, step input; sounds, inspector, chart info, timing)
 - [x] M1.14 Audio in the editor (the publish compiler feeds the engine, play from cursor on the audio clock, audition, mute background, solo)
 - [x] M1.15 Play mode (autoplay and test play judged by the port of `score.c`, your `keys.ini`, HUD, result card)
-- [ ] M1.16-18 Test in EZ2PORT, new chart, lint, hardening
+- [x] M1.16 Publish and Test in EZ2PORT (F5), with the pre-flight check (errors block Publish) and a basic title plate
+- [ ] M1.17 New chart, autosave, crash recovery
+- [ ] M1.18 Hardening: fixtures, 50k-note benchmark, release workflow
 
 ### Later
 
