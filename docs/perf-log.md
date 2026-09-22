@@ -34,3 +34,29 @@ Reading: the JavaScript cost of placing ~10k sprites is about 1 ms, well inside
 the budget, so the scene-graph approach holds. Whether the GPU side holds on
 WebKitGTK is the open question the two _to do_ rows answer; the fallback plan
 if it does not is in `docs/architecture.md` (Risks).
+
+## M1.18 - the real editor on a 50k-note chart
+
+`packages/chart-core/test/bench.test.ts` and `apps/editor/tests/e2e/perf.spec.ts`
+build a synthetic 14K chart (`synthChart`: 50 000 notes, 1 500 sounds, holds
+of several kinds, a BPM change every 16 measures) and time what the editor
+does with it. Both run in CI with generous limits; these are the container's
+numbers (Node 22, headless Chromium 141 with SwiftShader).
+
+| Date       | What                                                         | Time         |
+| ---------- | ------------------------------------------------------------ | ------------ |
+| 2026-09-22 | Open: build the note index                                   | 29 ms        |
+| 2026-09-22 | One frame's visible-range queries (every lane, two measures) | 0.02 ms      |
+| 2026-09-22 | Place + move + undo twice                                    | 6.6 ms       |
+| 2026-09-22 | Save (byte-stable bmson)                                     | 172 ms       |
+| 2026-09-22 | Load (parse)                                                 | 59 ms        |
+| 2026-09-22 | Compile for playback / publish (whole chart)                 | 159 ms       |
+| 2026-09-22 | Pre-flight lint                                              | 31 ms        |
+| 2026-09-22 | Playfield draw, JS only, Edit zoom (median / p95)            | 1.4 / 6.1 ms |
+| 2026-09-22 | Playfield draw, JS only, zoomed right out (median / p95)     | 2.8 / 7.3 ms |
+
+Reading: per-frame work is inside the 4 ms budget at the median; the p95
+spikes are garbage collection and the software GL's texture uploads, to be
+re-measured on real webviews. The compile runs after edits settle (160 ms
+debounce), so at this size a recompile while playing is noticeable; making
+it incremental (per channel) is the plan's next step for the audio sync.

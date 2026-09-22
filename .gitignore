@@ -2,6 +2,7 @@ node_modules/
 dist/
 target/
 coverage/
+fixtures-out/
 playwright-report/
 test-results/
 *.log

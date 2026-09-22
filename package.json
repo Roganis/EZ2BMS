@@ -16,7 +16,8 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "e2e": "pnpm --filter @ez2bms/editor e2e",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "fixtures": "tsx scripts/gen-fixtures.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
@@ -26,6 +27,7 @@
     "globals": "^16.0.0",
     "prettier": "^3.9.8",
     "prettier-plugin-svelte": "^4.1.1",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.70.1"
   }

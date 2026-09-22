@@ -8,5 +8,6 @@ export * from './types';
 /** The desktop backend inside Tauri, the in-memory one anywhere else. */
 export function createBackend(): Backend {
   if ('__TAURI_INTERNALS__' in window) return tauriBackend();
-  return webBackend(demoFiles(new URLSearchParams(location.search).has('modes')));
+  const q = new URLSearchParams(location.search);
+  return webBackend(demoFiles(q.has('modes'), q.has('bench')));
 }

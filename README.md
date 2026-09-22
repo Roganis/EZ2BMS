@@ -6,8 +6,10 @@ judgement of the game, not a spreadsheet of channels - hit Tab to play what you
 just wrote the way the engine will play it, and publish a song package the
 engine loads as-is.
 
-> Work in progress. Milestone 1 ("chart & play core") is being built; the
-> checklist below is the source of truth for what exists.
+> Work in progress. Milestone 1 ("chart & play core") is nearly complete; the
+> checklist below is the source of truth for what exists, and
+> [AI-DISCLOSURE.md](AI-DISCLOSURE.md) says what has and has not been checked
+> on real machines.
 
 ## What it is for
 
@@ -40,6 +42,23 @@ still works, with a procedural skin and plaintext packages.
 | `crates/ez2port-oracle` | Rust + C, **tests only**: EZ2PORT's own core, used to prove parity                         |
 | `src-tauri`             | the desktop host                                                                           |
 | `docs/`                 | architecture, the bmson dialect, the EZ2PORT contract and requests, performance log        |
+
+## Trying it
+
+```sh
+pnpm install
+pnpm tauri dev          # the desktop app (Linux: libwebkit2gtk-4.1-dev, libasound2-dev)
+pnpm dev                # or just the editor in a browser, with a demo song and silent audio
+pnpm fixtures           # writes fixtures-out/: one playable test song per EZ2PORT mode,
+                        # with synthesized WAV sounds - open one, press Space, Tab, F5
+```
+
+In the app: **Open song folder** on the start screen, then click a lane to place
+a note, drag up for a hold, **Space** to hear it, **Tab** for the Play view,
+**Shift+Tab** to play it yourself with EZ2PORT's keys, **F5** to run it in
+EZ2PORT (set your game folder in the EZ2PORT tab first), **Ctrl+Shift+P** to
+publish. **Ctrl+K** finds everything else; all keys are in
+[docs/keybindings.md](docs/keybindings.md).
 
 ## Building
 
@@ -79,7 +98,7 @@ pnpm tauri dev          # the desktop app
 - [x] M1.15 Play mode (autoplay and test play judged by the port of `score.c`, your `keys.ini`, HUD, result card)
 - [x] M1.16 Publish and Test in EZ2PORT (F5), with the pre-flight check (errors block Publish) and a basic title plate
 - [x] M1.17 New chart (mode wheel, named like EZ2PORT's charts), new song, autosave and crash recovery
-- [ ] M1.18 Hardening: fixtures, 50k-note benchmark, release workflow
+- [x] M1.18 Hardening: test songs per mode (`pnpm fixtures`), 50k-note benchmarks ([perf log](docs/perf-log.md)), generated [key reference](docs/keybindings.md), release workflow
 
 ### Later
 

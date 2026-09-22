@@ -73,6 +73,8 @@ export class PlayfieldRenderer {
   };
   /** Rack chips as last drawn, for hit testing. */
   private rackHits: { id: NoteId; x: number; y: number; w: number; h: number }[] = [];
+  /** How long the last draws took (JS only, ms), for the performance log. */
+  readonly drawTimes: number[] = [];
   /** Called after each frame with the pulses on screen (bottom, top) and the layout. */
   onView: ((lo: number, hi: number, layout: Layout) => void) | undefined;
 
@@ -158,7 +160,10 @@ export class PlayfieldRenderer {
   private frame(): void {
     this.raf = 0;
     if (!this.state) return;
+    const t0 = performance.now();
     const animating = this.draw(this.state);
+    this.drawTimes.push(performance.now() - t0);
+    if (this.drawTimes.length > 240) this.drawTimes.shift();
     if (animating || this.state.live) this.invalidate();
   }
 

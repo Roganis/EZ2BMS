@@ -13,6 +13,7 @@ import {
   placeNote,
   serializeBmson,
   setBpmAt,
+  synthChart,
   type ModeId,
   type Tier,
 } from '@ez2bms/chart-core';
@@ -100,6 +101,11 @@ function laneTour(mode: ModeId): Uint8Array {
   return encodeUtf8(serializeBmson(doc.data));
 }
 
+/** A 50k-note, 1500-sound chart, for the renderer benchmark (?bench). */
+function benchChart(): Uint8Array {
+  return encodeUtf8(serializeBmson(synthChart({ mode: '14k', notes: 50_000, channels: 1500 })));
+}
+
 export const TOUR_MODES: readonly ModeId[] = [
   '5k-only',
   'scratch',
@@ -110,11 +116,12 @@ export const TOUR_MODES: readonly ModeId[] = [
   '14k',
 ];
 
-/** The demo song; with `modes`, one extra chart per EZ2PORT mode. */
-export function demoFiles(modes = false): Map<string, Uint8Array> {
+/** The demo song; with `modes`, one extra chart per EZ2PORT mode; with `bench`, a 50k-note chart. */
+export function demoFiles(modes = false, bench = false): Map<string, Uint8Array> {
   const files = new Map<string, Uint8Array>();
   files.set(`${DEMO_DIR}/streetmix1p-neonparade.bmson`, chart('5k', 'NM', 6, false));
   files.set(`${DEMO_DIR}/7streetmix1p-neonparade-hd.bmson`, chart('7k', 'HD', 12, true));
+  if (bench) files.set(`${DEMO_DIR}/spacemix1p-neonparade-ex.bmson`, benchChart());
   if (modes) {
     for (const m of TOUR_MODES) {
       if (m === '5k' || m === '7k') continue;
