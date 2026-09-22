@@ -52,6 +52,15 @@ backends, offline rendering and `.ssf` cutting. It was built and tested in a
 container with no sound card: the cpal backend compiles here but has never
 produced sound.
 
+### Editor (M1.11-M1.15), 2026-09-22
+
+The assistant wrote the editor front end in `apps/editor`: the bridge and
+its in-browser twin, state, commands and palette, the start screen and
+drawers, the Pixi playfield, the editing tools, playback on the audio clock
+and Play mode. It was exercised with Playwright in headless Chromium against
+the in-browser backend (silent audio); nobody has yet charted a song with it,
+heard it through a sound card, or played it on a keyboard in real time.
+
 ### Desktop host (M1.10), 2026-09-22
 
 The assistant wrote `src-tauri`: the commands above, the window and bundle
@@ -90,3 +99,6 @@ script in place of the game.
 | F5 plays a chart in EZ2PORT (Windows, path with spaces)            | a fake ez2play on Linux only              | **No** - owner        |
 | The desktop app starts (Linux)                                     | Xvfb, silent-clock fallback               | Yes, in the container |
 | The desktop app starts (Windows, WebView2) and plays sound         | CI builds and tests only                  | **No** - owner        |
+| Editing: place, hold, move, resize, erase, undo, save byte-stable  | Playwright on the real playfield          | Yes, in the container |
+| Playback follows the clock; Play mode judges and shows a result    | Playwright, silent clock                  | Yes, in the container |
+| Test play feels right: latency, key response, sound on press       | not run                                   | **No** - owner        |

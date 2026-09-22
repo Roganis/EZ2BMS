@@ -3,7 +3,9 @@
 
 import type { ChartDoc, Clip } from '@ez2bms/chart-core';
 import { AudioClient } from '../audio/client.svelte';
-import { createBackend, type AudioInfo, type Backend } from '../bridge';
+import { createBackend, joinPath, type AudioInfo, type Backend } from '../bridge';
+import { laneKeysFromIni } from '../input/lanekeys';
+import { PlayController } from '../play/controller.svelte';
 import { Commands } from '../commands/registry';
 import { Project, type ChartSlot } from './project.svelte';
 import { Settings } from './settings.svelte';
@@ -15,6 +17,7 @@ export class App {
   readonly view = new View();
   readonly commands = new Commands();
   readonly audio: AudioClient;
+  readonly play: PlayController;
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
@@ -24,6 +27,7 @@ export class App {
   constructor(readonly backend: Backend) {
     this.settings = new Settings(backend);
     this.audio = new AudioClient(backend, this.view, this.settings);
+    this.play = new PlayController(this);
     this.commands.onError = (e, c) =>
       toast(`${c.title}: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }
@@ -34,9 +38,21 @@ export class App {
     this.view.speed = this.settings.data.speed;
     this.commands.setOverrides(this.settings.data.keys);
     this.audioInfo = await this.backend.audio.info().catch(() => null);
+    await this.loadKeys();
     if (this.audioInfo?.device_error)
       toast(`No audio device - playing silently (${this.audioInfo.device_error})`, 'warn');
     this.ready = true;
+  }
+
+  /** The player's EZ2PORT key bindings (<game>/ez2port/keys.ini), else the port's defaults. */
+  async loadKeys(): Promise<void> {
+    const root = this.settings.data.gameRoot;
+    const text = root
+      ? await this.backend
+          .readText(joinPath(joinPath(root, 'ez2port'), 'keys.ini'))
+          .catch(() => null)
+      : null;
+    this.play.keys = laneKeysFromIni(text);
   }
 
   get slot(): ChartSlot | undefined {
@@ -79,7 +95,8 @@ export class App {
   selectChart(i: number): void {
     const p = this.project;
     if (!p || !p.charts[i]) return;
-    if (this.view.playing) void this.audio.stop();
+    if (this.play.active) void this.play.stop(false);
+    else if (this.view.playing) void this.audio.stop();
     p.activeIndex = i;
     const doc = p.charts[i]!.doc;
     this.view.cursor = 0;

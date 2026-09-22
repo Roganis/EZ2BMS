@@ -15,9 +15,24 @@ export function registerPlayCommands(app: App): void {
       keys: ['Space'],
       enabled: () => !!app.slot,
       run: async () => {
+        if (app.play.active) return app.play.stop(true);
         if (v.playing) return app.audio.stop();
         startedAt = v.cursor;
+        // In the Play view, Space is autoplay with judgements and the HUD.
+        if (v.mode === 'play') return app.play.start('auto');
         await app.audio.play(app.slot!, v.cursor);
+      },
+    },
+    {
+      id: 'play.test',
+      title: 'Test play from the cursor (your keys, judged like EZ2PORT)',
+      group: 'Play',
+      keys: ['Shift+Tab'],
+      enabled: () => !!app.slot,
+      run: async () => {
+        if (app.play.active === 'test') return app.play.stop(true);
+        startedAt = v.cursor;
+        await app.play.start('test');
       },
     },
     {

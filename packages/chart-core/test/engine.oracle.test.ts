@@ -314,6 +314,22 @@ describe('play session', () => {
     expect(s.score.failed).toBe(true);
   });
 
+  it('a session started part-way ignores everything before its start', () => {
+    const { plan } = setup(true);
+    const startMs = plan.events.filter((e) => e.lane)[20]!.ms;
+    const s = new PlaySession(plan, modeDef('7k').columns, ini, { autoplay: true, startMs });
+    const later = plan.events.filter((e) => e.lane && e.ms >= startMs);
+    let heads = 0;
+    for (let t = startMs; t <= plan.endMs + 1000; t += 5) {
+      heads += s.advance(t).fx.filter((f) => !f.instalment).length;
+    }
+    expect(heads).toBe(later.length);
+    expect(s.score.counts[J.MISS]).toBe(0);
+    expect(s.totalNotes).toBeLessThan(
+      new PlaySession(plan, modeDef('7k').columns, ini, { autoplay: true }).totalNotes,
+    );
+  });
+
   it('a press between notes still sounds the nearer one, and a stray is not judged', () => {
     const { s } = setup(false);
     s.advance(10);

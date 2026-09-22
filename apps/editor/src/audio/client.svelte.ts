@@ -45,6 +45,10 @@ export class AudioClient {
   private raf = 0;
   muteBgm = $state(false);
   solo = $state<number | null>(null);
+  /** Test play: the engine plays the backing only; lane sounds come from presses. */
+  lanesMuted = false;
+  private reg: KeysoundRegistry | undefined;
+  private planKey = '';
 
   constructor(
     private readonly backend: Backend,
@@ -103,7 +107,9 @@ export class AudioClient {
 
   async sync(slot: ChartSlot): Promise<void> {
     clearTimeout(this.syncTimer);
-    if (this.planSlot === slot && this.planRev === slot.rev) return;
+    const key = `${this.muteBgm}|${this.solo}|${this.lanesMuted}`;
+    if (this.planSlot === slot && this.planRev === slot.rev && this.planKey === key) return;
+    this.planKey = key;
     const d = slot.doc.data;
     const reg = new KeysoundRegistry();
     const plan = compileChart(d, {
@@ -116,12 +122,14 @@ export class AudioClient {
       },
     });
     this.plan = plan;
+    this.reg = reg;
     this.timeline = new PlanTimeline(plan.tempo, slot.doc.resolution, d.stopEvents);
     this.planRev = slot.rev;
     this.planSlot = slot;
     const events: AudioEvent[] = [];
     for (const e of plan.events) {
       if (this.muteBgm && !e.lane) continue;
+      if (this.lanesMuted && e.lane) continue;
       if (this.solo !== null && e.lane && e.x !== this.solo) continue;
       const def = reg.defs[e.keysound]!;
       const id = this.loaded.get(def.src)?.id;
@@ -180,6 +188,31 @@ export class AudioClient {
     await this.backend.audio.stop();
   }
 
+  /** The plan last sent to the engine. */
+  get currentPlan(): ChartPlan | undefined {
+    return this.plan;
+  }
+
+  /** Song ms being heard now (undefined until the engine has started). */
+  heardNow(): number | undefined {
+    return this.view.playing ? this.heardMs() : undefined;
+  }
+
+  /** Sound one keysound of the compiled chart on a voice (a lane press). */
+  async triggerKeysound(ks: number, voice: number, level: number, pan: number): Promise<void> {
+    const def = this.reg?.defs[ks];
+    const id = def ? this.loaded.get(def.src)?.id : undefined;
+    if (!def || id === null || id === undefined) return;
+    await this.backend.audio.trigger({
+      sample: id,
+      voice,
+      level,
+      pan,
+      offset_ms: (def.startFrame * 1000) / PUBLISH_RATE,
+      until_ms: def.endFrame === null ? null : (def.endFrame * 1000) / PUBLISH_RATE,
+    });
+  }
+
   /** What the speaker is playing now, in song ms; undefined until the engine has started. */
   private heardMs(): number | undefined {
     const c = this.clock;
@@ -208,6 +241,7 @@ export class AudioClient {
     void this.stop();
     this.loaded.clear();
     this.plan = undefined;
+    this.reg = undefined;
     this.planSlot = undefined;
     this.planRev = -1;
   }

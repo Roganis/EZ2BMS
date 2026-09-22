@@ -10,6 +10,8 @@
   import type { ChartSlot } from '../state/project.svelte';
   import { chartTiming } from '../state/timing';
   import Minimap from './Minimap.svelte';
+  import PlayHud from './PlayHud.svelte';
+  import ResultCard from './ResultCard.svelte';
 
   let { slot }: { slot: ChartSlot } = $props();
   const v = app.view;
@@ -18,6 +20,7 @@
   let failed = $state('');
   let lo = $state(0);
   let hi = $state(0);
+  let fieldBox = $state({ left: 0, right: 0, judgeY: 0 });
   let ghost = $state<{ x: number; y: number; l: number } | null>(null);
   let marquee = $state<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const tool = new PointerTool();
@@ -55,7 +58,24 @@
     if (h) tool.up(e, h);
   }
 
+  function onKeyUpCapture(e: KeyboardEvent) {
+    if (app.play.key(e, false)) e.stopImmediatePropagation();
+  }
+
   function onKeyCapture(e: KeyboardEvent) {
+    // Play: lane keys belong to the game, Esc ends the run.
+    if (app.play.active) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        void app.play.stop(true);
+        return;
+      }
+      if (app.play.key(e, true)) {
+        e.stopImmediatePropagation();
+        return;
+      }
+    }
     if (e.key === 'Escape' && tool.busy) {
       const h = host_();
       if (h) tool.cancel(h);
@@ -76,7 +96,7 @@
       app.view.paletteOpen
     )
       return;
-    const x = laneForKey(e.code, new Set(columns.map((c) => c.x)));
+    const x = laneForKey(e.code, new Set(columns.map((c) => c.x)), app.play.keys);
     if (x === undefined) return;
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -111,17 +131,26 @@
         // End-to-end tests aim clicks with the real geometry (?e2e only).
         if ('__ez2bms' in window)
           (window as unknown as { __ez2bmsField: unknown }).__ez2bmsField = r;
-        r.onView = (a, b) => {
+        r.onView = (a, b, l) => {
           if (a !== lo) lo = a;
           if (b !== hi) hi = b;
+          if (
+            l.field.left !== fieldBox.left ||
+            l.field.right !== fieldBox.right ||
+            l.judgeY !== fieldBox.judgeY
+          ) {
+            fieldBox = { left: l.field.left, right: l.field.right, judgeY: l.judgeY };
+          }
         };
         ro = new ResizeObserver(() => r.resize(host.clientWidth, host.clientHeight));
         ro.observe(host);
       })
       .catch((e: unknown) => (failed = e instanceof Error ? e.message : String(e)));
     window.addEventListener('keydown', onKeyCapture, true);
+    window.addEventListener('keyup', onKeyUpCapture, true);
     return () => {
       window.removeEventListener('keydown', onKeyCapture, true);
+      window.removeEventListener('keyup', onKeyUpCapture, true);
       alive = false;
       ro?.disconnect();
       renderer?.destroy();
@@ -142,7 +171,8 @@
       hoverLane: v.hoverLane,
       ghost,
       marquee,
-      pressed: new Set(),
+      pressed: app.play.pressed,
+      hidden: app.play.hidden,
       live: v.playing,
     });
   });
@@ -196,6 +226,16 @@
     {#if failed}<p class="fail">The playfield needs WebGL: {failed}</p>{/if}
   </div>
   <Minimap {slot} {lo} {hi} />
+  {#if app.play.hud && (app.play.active || v.mode === 'play')}
+    <PlayHud hud={app.play.hud} box={fieldBox} active={!!app.play.active} />
+  {/if}
+  {#if app.play.result}
+    <ResultCard
+      result={app.play.result}
+      onretry={() => void app.play.start(app.play.result!.kind)}
+      onclose={() => (app.play.result = null)}
+    />
+  {/if}
 </div>
 
 <style>

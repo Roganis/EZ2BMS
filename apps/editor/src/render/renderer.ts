@@ -36,6 +36,8 @@ export interface FieldState {
   marquee: { x0: number; y0: number; x1: number; y1: number } | null;
   /** Lanes held down in Play (bmson x). */
   pressed: ReadonlySet<number>;
+  /** Notes already hit in Play: taps vanish, holds pin their head to the judge line. */
+  hidden: ReadonlySet<NoteId>;
   /** Draw every frame (playing). */
   live: boolean;
 }
@@ -71,8 +73,8 @@ export class PlayfieldRenderer {
   };
   /** Rack chips as last drawn, for hit testing. */
   private rackHits: { id: NoteId; x: number; y: number; w: number; h: number }[] = [];
-  /** Called after each frame with the pulses on screen (bottom, top). */
-  onView: ((lo: number, hi: number) => void) | undefined;
+  /** Called after each frame with the pulses on screen (bottom, top) and the layout. */
+  onView: ((lo: number, hi: number, layout: Layout) => void) | undefined;
 
   private readonly bg = new Graphics();
   private readonly grid = new Graphics();
@@ -309,7 +311,7 @@ export class PlayfieldRenderer {
     this.drawRack(s, l, vp, tex, p0 - pad, p1 + pad);
     this.drawOverlay(s, l, vp, tex);
     this.app.render();
-    this.onView?.(p0, p1);
+    this.onView?.(p0, p1, l);
     return animating;
   }
 
@@ -450,7 +452,12 @@ export class PlayfieldRenderer {
       const ring = this.skin.ringFor(tex, lane.kind, lane.width);
       const bw = Math.max(4, Math.round(lane.width * 0.72));
       for (const n of s.doc.index.inRange(lane.x, p0, p1)) {
-        const y = vp.yOf(n.y);
+        let y = vp.yOf(n.y);
+        if (s.hidden.has(n.id)) {
+          if (n.l === 0) continue;
+          y = Math.min(y, l.judgeY);
+          if (vp.yOf(n.y + n.l) >= l.judgeY) continue;
+        }
         const sel = s.selection.has(n.id);
         if (n.l > 0) {
           const ye = vp.yOf(n.y + n.l);

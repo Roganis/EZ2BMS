@@ -41,6 +41,8 @@ export interface JudgeFx {
   instalment: boolean;
   /** Press before the note (FAST) - heads only. */
   early?: boolean;
+  /** The bmson note judged (heads only). */
+  noteId?: number;
 }
 
 interface LaneNote {
@@ -52,6 +54,12 @@ interface LaneNote {
 
 export interface SessionOptions {
   autoplay: boolean;
+  /**
+   * Start part-way through (song ms): lane notes before this are neither
+   * judged nor counted, background before it is not sounded - what a test
+   * from the cursor needs.
+   */
+  startMs?: number;
 }
 
 export class PlaySession {
@@ -77,8 +85,9 @@ export class PlaySession {
     this.byLane = columns.map(() => []);
     const notes: LaneNote[] = [];
     let total = 0;
+    const start = opts.startMs ?? -Infinity;
     for (const ev of plan.events) {
-      if (!ev.lane) continue;
+      if (!ev.lane || ev.ms < start) continue;
       const lane = laneOf.get(ev.x);
       if (lane === undefined) continue;
       const n: LaneNote = { ev, lane, tickMs: tickMs(plan.tempo.bpmAt(ev.tick)), judged: false };
@@ -89,7 +98,7 @@ export class PlaySession {
     const byTime = (a: LaneNote, b: LaneNote) => a.ev.ms - b.ev.ms;
     this.notes = notes.sort(byTime);
     for (const l of this.byLane) l.sort(byTime);
-    this.backing = plan.events.filter((e) => !e.lane).sort((a, b) => a.ms - b.ms);
+    this.backing = plan.events.filter((e) => !e.lane && e.ms >= start).sort((a, b) => a.ms - b.ms);
     this.totalNotes = total;
     this.score.onInstalment = (j, lane) =>
       this.fx.push({ ms: this.nowMs, lane, j, instalment: true });
@@ -177,7 +186,7 @@ export class PlaySession {
   }
 
   private head(n: LaneNote, j: J, ms: number, early?: boolean): void {
-    const fx: JudgeFx = { ms, lane: n.lane, j, instalment: false };
+    const fx: JudgeFx = { ms, lane: n.lane, j, instalment: false, noteId: n.ev.noteId };
     if (early !== undefined) fx.early = early;
     this.fx.push(fx);
     // A missed hold starts its hold at MISS too (the engine's expiry scan goes
