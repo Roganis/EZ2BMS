@@ -61,7 +61,7 @@ pnpm tauri dev          # the desktop app
 ### M1 - Chart & play core
 
 - [x] M1.0 Workspaces, CI, renderer performance spike ([perf log](docs/perf-log.md))
-- [ ] M1.1 EZ2PORT oracle harness
+- [x] M1.1 EZ2PORT oracle harness (`third_party/ez2port-core`, `crates/ez2port-oracle`)
 - [ ] M1.2 Chart model + bmson read/write
 - [ ] M1.3 Timing
 - [ ] M1.4 Modes + EZ2 data parsers (`.gds`, `.pvi`, `.abm`, key tables, cipher)

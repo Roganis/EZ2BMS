@@ -5,5 +5,16 @@ edition.workspace = true
 license = "GPL-3.0-or-later"
 rust-version.workspace = true
 publish = false
+description = "TEST ONLY: EZ2PORT's own ez2core (vendored) answering questions as JSON, to prove EZ2BMS's re-implementations match"
+
+[[bin]]
+name = "ez2port-oracle"
+path = "src/main.rs"
 
 [dependencies]
+
+[build-dependencies]
+cc = "1"
+
+[dev-dependencies]
+serde_json = { workspace = true }
