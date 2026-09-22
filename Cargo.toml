@@ -12,7 +12,6 @@ default-members = [
   "crates/ez2bms-audio",
   "crates/ez2bms-launch",
   "crates/ez2port-oracle",
-  "src-tauri",
 ]
 
 [workspace.package]
