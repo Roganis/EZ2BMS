@@ -68,7 +68,7 @@ pnpm tauri dev          # the desktop app
 - [x] M1.5 Editing core (ops with inverses, transactions, drafts, history, lane rules, commands)
 - [x] M1.6 Publish plan + package writers (oracle: identical to the port importer on lanes and background)
 - [x] M1.7 Engine emulation (judge, holds, gauge, score) (oracle: random scripts and the synthetic player agree number for number)
-- [ ] M1.8 Rust audio engine
+- [x] M1.8 Rust audio engine (voice rules, mid-sample start, allocation-free renderer; oracle: published `.ssf` files)
 - [ ] M1.9 `ez2play` launcher
 - [ ] M1.10 Tauri shell
 - [ ] M1.11-15 Editor: UI, renderer + skins, tools, audio, Play mode

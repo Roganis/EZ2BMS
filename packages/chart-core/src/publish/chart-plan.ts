@@ -53,6 +53,14 @@ export interface PlanEvent {
   kind: number;
   /** The bmson note it came from. */
   noteId: NoteId;
+  /**
+   * For playback: when the sample it plays from would have started (its fresh
+   * hit; `ms` itself for a whole sample), and when the slice ends (the next
+   * note on the channel; null plays out). The audio engine derives slice bounds
+   * from these times, so a chain of slices joins without a gap at any rate.
+   */
+  originMs: number;
+  untilMs: number | null;
 }
 
 export interface ChartPlanStats {
@@ -157,6 +165,8 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
     ms: number;
     ks: number;
     durMs: number;
+    originMs: number;
+    untilMs: number | null;
   }
   const pending: Pending[] = [];
   const byChannel = new Map<number, NoteRec[]>();
@@ -194,7 +204,19 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
         : endF === null
           ? Math.max(0, (info?.frames ?? Infinity) - startF)
           : endF - startF;
-      pending.push({ n, tick: ticks[i]!, ms: t, ks, durMs: (durFrames * 1000) / OUT_RATE });
+      const untilMs =
+        whole || endF === null
+          ? null
+          : Math.max(ms[i + 1]!, t + (MIN_SLICE_FRAMES * 1000) / OUT_RATE);
+      pending.push({
+        n,
+        tick: ticks[i]!,
+        ms: t,
+        ks,
+        durMs: (durFrames * 1000) / OUT_RATE,
+        originMs: whole ? t : anchor,
+        untilMs,
+      });
     });
   }
   pending.sort((a, b) => a.tick - b.tick || a.n.x - b.n.x || a.n.id - b.n.id);
@@ -248,6 +270,8 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
       holdTicks,
       kind,
       noteId: n.id,
+      originMs: p.originMs,
+      untilMs: p.untilMs,
     });
     const end = Math.max(
       p.ms + (Number.isFinite(p.durMs) ? p.durMs : 0),

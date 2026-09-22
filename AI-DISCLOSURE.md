@@ -43,6 +43,15 @@ judgement and scoring. Every format and rule it claims to share with EZ2PORT
 is checked against the vendored C code (`docs/ez2port-compat.md`). All test
 inputs are synthetic; no game file was read by any test.
 
+### Audio engine (M1.8), 2026-09-22
+
+The assistant wrote `crates/ez2bms-audio`: decoding, resampling, the sample
+cache, waveform peaks, the real-time mixer with EZ2PORT's voice rules
+(transcribed from the port's `ezaudio.c`), the audio clock, the null and cpal
+backends, offline rendering and `.ssf` cutting. It was built and tested in a
+container with no sound card: the cpal backend compiles here but has never
+produced sound.
+
 ---
 
 ## Verification status
@@ -55,3 +64,7 @@ inputs are synthetic; no game file was read by any test.
 | Play mode judges and scores like EZ2PORT                           | oracle: random scripts, `ez2judge` player | Yes, in the container |
 | `.gds`/`.pvi`/`.abm` readers on real game files                    | not run (no game data here)               | **No** - owner        |
 | A published song shows and plays in EZ2PORT                        | not run                                   | **No** - owner        |
+| Mixer: exact starts, voice cuts, mid-sample resume, gapless slices | unit tests through the offline renderer   | Yes, in the container |
+| The renderer never allocates                                       | a counting allocator in a test            | Yes, in the container |
+| Published `.ssf` files load in EZ2PORT's parser                    | oracle                                    | Yes, in the container |
+| Sound on a real device (cpal), latency, no glitches                | not run (no audio device here)            | **No** - owner        |

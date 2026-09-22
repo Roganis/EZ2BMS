@@ -24,6 +24,7 @@ row is proven by a test against the vendored engine core
 | Lane notes and background sounds of a bmson             | `publish/chart-plan.ts`  | same records as the port's own `ez2_bmson_import`         |
 | Judgement, combo, gauge, score and the hold machine     | `engine/score.ts`        | `engine.oracle.test.ts` - random scripts, op for op       |
 | The synthetic player (`tools/ez2judge.c`)               | `engine/judge-sim.ts`    | same counts, score, gauge and grade                       |
+| Published keysounds (`.ssf`, 16-bit 44.1 kHz stereo)    | `ez2bms-audio` `cut.rs`  | `ez2port-oracle/tests/audio.rs` - header and PCM hash     |
 
 ## Deliberate differences
 
@@ -39,6 +40,19 @@ row is proven by a test against the vendored engine core
 | Slice cut points         | rounded to 1 ms                                        | exact frames from the published f32 tempo                | consecutive slices join without a click    |
 | Background tracks        | first track free at that tick                          | first track whose last sound has finished                | the original has one voice per track       |
 | End of the stage         | 26 frames after the last record                        | a closing tempo record after the last sound's tail       | the last sound is not cut off              |
+
+## Followed from the port's platform code (not in the oracle)
+
+The mixer lives in EZ2PORT's platform layer (`platform/common/ezaudio.c`),
+outside the vendored core, so these are transcribed and unit-tested rather than
+compared against C: a retrigger restarts the sound on its voice; backing and
+autoplay play on the sample's own voice, presses on the lane's; level is
+`10^(dB/2000)` with -100 dB as silence; pan turns one side down and leaves the
+other; the output passes a soft knee at 0.9 and a clamp.
+
+Two deliberate differences: EZ2BMS resamples with a proper filter (the port
+steps through a non-44.1 kHz sample nearest-neighbour), and it publishes every
+keysound at 44.1 kHz so the port never has to resample one.
 
 ## Port behaviour worth knowing
 

@@ -4,5 +4,18 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+description = "EZ2BMS audio: decode, resample, mix with EZ2PORT's voice rules, cut and encode keysounds"
+
+[features]
+default = []
+# The real output device. Off by default so the crate builds and tests
+# anywhere (CI without ALSA, this container); the app turns it on.
+cpal = ["dep:cpal"]
 
 [dependencies]
+arc-swap = "1"
+rtrb = "0.3"
+rubato = "0.16"
+symphonia = { version = "0.5", default-features = false, features = ["wav", "pcm", "adpcm", "ogg", "vorbis", "flac", "mp3"] }
+thiserror.workspace = true
+cpal = { version = "0.16", optional = true }

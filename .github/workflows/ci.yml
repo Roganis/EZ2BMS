@@ -43,6 +43,9 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      # ALSA headers, for the audio crate's real-device backend (cpal).
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test
+      - run: cargo build -p ez2bms-audio --features cpal

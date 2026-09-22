@@ -63,12 +63,33 @@ not a different renderer.
 
 ## Audio
 
-The mixer runs on the audio thread with no allocation and no locks. The front
-end sends the compiled plan per channel as raw bytes; a builder thread turns it
-into a frame-accurate schedule and swaps it in with `arc-swap`. Starting from any
-position picks up samples that are already sounding mid-sample. The same mixer
-renders offline, which is how tests check audio without a device (`null`
-backend) and how previews and slices are rendered.
+`crates/ez2bms-audio` plays what chart-core compiles; it makes no timing or
+voice decisions of its own.
+
+- **Samples.** Decoded once (WAV/OGG/FLAC/MP3 through symphonia, `.ssf`/`.ezw`
+  directly), resampled to the device rate with the filter delay removed, and
+  cached while the file is unchanged. Peak mipmaps feed waveform drawing.
+- **Schedule.** Events carry song milliseconds from chart-core. A slice gives
+  its fresh hit's time and the next note's time, so its bounds and the event
+  times come from the same frame positions: a chain of slices plays exactly
+  like the uncut sample at any device rate (tested bit for bit).
+- **Voices.** EZ2PORT's rule: a sound on a voice that is already sounding cuts
+  it and restarts. Every keysound has a voice (backing, autoplay) and every
+  lane has one (presses); gains are DirectSound's (`10^(dB/2000)`, pan turns one
+  side down), and the output stage is the port's soft knee and clamp.
+- **Real time.** The renderer never allocates, locks or frees (a test counts
+  allocator calls). The control side swaps whole transports (schedule, play,
+  stop, seek) with `arc-swap` and keeps retired ones until the audio thread has
+  let go; immediate sounds (auditions, test-play presses) go through an `rtrb`
+  ring. Playing from any frame picks up every sound already under way,
+  mid-sample, with voice cuts applied.
+- **Clock.** Each buffer publishes frame, host time and output latency through
+  a seqlock; `heard_frame_at(now)` is what the speaker is playing.
+- **Backends.** `cpal` (feature) for the device, `null` for a real-time clock
+  without one; `offline` renders through the same renderer for previews,
+  bounces and tests.
+- **Publish.** Keysounds are cut from 44.1 kHz audio into 16-bit stereo `.ssf`,
+  the port's own format; consecutive cuts join exactly into the uncut sample.
 
 ## Risks and fallbacks
 

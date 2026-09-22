@@ -106,6 +106,13 @@ describe('publish plan', () => {
           expect(defs[0]!.startFrame).toBe(0);
           for (let i = 1; i < defs.length; i++)
             expect(defs[i]!.startFrame).toBe(defs[i - 1]!.endFrame);
+          // Playback sees the same chain as times: one origin, each slice
+          // ending where the next begins, the last playing out.
+          const ev = plan.events;
+          for (let i = 0; i < ev.length; i++) {
+            expect(ev[i]!.originMs).toBe(ev[0]!.ms);
+            expect(ev[i]!.untilMs).toBe(i + 1 < ev.length ? ev[i + 1]!.ms : null);
+          }
         },
       ),
     );
