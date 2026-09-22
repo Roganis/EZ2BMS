@@ -52,6 +52,14 @@ backends, offline rendering and `.ssf` cutting. It was built and tested in a
 container with no sound card: the cpal backend compiles here but has never
 produced sound.
 
+### Desktop host (M1.10), 2026-09-22
+
+The assistant wrote `src-tauri`: the commands above, the window and bundle
+configuration, and the app icon (`src-tauri/icon-source.svg`, drawn for this
+project). The app was built here and started under a virtual display for
+twelve seconds; with no sound card it fell back to the silent clock as
+designed. It has not been run on Windows.
+
 ### Launcher and requests to the port (M1.9), 2026-09-22
 
 The assistant wrote `crates/ez2bms-launch` (it reads `ez2play`'s options from
@@ -80,3 +88,5 @@ script in place of the game.
 | Sound on a real device (cpal), latency, no glitches                | not run (no audio device here)            | **No** - owner        |
 | The probe reads build 1582's options and commit                    | run on the owner's `ez2play.exe` locally  | Yes, in the container |
 | F5 plays a chart in EZ2PORT (Windows, path with spaces)            | a fake ez2play on Linux only              | **No** - owner        |
+| The desktop app starts (Linux)                                     | Xvfb, silent-clock fallback               | Yes, in the container |
+| The desktop app starts (Windows, WebView2) and plays sound         | CI builds and tests only                  | **No** - owner        |

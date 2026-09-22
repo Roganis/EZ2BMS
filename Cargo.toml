@@ -4,6 +4,7 @@ members = [
   "crates/ez2bms-audio",
   "crates/ez2bms-launch",
   "crates/ez2port-oracle",
+  "src-tauri",
 ]
 # The Tauri app needs webkit2gtk (Linux) to build; everything else builds
 # anywhere. `cargo test` at the root runs the portable crates only.
@@ -11,6 +12,7 @@ default-members = [
   "crates/ez2bms-audio",
   "crates/ez2bms-launch",
   "crates/ez2port-oracle",
+  "src-tauri",
 ]
 
 [workspace.package]

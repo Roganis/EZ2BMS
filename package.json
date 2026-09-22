@@ -16,10 +16,11 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "e2e": "pnpm --filter @ez2bms/editor e2e",
-    "tauri": "pnpm --filter @ez2bms/editor tauri"
+    "tauri": "tauri"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
+    "@tauri-apps/cli": "^2.11.5",
     "eslint": "^10.11.0",
     "eslint-plugin-svelte": "^3.23.0",
     "globals": "^16.0.0",

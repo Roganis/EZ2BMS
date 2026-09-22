@@ -1,0 +1,24 @@
+[package]
+name = "ez2bms"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "EZ2BMS desktop host: file access, audio, publishing and EZ2PORT, for the editor front end"
+default-run = "ez2bms"
+
+[lib]
+name = "ez2bms_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+ez2bms-audio = { path = "../crates/ez2bms-audio", features = ["cpal"] }
+ez2bms-launch = { path = "../crates/ez2bms-launch" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+thiserror = { workspace = true }

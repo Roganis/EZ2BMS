@@ -91,6 +91,25 @@ voice decisions of its own.
 - **Publish.** Keysounds are cut from 44.1 kHz audio into 16-bit stereo `.ssf`,
   the port's own format; consecutive cuts join exactly into the uncut sample.
 
+## The desktop host (`src-tauri`)
+
+The host does what a browser cannot, and nothing else; chart logic never
+crosses the bridge. Its commands, each mirrored by the web mock in
+`apps/editor/src/bridge/`:
+
+| Group    | Commands                                                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Files    | `fs_read` (raw bytes), `fs_read_text`, `fs_write_text` / `fs_write_bytes` (atomic, optional `.bak`), `fs_list`, `project_scan`     |
+| Settings | `settings_load`, `settings_save` (a JSON object the front end owns, in the app's config folder)                                    |
+| Audio    | `audio_info`, `audio_load`, `audio_peaks`, `audio_set_events`, `audio_play` / `seek` / `stop`, `audio_trigger`, `audio_set_master` |
+| Clock    | `audio_clock`, `audio_now` (for offset pings), `audio_clock_stream` (a snapshot every 8 ms over a Tauri channel)                   |
+| EZ2PORT  | `port_locate`, `port_probe`, `port_publish` (cuts keysounds, writes the package whole), `port_test` / `port_stop`                  |
+
+Without an output device the audio engine falls back to a silent real-time
+clock, so Play mode still runs. `port_test` publishes into a private songs
+folder in the app cache, streams ez2play's output back line by line, and
+removes the folder when the game exits.
+
 ## Risks and fallbacks
 
 - **WebKitGTK WebGL speed** - see [`perf-log.md`](perf-log.md). Mitigations:

@@ -11,8 +11,7 @@
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
-    "e2e": "playwright test",
-    "tauri": "tauri"
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@ez2bms/chart-core": "workspace:*",
@@ -24,7 +23,6 @@
   "devDependencies": {
     "@playwright/test": "1.56.1",
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
-    "@tauri-apps/cli": "^2.11.5",
     "@types/node": "^22.0.0",
     "svelte-check": "^4.7.6",
     "typescript": "~6.0.3",

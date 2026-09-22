@@ -70,7 +70,7 @@ pnpm tauri dev          # the desktop app
 - [x] M1.7 Engine emulation (judge, holds, gauge, score) (oracle: random scripts and the synthetic player agree number for number)
 - [x] M1.8 Rust audio engine (voice rules, mid-sample start, allocation-free renderer; oracle: published `.ssf` files)
 - [x] M1.9 `ez2play` launcher (feature probe without running it, isolated songs folder, log capture) - [requests to the port](docs/ez2port-requests.md)
-- [ ] M1.10 Tauri shell
+- [x] M1.10 Tauri shell + IPC (files, settings, audio, clock stream, publish, test runs)
 - [ ] M1.11-15 Editor: UI, renderer + skins, tools, audio, Play mode
 - [ ] M1.16-18 Test in EZ2PORT, new chart, lint, hardening
 

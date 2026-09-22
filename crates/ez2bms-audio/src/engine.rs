@@ -171,8 +171,15 @@ pub struct Engine {
     ctl: Mutex<Control>,
     triggers: Mutex<rtrb::Producer<VoiceStart>>,
     rate: u32,
-    backend: Option<Box<dyn Send>>,
+    /// Behind a mutex only so the engine is `Sync` whatever the backend is.
+    backend: Mutex<Option<Box<dyn Send>>>,
 }
+
+// Commands on any thread share one engine.
+const _: () = {
+    const fn shared<T: Send + Sync>() {}
+    shared::<Engine>();
+};
 
 impl Engine {
     /// An engine and its renderer, for a backend (or a test) to drive.
@@ -215,14 +222,14 @@ impl Engine {
             }),
             triggers: Mutex::new(tx),
             rate,
-            backend: None,
+            backend: Mutex::new(None),
         };
         (engine, renderer)
     }
 
     /// Keep a backend alive for as long as the engine (dropping it stops output).
     pub fn attach_backend(&mut self, backend: Box<dyn Send>) {
-        self.backend = Some(backend);
+        *self.backend.get_mut().unwrap() = Some(backend);
     }
 
     /// Output to nowhere in real time: a working clock without a device.
@@ -243,7 +250,7 @@ impl Engine {
     }
 
     pub fn has_backend(&self) -> bool {
-        self.backend.is_some()
+        self.backend.lock().unwrap().is_some()
     }
 
     fn publish(&self, ctl: &mut Control, cue: Cue, resume: Vec<VoiceStart>) {
@@ -329,6 +336,6 @@ impl Engine {
 impl Drop for Engine {
     fn drop(&mut self) {
         // Stop the backend (and its audio thread) before the shared state goes.
-        self.backend.take();
+        self.backend.get_mut().unwrap().take();
     }
 }
