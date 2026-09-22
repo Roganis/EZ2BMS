@@ -16,23 +16,17 @@ import {
   type ChartPlan,
 } from '@ez2bms/chart-core';
 import { SvelteMap } from 'svelte/reactivity';
-import {
-  joinPath,
-  type AudioEvent,
-  type Backend,
-  type ClockSnapshot,
-  type Loaded,
-} from '../bridge';
+import type { AudioEvent, Backend, ClockSnapshot, Loaded } from '../bridge';
 import type { ChartSlot, Project } from '../state/project.svelte';
 import type { Settings } from '../state/settings.svelte';
 import { toast } from '../state/toasts.svelte';
 import type { View } from '../state/view.svelte';
+import { soundNames, soundPath } from './paths';
 import { PlanTimeline } from './timeline';
 
 /** Voice for auditions: its own, so a new audition cuts the last one. */
 const AUDITION_VOICE = (1 << 16) + 255;
 const PUBLISH_RATE = 44100;
-const AUDIO_EXT = ['wav', 'ogg', 'flac', 'mp3', 'oga', 'ssf'];
 
 export class AudioClient {
   /** Sound name (as the chart names it) -> what the engine loaded. */
@@ -76,25 +70,13 @@ export class AudioClient {
 
   /** Load every sound the project's charts use (and keep ids for the rest). */
   async loadProject(p: Project): Promise<void> {
-    const names = new Set<string>();
-    for (const c of p.charts) for (const ch of c.doc.data.channels) names.add(ch.name);
-    await this.load(p, [...names]);
+    await this.load(p, soundNames(p.charts));
   }
 
   async load(p: Project, names: string[]): Promise<void> {
     const want = names.filter((n) => !this.loaded.has(n));
     if (!want.length) return;
-    // BMS charts often name "kick.wav" for a file that is really kick.ogg.
-    const byStem = new Map<string, string>();
-    for (const s of p.samples) byStem.set(s.replace(/\.[^./]+$/, '').toLowerCase(), s);
-    const pathOf = (n: string) => {
-      const exact = p.samples.find((s) => s.toLowerCase() === n.toLowerCase());
-      const alt = byStem.get(n.replace(/\.[^./]+$/, '').toLowerCase());
-      return joinPath(
-        p.dir,
-        exact ?? (alt && AUDIO_EXT.some((e) => alt.toLowerCase().endsWith(e)) ? alt : n),
-      );
-    };
+    const pathOf = (n: string) => soundPath(p.dir, p.samples, n);
     const res = await this.backend.audio.load(want.map(pathOf));
     let failed = 0;
     res.forEach((r, i) => {
