@@ -74,7 +74,7 @@ pnpm tauri dev          # the desktop app
 - [x] M1.11 Editor shell: backend bridge (Tauri + in-browser mock), state, command registry, palette, song select, drawers
 - [x] M1.12 Playfield renderer: EZ2PORT's lanes and scroll in Pixi, neon skin, every mode on both sides, background rack, minimap
 - [ ] M1.12b The game's own skin from `.pvi`/`.abm`
-- [ ] M1.13 Tools and drawers (draw, select, move, resize, marquee; sounds, inspector, chart info, timing)
+- [x] M1.13 Tools and drawers (draw, drag-to-hold, move, resize, rubber band, erase, step input; sounds, inspector, chart info, timing)
 - [ ] M1.14 Audio in the editor (plan sync, play from cursor, audition)
 - [ ] M1.15 Play mode (autoplay, keyboard test play, result card)
 - [ ] M1.16-18 Test in EZ2PORT, new chart, lint, hardening

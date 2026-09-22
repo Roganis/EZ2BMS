@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { registerBuiltins } from '../commands/builtin';
+  import { registerNoteCommands } from '../commands/notes';
   import { app } from '../state/app.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import Editor from './Editor.svelte';
@@ -8,6 +9,7 @@
   import Toasts from './Toasts.svelte';
 
   registerBuiltins(app);
+  registerNoteCommands(app);
 
   onMount(() => {
     void app.init();

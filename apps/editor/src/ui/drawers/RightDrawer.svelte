@@ -2,7 +2,10 @@
   import { app } from '../../state/app.svelte';
   import type { ChartSlot } from '../../state/project.svelte';
   import type { RightDrawer } from '../../state/view.svelte';
+  import ChartInfo from './ChartInfo.svelte';
   import Drawer from './Drawer.svelte';
+  import Inspector from './Inspector.svelte';
+  import TimingPanel from './TimingPanel.svelte';
 
   let { slot }: { slot: ChartSlot } = $props();
   const TABS: { id: RightDrawer; label: string }[] = [
@@ -22,19 +25,13 @@
       {/each}
     </nav>
   {/snippet}
-  <div class="pad">
-    {#if app.view.right === 'inspector'}
-      <p class="dim">
-        {slot.doc.selection.ids.size
-          ? `${slot.doc.selection.ids.size} selected`
-          : 'Select notes to edit them here.'}
-      </p>
-    {:else if app.view.right === 'chart'}
-      <p class="dim">{slot.label} · level {slot.level}</p>
-    {:else}
-      <p class="dim">Initial BPM {slot.doc.data.info.initBpm}</p>
-    {/if}
-  </div>
+  {#if app.view.right === 'inspector'}
+    <Inspector {slot} />
+  {:else if app.view.right === 'chart'}
+    <ChartInfo {slot} />
+  {:else}
+    <TimingPanel {slot} />
+  {/if}
 </Drawer>
 
 <style>
@@ -55,12 +52,5 @@
   .tabs button.on {
     color: var(--ink);
     border-color: var(--neon);
-  }
-  .pad {
-    padding: 12px;
-  }
-  .dim {
-    color: var(--ink-dim);
-    font-size: 13px;
   }
 </style>

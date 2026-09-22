@@ -38,7 +38,7 @@ export function placementConflict(
 }
 
 /** Check a whole moved set against the rest of the chart and against itself. */
-function movedConflict(
+export function movedConflict(
   doc: ChartDoc,
   moved: { id: NoteId; x: number; y: number; l: number }[],
 ): boolean {

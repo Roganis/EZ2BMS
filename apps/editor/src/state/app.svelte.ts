@@ -1,7 +1,7 @@
 // The editor's one root object: the backend, settings, the open project, how
 // it is viewed, and every command. Components import `app` and read from it.
 
-import type { ChartDoc } from '@ez2bms/chart-core';
+import type { ChartDoc, Clip } from '@ez2bms/chart-core';
 import { createBackend, type AudioInfo, type Backend } from '../bridge';
 import { Commands } from '../commands/registry';
 import { Project, type ChartSlot } from './project.svelte';
@@ -16,6 +16,8 @@ export class App {
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
+  /** Copied notes (in the app, not the system clipboard). */
+  clip: Clip | undefined;
 
   constructor(readonly backend: Backend) {
     this.settings = new Settings(backend);
@@ -55,6 +57,13 @@ export class App {
       toast(`Could not open ${dir}: ${e instanceof Error ? e.message : String(e)}`, 'error');
       return false;
     }
+  }
+
+  /** Open the command palette with text already typed (e.g. "bpm "). */
+  paletteSeed = $state('');
+  openPalette(seed = ''): void {
+    this.paletteSeed = seed;
+    this.view.paletteOpen = true;
   }
 
   closeProject(): void {

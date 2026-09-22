@@ -9,7 +9,8 @@
 
   $effect(() => {
     if (app.view.paletteOpen) {
-      query = '';
+      query = app.paletteSeed;
+      app.paletteSeed = '';
       index = 0;
       queueMicrotask(() => input?.focus());
     }

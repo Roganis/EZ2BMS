@@ -69,6 +69,8 @@ export class PlayfieldRenderer {
     cols: new Map(),
     n: 0,
   };
+  /** Rack chips as last drawn, for hit testing. */
+  private rackHits: { id: NoteId; x: number; y: number; w: number; h: number }[] = [];
   /** Called after each frame with the pulses on screen (bottom, top). */
   onView: ((lo: number, hi: number) => void) | undefined;
 
@@ -211,6 +213,29 @@ export class PlayfieldRenderer {
     return hold ? { note: hold, part: 'body' } : undefined;
   }
 
+  /** The background sound under the pointer, if any. */
+  rackNoteAt(px: number, py: number): NoteRec | undefined {
+    const pad = 3;
+    for (let i = this.rackHits.length - 1; i >= 0; i--) {
+      const h = this.rackHits[i]!;
+      if (px >= h.x - pad && px <= h.x + h.w + pad && py >= h.y - pad && py <= h.y + h.h + pad) {
+        return this.state?.doc.index.get(h.id);
+      }
+    }
+    return undefined;
+  }
+
+  /** Whether a screen x is over the background rack. */
+  overRack(px: number): boolean {
+    const l = this.layout;
+    return (
+      !!l &&
+      l.rack.cols > 0 &&
+      px >= l.rack.left - 6 &&
+      px <= l.rack.left + l.rack.cols * l.rack.colWidth + 6
+    );
+  }
+
   /** Notes whose heads fall inside a screen rectangle. */
   notesIn(x0: number, y0: number, x1: number, y1: number): NoteId[] {
     const s = this.state;
@@ -223,6 +248,10 @@ export class PlayfieldRenderer {
     for (const g of [...l.lanes, ...l.offLanes]) {
       if (g.left + g.width < xa || g.left > xb) continue;
       for (const n of s.doc.index.inRange(g.x, pa, pb)) if (n.y >= pa && n.y <= pb) out.push(n.id);
+    }
+    for (const h of this.rackHits) {
+      if (h.x + h.w >= xa && h.x <= xb && h.y + h.h >= Math.min(y0, y1) && h.y <= Math.max(y0, y1))
+        out.push(h.id);
     }
     return out;
   }
@@ -480,6 +509,14 @@ export class PlayfieldRenderer {
         const x = l.rack.left + col * l.rack.colWidth;
         c.position.set(x - PAD, y - (tex.chip.height - 2 * PAD) / 2 - PAD);
         c.width = Math.max(4, l.rack.colWidth - 3) + 2 * PAD;
+        const chipH = tex.chip.height - 2 * PAD;
+        this.rackHits.push({
+          id: n.id,
+          x,
+          y: y - chipH / 2,
+          w: Math.max(4, l.rack.colWidth - 3),
+          h: chipH,
+        });
         c.tint = hsl(channelHue(ch?.name ?? ''), 0.8, 0.62);
         c.alpha = (s.selection.has(n.id) ? 1 : 0.8) * this.extras;
         if (s.selection.has(n.id)) c.tint = 0xffffff;
