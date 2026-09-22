@@ -82,23 +82,26 @@ fn the_command_line_asks_only_for_what_the_build_has() {
     };
     let args: Vec<String> =
         spec(d).args(&all).unwrap().iter().map(|a| a.to_string_lossy().into_owned()).collect();
+    // Paths as the platform joins them (backslashes on Windows).
+    let p = |x: PathBuf| x.to_string_lossy().into_owned();
+    let s = spec(d);
     assert_eq!(
         args,
         [
-            "--root",
-            "/g/Final EX",
-            "--songs",
-            "/g/test songs",
-            "--mode",
-            "7StreetMix",
-            "--auto",
-            "--windowed",
-            "--no-bga",
-            "--speed",
-            "250",
-            "--log",
-            "/g/play.log",
-            "/g/test songs/abc/7streetmix1p-abc.ez"
+            "--root".to_string(),
+            p(s.game_root),
+            "--songs".into(),
+            p(s.songs.unwrap()),
+            "--mode".into(),
+            "7StreetMix".into(),
+            "--auto".into(),
+            "--windowed".into(),
+            "--no-bga".into(),
+            "--speed".into(),
+            "250".into(),
+            "--log".into(),
+            p(s.log.unwrap()),
+            p(s.chart),
         ]
     );
     // Nice-to-haves are dropped on an older build; must-haves refuse.
