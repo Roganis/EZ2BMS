@@ -339,10 +339,10 @@ static int cmd_abm_write(const char *rgb_path, int w, int h, const char *out)
         free(rgb);
         return fail("abm-write", "RGB buffer smaller than W*H*3");
     }
-    rc = ez2_abm_write(out, rgb, w, h);
+    rc = ez2_abm_write(out, rgb, w, h);   /* 1 = written (not an EZ2_ABM_* code) */
     free(rgb);
-    if (rc != EZ2_ABM_OK)
-        return fail("abm-write", ez2_abm_strerror(rc));
+    if (rc != 1)
+        return fail("abm-write", "cannot write");
     printf("{\"ok\":true}\n");
     return 0;
 }

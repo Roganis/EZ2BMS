@@ -64,7 +64,7 @@ pnpm tauri dev          # the desktop app
 - [x] M1.1 EZ2PORT oracle harness (`third_party/ez2port-core`, `crates/ez2port-oracle`)
 - [x] M1.2 Chart model + bmson read/write ([dialect](docs/bmson-dialect.md))
 - [x] M1.3 Timing (bmson view + the engine's tick/f32 tempo map, bit-identical to EZ2PORT; EZFF read/write)
-- [ ] M1.4 Modes + EZ2 data parsers (`.gds`, `.pvi`, `.abm`, key tables, cipher)
+- [x] M1.4 Modes + EZ2 data parsers (`.gds`, `.pvi`, `.abm`, key tables, cipher) - [compat](docs/ez2port-compat.md)
 - [ ] M1.5 Editing core
 - [ ] M1.6 Publish plan + package writers
 - [ ] M1.7 Engine emulation (judge, holds, gauge, score)
