@@ -53,7 +53,8 @@ export function iniValue(s: string): string {
     .trim();
 }
 
-export interface SongIni {
+/** The contents of a package's song.ini. */
+export interface SongIniFile {
   key: string;
   title: string;
   artist: string;
@@ -66,7 +67,7 @@ export interface SongIni {
   bga?: { file: string; startMs: number };
 }
 
-export function songIniText(s: SongIni, eol: Eol = '\n'): string {
+export function songIniText(s: SongIniFile, eol: Eol = '\n'): string {
   const lines = [
     '[Song]',
     `Key = ${s.key}`,

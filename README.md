@@ -67,7 +67,7 @@ pnpm tauri dev          # the desktop app
 - [x] M1.4 Modes + EZ2 data parsers (`.gds`, `.pvi`, `.abm`, key tables, cipher) - [compat](docs/ez2port-compat.md)
 - [x] M1.5 Editing core (ops with inverses, transactions, drafts, history, lane rules, commands)
 - [x] M1.6 Publish plan + package writers (oracle: identical to the port importer on lanes and background)
-- [ ] M1.7 Engine emulation (judge, holds, gauge, score)
+- [x] M1.7 Engine emulation (judge, holds, gauge, score) (oracle: random scripts and the synthetic player agree number for number)
 - [ ] M1.8 Rust audio engine
 - [ ] M1.9 `ez2play` launcher
 - [ ] M1.10 Tauri shell

@@ -33,11 +33,25 @@ the renderer performance spike and the documentation in `docs/`.
 It had no access to a GPU, an audio device, the game data, the executable or a
 cabinet. Nothing it measured says anything about those; see the table.
 
+### Chart core and engine emulation (M1.1-M1.7), 2026-09-22
+
+The assistant vendored EZ2PORT's engine core unmodified as a test oracle,
+then wrote `packages/chart-core`: the chart model and bmson dialect, timing,
+the mode registry, the `.ez`/`.gds`/`.pvi`/`.abm` formats and the cipher, the
+editing core, the package publisher and a TypeScript port of the engine's
+judgement and scoring. Every format and rule it claims to share with EZ2PORT
+is checked against the vendored C code (`docs/ez2port-compat.md`). All test
+inputs are synthetic; no game file was read by any test.
+
 ---
 
 ## Verification status
 
-| Claim                                           | Basis                           | Verified              |
-| ----------------------------------------------- | ------------------------------- | --------------------- |
-| Renderer JS cost is ~1 ms/frame at ~10k sprites | headless Chromium (software GL) | Yes, in the container |
-| Renderer frame rate on WebKitGTK / WebView2     | not yet measured                | **No** - owner        |
+| Claim                                                              | Basis                                     | Verified              |
+| ------------------------------------------------------------------ | ----------------------------------------- | --------------------- |
+| Renderer JS cost is ~1 ms/frame at ~10k sprites                    | headless Chromium (software GL)           | Yes, in the container |
+| Renderer frame rate on WebKitGTK / WebView2                        | not yet measured                          | **No** - owner        |
+| Every format EZ2BMS writes reads back in EZ2PORT's core as planned | oracle (build 1582), synthetic inputs     | Yes, in the container |
+| Play mode judges and scores like EZ2PORT                           | oracle: random scripts, `ez2judge` player | Yes, in the container |
+| `.gds`/`.pvi`/`.abm` readers on real game files                    | not run (no game data here)               | **No** - owner        |
+| A published song shows and plays in EZ2PORT                        | not run                                   | **No** - owner        |

@@ -38,3 +38,7 @@ export * from './publish/tracks';
 export * from './publish/chart-plan';
 export * from './publish/text';
 export * from './publish/package';
+export * from './engine/songini';
+export * from './engine/score';
+export * from './engine/session';
+export * from './engine/judge-sim';
