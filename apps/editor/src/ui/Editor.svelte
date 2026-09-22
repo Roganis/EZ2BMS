@@ -19,6 +19,11 @@
     void app.audio.solo;
     app.audio.scheduleSync(slot);
   });
+  // Unsaved work goes to the app's folder a few seconds after each edit.
+  $effect(() => {
+    for (const c of project.charts) void c.rev;
+    if (project.dirty) app.autosave.schedule(project);
+  });
   // New sounds in the chart get loaded.
   $effect(() => {
     if (!slot) return;
@@ -40,7 +45,12 @@
       {#if slot}
         <Playfield {slot} />
       {:else}
-        <div class="empty">This song has no charts yet.</div>
+        <div class="empty">
+          <p>This song has no charts yet.</p>
+          <button class="ez-btn" onclick={() => (app.view.newChartOpen = true)}
+            >New chart <kbd>Ctrl N</kbd></button
+          >
+        </div>
       {/if}
     </div>
     {#if app.view.right && slot}
@@ -69,7 +79,9 @@
   .empty {
     height: 100%;
     display: grid;
-    place-items: center;
+    place-content: center;
+    justify-items: center;
+    gap: 8px;
     color: var(--ink-dim);
   }
 </style>

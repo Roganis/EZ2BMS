@@ -7,6 +7,7 @@
   import { app } from '../state/app.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import Editor from './Editor.svelte';
+  import NewChartDialog from './NewChartDialog.svelte';
   import StartScreen from './StartScreen.svelte';
   import Toasts from './Toasts.svelte';
 
@@ -37,6 +38,9 @@
   <Editor project={app.project} />
 {:else}
   <StartScreen />
+{/if}
+{#if app.project && app.view.newChartOpen}
+  <NewChartDialog onclose={() => (app.view.newChartOpen = false)} />
 {/if}
 <CommandPalette />
 <Toasts />

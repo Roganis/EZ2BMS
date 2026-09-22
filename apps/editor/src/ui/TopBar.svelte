@@ -15,9 +15,12 @@
     return chartTiming(slot.doc);
   });
   const bpm = $derived(timing ? timing.bpmAt(v.cursor) : 0);
-  const pos = $derived(
-    slot ? formatPosition(positionOf(v.cursor, slot.doc.resolution)) : '---:-:--',
-  );
+  const pos = $derived.by(() => {
+    if (!slot) return '---:-:--';
+    const p = positionOf(v.cursor, slot.doc.resolution);
+    // Moving: whole ticks, so the readout does not flicker.
+    return formatPosition(v.playing ? { ...p, tick: Math.floor(p.tick) } : p);
+  });
   const time = $derived(timing ? formatSeconds(timing.secondsAt(v.cursor)) : '-:--.---');
   const canUndo = $derived(slot ? (void slot.rev, slot.doc.canUndo) : false);
   const canRedo = $derived(slot ? (void slot.rev, slot.doc.canRedo) : false);

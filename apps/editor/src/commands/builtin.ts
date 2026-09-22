@@ -44,6 +44,22 @@ export function registerBuiltins(app: App): void {
       },
     },
     {
+      id: 'file.newSong',
+      title: 'New song…',
+      group: 'File',
+      global: true,
+      run: () => app.newSong(),
+    },
+    {
+      id: 'chart.new',
+      title: 'New chart…',
+      group: 'Chart',
+      keys: ['Mod+N'],
+      global: true,
+      enabled: () => !!app.project,
+      run: () => (v.newChartOpen = true),
+    },
+    {
       id: 'file.close',
       title: 'Close song',
       group: 'File',

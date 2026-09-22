@@ -28,6 +28,7 @@ export class View {
   leftOpen = $state(true);
   right = $state<RightDrawer | null>('inspector');
   paletteOpen = $state(false);
+  newChartOpen = $state(false);
   playing = $state(false);
   /** Step input: the cabinet's keys place notes at the cursor. */
   stepInput = $state(false);

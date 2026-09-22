@@ -6,14 +6,22 @@
 
 <div class="toasts" role="status" aria-live="polite">
   {#each toasts.list as t (t.id)}
-    <button
+    <div
       class="toast {t.kind}"
       animate:flip={{ duration: 200 }}
       transition:fly={{ x: 40, duration: 220 }}
-      onclick={() => toasts.dismiss(t.id)}
     >
-      {t.text}
-    </button>
+      <button class="text" onclick={() => toasts.dismiss(t.id)}>{t.text}</button>
+      {#if t.action}
+        <button
+          class="ez-btn"
+          onclick={() => {
+            t.action!.run();
+            toasts.dismiss(t.id);
+          }}>{t.action.label}</button
+        >
+      {/if}
+    </div>
   {/each}
 </div>
 
@@ -25,11 +33,12 @@
     display: grid;
     gap: 8px;
     z-index: 50;
-    max-width: min(420px, 90vw);
+    max-width: min(440px, 90vw);
   }
   .toast {
-    all: unset;
-    cursor: pointer;
+    display: flex;
+    gap: 10px;
+    align-items: center;
     padding: 10px 14px;
     border-radius: var(--radius);
     background: var(--panel);
@@ -37,7 +46,11 @@
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
     font-size: 13px;
     line-height: 1.35;
-    backdrop-filter: none;
+  }
+  .text {
+    all: unset;
+    cursor: pointer;
+    flex: 1;
   }
   .ok {
     border-color: var(--ok);

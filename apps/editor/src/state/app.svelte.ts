@@ -7,10 +7,11 @@ import { createBackend, joinPath, type AudioInfo, type Backend } from '../bridge
 import { laneKeysFromIni } from '../input/lanekeys';
 import { PlayController } from '../play/controller.svelte';
 import { PortState } from './port.svelte';
+import { Autosave, formatWhen } from './autosave';
 import { Commands } from '../commands/registry';
 import { Project, type ChartSlot } from './project.svelte';
 import { Settings } from './settings.svelte';
-import { toast } from './toasts.svelte';
+import { ask, toast } from './toasts.svelte';
 import { View } from './view.svelte';
 
 export class App {
@@ -20,6 +21,7 @@ export class App {
   readonly audio: AudioClient;
   readonly play: PlayController;
   readonly port: PortState;
+  readonly autosave: Autosave;
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
@@ -31,6 +33,7 @@ export class App {
     this.audio = new AudioClient(backend, this.view, this.settings);
     this.play = new PlayController(this);
     this.port = new PortState(this);
+    this.autosave = new Autosave(backend);
     this.commands.onError = (e, c) =>
       toast(`${c.title}: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }
@@ -41,7 +44,7 @@ export class App {
     this.view.speed = this.settings.data.speed;
     this.commands.setOverrides(this.settings.data.keys);
     this.audioInfo = await this.backend.audio.info().catch(() => null);
-    await this.loadKeys();
+    await this.port.detect();
     if (this.audioInfo?.device_error)
       toast(`No audio device - playing silently (${this.audioInfo.device_error})`, 'warn');
     this.ready = true;
@@ -74,8 +77,9 @@ export class App {
       void this.audio.loadProject(p);
       this.settings.addRecent(dir);
       this.selectChart(0);
-      if (!p.charts.length)
-        toast('No charts in this folder yet - create one with New chart', 'info');
+      p.onSaved = (slots) => void this.autosave.clear(p, slots);
+      if (!p.charts.length) this.view.newChartOpen = true;
+      void this.offerRecovery(p);
       return true;
     } catch (e) {
       toast(`Could not open ${dir}: ${e instanceof Error ? e.message : String(e)}`, 'error');
@@ -88,6 +92,33 @@ export class App {
   openPalette(seed = ''): void {
     this.paletteSeed = seed;
     this.view.paletteOpen = true;
+  }
+
+  private async offerRecovery(p: Project): Promise<void> {
+    const found = await this.autosave.pending(p).catch(() => []);
+    for (const r of found) {
+      ask(
+        `Unsaved changes to ${r.file} from ${formatWhen(r.when)} were kept after EZ2BMS closed.`,
+        {
+          label: 'Recover',
+          run: () => {
+            p.recover(r.file, r.text);
+            const i = p.charts.findIndex((c) => c.file === r.file);
+            if (i >= 0) this.selectChart(i);
+            toast(`Recovered ${r.file} - save to keep it`, 'ok');
+          },
+        },
+      );
+    }
+  }
+
+  /** A new song in an empty (or audio-only) folder. */
+  async newSong(): Promise<void> {
+    const dir = await this.backend.pickFolder(
+      'Folder for the new song (its sounds can already be there)',
+    );
+    if (!dir) return;
+    if (await this.openProject(dir)) this.view.newChartOpen = true;
   }
 
   closeProject(): void {

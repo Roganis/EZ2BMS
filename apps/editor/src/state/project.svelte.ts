@@ -106,6 +106,15 @@ export class Project {
     return p;
   }
 
+  /** Swap a chart for recovered text (it stays unsaved until you save). */
+  recover(file: string, text: string): void {
+    const i = this.charts.findIndex((c) => c.file === file);
+    const slot = Project.slotFor(file, encodeUtf8(text));
+    slot.dirty = true;
+    if (i >= 0) this.charts[i] = slot;
+    else this.charts.push(slot);
+  }
+
   static slotFor(file: string, bytes: Uint8Array): ChartSlot {
     const { chart, warnings } = parseBmson(bytes);
     const resolved = chartMode(chart.info, file);
@@ -130,9 +139,13 @@ export class Project {
     slot.dirty = false;
   }
 
+  /** Called with the charts just written (autosave clears its copies). */
+  onSaved: ((slots: ChartSlot[]) => void) | undefined;
+
   async saveAll(): Promise<number> {
     const dirty = this.charts.filter((c) => c.dirty);
     for (const c of dirty) await this.save(c);
+    if (dirty.length) this.onSaved?.(dirty);
     await this.backend.writeText(
       joinPath(this.dir, SIDECAR),
       JSON.stringify($state.snapshot(this.sidecar), null, 2) + '\n',
