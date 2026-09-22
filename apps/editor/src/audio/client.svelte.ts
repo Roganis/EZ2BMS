@@ -1,0 +1,232 @@
+// The editor's side of the audio engine.
+//
+// It compiles the chart with the SAME compiler Publish uses (chart-core
+// compileChart: slices, keysounds, STOPs as gaps, f32 tempo), hands the
+// events to the engine, and while playing moves the cursor to what the
+// speaker is playing, from the audio clock - never from a timer.
+
+import {
+  compileChart,
+  dsLevel,
+  dsPan,
+  KeysoundRegistry,
+  MIX_UNITY,
+  modeDef,
+  PAN_CENTRE,
+  type ChartPlan,
+} from '@ez2bms/chart-core';
+import { SvelteMap } from 'svelte/reactivity';
+import {
+  joinPath,
+  type AudioEvent,
+  type Backend,
+  type ClockSnapshot,
+  type Loaded,
+} from '../bridge';
+import type { ChartSlot, Project } from '../state/project.svelte';
+import type { Settings } from '../state/settings.svelte';
+import { toast } from '../state/toasts.svelte';
+import type { View } from '../state/view.svelte';
+import { PlanTimeline } from './timeline';
+
+/** Voice for auditions: its own, so a new audition cuts the last one. */
+const AUDITION_VOICE = (1 << 16) + 255;
+const PUBLISH_RATE = 44100;
+const AUDIO_EXT = ['wav', 'ogg', 'flac', 'mp3', 'oga', 'ssf'];
+
+export class AudioClient {
+  /** Sound name (as the chart names it) -> what the engine loaded. */
+  private loaded = new SvelteMap<string, Loaded>();
+  private plan: ChartPlan | undefined;
+  private timeline: PlanTimeline | undefined;
+  private planRev = -1;
+  private planSlot: ChartSlot | undefined;
+  private syncTimer: ReturnType<typeof setTimeout> | undefined;
+  private clock: ClockSnapshot | undefined;
+  private unstream: (() => void) | undefined;
+  private offsetMs = 0;
+  private startGen = -1;
+  private startMs = 0;
+  private lastMs = 0;
+  private raf = 0;
+  muteBgm = $state(false);
+  solo = $state<number | null>(null);
+
+  constructor(
+    private readonly backend: Backend,
+    private readonly view: View,
+    private readonly settings: Settings,
+  ) {}
+
+  /** Measure how far the engine's host clock is from performance.now(): the fastest of ten pings. */
+  async calibrate(): Promise<void> {
+    let best = Infinity;
+    for (let i = 0; i < 10; i++) {
+      const t0 = performance.now();
+      const host = await this.backend.audio.now();
+      const t1 = performance.now();
+      if (t1 - t0 < best) {
+        best = t1 - t0;
+        this.offsetMs = host / 1e6 - (t0 + t1) / 2;
+      }
+    }
+    this.unstream?.();
+    this.unstream = this.backend.audio.streamClock((c) => (this.clock = c));
+  }
+
+  /** Load every sound the project's charts use (and keep ids for the rest). */
+  async loadProject(p: Project): Promise<void> {
+    const names = new Set<string>();
+    for (const c of p.charts) for (const ch of c.doc.data.channels) names.add(ch.name);
+    await this.load(p, [...names]);
+  }
+
+  async load(p: Project, names: string[]): Promise<void> {
+    const want = names.filter((n) => !this.loaded.has(n));
+    if (!want.length) return;
+    // BMS charts often name "kick.wav" for a file that is really kick.ogg.
+    const byStem = new Map<string, string>();
+    for (const s of p.samples) byStem.set(s.replace(/\.[^./]+$/, '').toLowerCase(), s);
+    const pathOf = (n: string) => {
+      const exact = p.samples.find((s) => s.toLowerCase() === n.toLowerCase());
+      const alt = byStem.get(n.replace(/\.[^./]+$/, '').toLowerCase());
+      return joinPath(
+        p.dir,
+        exact ?? (alt && AUDIO_EXT.some((e) => alt.toLowerCase().endsWith(e)) ? alt : n),
+      );
+    };
+    const res = await this.backend.audio.load(want.map(pathOf));
+    let failed = 0;
+    res.forEach((r, i) => {
+      this.loaded.set(want[i]!, r);
+      if (r.error) failed++;
+    });
+    if (failed)
+      toast(
+        `${failed} sound${failed === 1 ? '' : 's'} could not be read (see the Sounds drawer)`,
+        'warn',
+      );
+    this.planRev = -1;
+  }
+
+  loadedInfo(name: string): Loaded | undefined {
+    return this.loaded.get(name);
+  }
+
+  /** Recompile soon (after edits settle); play() compiles right away. */
+  scheduleSync(slot: ChartSlot): void {
+    clearTimeout(this.syncTimer);
+    this.syncTimer = setTimeout(() => void this.sync(slot), this.view.playing ? 30 : 160);
+  }
+
+  async sync(slot: ChartSlot): Promise<void> {
+    clearTimeout(this.syncTimer);
+    if (this.planSlot === slot && this.planRev === slot.rev) return;
+    const d = slot.doc.data;
+    const reg = new KeysoundRegistry();
+    const plan = compileChart(d, {
+      columns: modeDef(slot.mode).columns,
+      name: 'preview',
+      keysounds: reg,
+      samples: (src) => {
+        const l = this.loaded.get(src);
+        return l && !l.error ? { frames: Math.round(l.seconds * PUBLISH_RATE) } : undefined;
+      },
+    });
+    this.plan = plan;
+    this.timeline = new PlanTimeline(plan.tempo, slot.doc.resolution, d.stopEvents);
+    this.planRev = slot.rev;
+    this.planSlot = slot;
+    const events: AudioEvent[] = [];
+    for (const e of plan.events) {
+      if (this.muteBgm && !e.lane) continue;
+      if (this.solo !== null && e.lane && e.x !== this.solo) continue;
+      const def = reg.defs[e.keysound]!;
+      const id = this.loaded.get(def.src)?.id;
+      if (id === null || id === undefined) continue;
+      events.push({
+        ms: e.ms,
+        origin_ms: e.originMs,
+        until_ms: e.untilMs,
+        sample: id,
+        voice: e.keysound,
+        level: dsLevel(MIX_UNITY, MIX_UNITY, MIX_UNITY, e.vel),
+        pan: dsPan(PAN_CENTRE, e.pan),
+      });
+    }
+    await this.backend.audio.setEvents(events);
+  }
+
+  /** Song milliseconds at a pulse, as EZ2PORT will play it. */
+  msAt(slot: ChartSlot, pulse: number): number {
+    if (!this.timeline || this.planSlot !== slot) return 0;
+    return this.timeline.msAt(pulse);
+  }
+
+  get playing(): boolean {
+    return this.view.playing;
+  }
+
+  async play(slot: ChartSlot, fromPulse: number): Promise<void> {
+    await this.sync(slot);
+    if (!this.clock) await this.calibrate();
+    const ms = this.timeline!.msAt(fromPulse);
+    this.startMs = ms;
+    this.lastMs = ms;
+    this.startGen = this.clock?.generation ?? -1;
+    await this.backend.audio.play(ms + this.settings.data.audioOffsetMs);
+    this.view.playing = true;
+    cancelAnimationFrame(this.raf);
+    const tick = () => {
+      if (!this.view.playing) return;
+      const heard = this.heardMs();
+      if (heard !== undefined) {
+        this.view.cursor = Math.max(0, this.timeline!.pulseAt(heard));
+        if (this.plan && heard > this.plan.endMs + 1500) {
+          void this.stop();
+          return;
+        }
+      }
+      this.raf = requestAnimationFrame(tick);
+    };
+    this.raf = requestAnimationFrame(tick);
+  }
+
+  async stop(): Promise<void> {
+    cancelAnimationFrame(this.raf);
+    this.view.playing = false;
+    await this.backend.audio.stop();
+  }
+
+  /** What the speaker is playing now, in song ms; undefined until the engine has started. */
+  private heardMs(): number | undefined {
+    const c = this.clock;
+    if (!c || !c.playing || c.generation === this.startGen) return undefined;
+    const hostNs = (performance.now() + this.offsetMs) * 1e6;
+    const frame = c.frame + ((hostNs - c.host_ns) * c.rate) / 1e9 - c.latency_frames;
+    const ms = (frame * 1000) / c.rate - this.settings.data.audioOffsetMs;
+    // Never backwards: a late buffer must not make the cursor jitter.
+    this.lastMs = Math.max(this.lastMs, ms);
+    return this.lastMs;
+  }
+
+  /** Hear a sound (or part of one) now, cutting the last audition. */
+  async audition(name: string, fromMs = 0, untilMs: number | null = null): Promise<void> {
+    const id = this.loaded.get(name)?.id;
+    if (id === null || id === undefined) return;
+    await this.backend.audio.trigger({
+      sample: id,
+      voice: AUDITION_VOICE,
+      offset_ms: fromMs,
+      until_ms: untilMs,
+    });
+  }
+
+  forget(): void {
+    void this.stop();
+    this.loaded.clear();
+    this.plan = undefined;
+    this.planSlot = undefined;
+    this.planRev = -1;
+  }
+}

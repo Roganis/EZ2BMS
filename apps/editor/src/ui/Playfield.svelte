@@ -36,6 +36,10 @@
       setMarquee: (m) => (marquee = m),
       pan: (d) => (v.cursor = Math.max(0, v.cursor + d)),
       say: (m) => toast(m, 'warn'),
+      audition: (ch) => {
+        const name = slot.doc.channel(ch)?.name;
+        if (name && !v.playing) void app.audio.audition(name);
+      },
     };
   }
 

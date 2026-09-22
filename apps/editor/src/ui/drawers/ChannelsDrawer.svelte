@@ -75,7 +75,19 @@
             ondblclick={() => (renaming = r.id)}
             title="{r.name} - double-click to rename"
           >
-            <span class="sw" style:--h={channelHue(r.name)}></span>
+            <span
+              class="sw"
+              style:--h={channelHue(r.name)}
+              class:bad={!!app.audio.loadedInfo(r.name)?.error}
+              role="button"
+              tabindex="-1"
+              title={app.audio.loadedInfo(r.name)?.error ?? 'Listen'}
+              onclick={(e) => {
+                e.stopPropagation();
+                void app.audio.audition(r.name);
+              }}
+              onkeydown={() => {}}
+            ></span>
             <span class="nm">{r.name}</span>
             {#if r.uses}
               <span class="n">{r.uses}</span>
@@ -175,7 +187,12 @@
   .item.dim {
     color: var(--ink-dim);
   }
+  .sw.bad {
+    background: repeating-linear-gradient(45deg, var(--err) 0 2px, transparent 2px 4px);
+    box-shadow: none;
+  }
   .sw {
+    cursor: pointer;
     width: 10px;
     height: 10px;
     border-radius: 3px;

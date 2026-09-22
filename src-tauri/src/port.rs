@@ -242,6 +242,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_front_end_shapes_deserialize() {
+        let pkg = serde_json::json!({
+            "key": "abc",
+            "project_dir": "/songs/abc",
+            "files": [{ "path": "song.ini", "bytes": [91, 83] }],
+            "keysounds": [{ "src": "kick.wav", "start_frame": 0, "end_frame": null, "file": "kick.ssf" }]
+        });
+        let p: PackageDto = serde_json::from_value(pkg.clone()).unwrap();
+        assert_eq!((p.files[0].bytes.len(), p.keysounds[0].end_frame), (2, None));
+        let t: TestDto = serde_json::from_value(serde_json::json!({
+            "package": pkg, "chart_file": "streetmix1p-abc.ez", "mode": "StreetMix",
+            "ez2play": "/g/ez2play.exe", "game_root": "/g", "auto": true
+        }))
+        .unwrap();
+        assert!(t.auto && t.windowed && !t.skip_ready && t.start_ms.is_none());
+        let line =
+            serde_json::to_value(RunEvent::Line { stream: "err", text: "x".into(), at_ms: 3 })
+                .unwrap();
+        assert_eq!(line["kind"], "line");
+        let exit =
+            serde_json::to_value(RunEvent::Exit { outcome: "finished".into(), code: Some(0) })
+                .unwrap();
+        assert_eq!((exit["kind"].as_str(), exit["code"].as_i64()), (Some("exit"), Some(0)));
+    }
+
+    #[test]
     fn publishing_cuts_keysounds_and_reports_what_is_missing() {
         let d = std::env::temp_dir().join(format!("ez2bms-app publish {}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);

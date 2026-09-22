@@ -2,6 +2,7 @@
 // it is viewed, and every command. Components import `app` and read from it.
 
 import type { ChartDoc, Clip } from '@ez2bms/chart-core';
+import { AudioClient } from '../audio/client.svelte';
 import { createBackend, type AudioInfo, type Backend } from '../bridge';
 import { Commands } from '../commands/registry';
 import { Project, type ChartSlot } from './project.svelte';
@@ -13,6 +14,7 @@ export class App {
   readonly settings: Settings;
   readonly view = new View();
   readonly commands = new Commands();
+  readonly audio: AudioClient;
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
@@ -21,6 +23,7 @@ export class App {
 
   constructor(readonly backend: Backend) {
     this.settings = new Settings(backend);
+    this.audio = new AudioClient(backend, this.view, this.settings);
     this.commands.onError = (e, c) =>
       toast(`${c.title}: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }
@@ -47,7 +50,9 @@ export class App {
   async openProject(dir: string): Promise<boolean> {
     try {
       const p = await Project.open(this.backend, dir);
+      this.audio.forget();
       this.project = p;
+      void this.audio.loadProject(p);
       this.settings.addRecent(dir);
       this.selectChart(0);
       if (!p.charts.length)
@@ -67,12 +72,14 @@ export class App {
   }
 
   closeProject(): void {
+    this.audio.forget();
     this.project = null;
   }
 
   selectChart(i: number): void {
     const p = this.project;
     if (!p || !p.charts[i]) return;
+    if (this.view.playing) void this.audio.stop();
     p.activeIndex = i;
     const doc = p.charts[i]!.doc;
     this.view.cursor = 0;

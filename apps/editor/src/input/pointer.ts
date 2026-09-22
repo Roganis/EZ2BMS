@@ -43,6 +43,8 @@ export interface ToolHost {
   setMarquee(m: { x0: number; y0: number; x1: number; y1: number } | null): void;
   pan(dPulses: number): void;
   say(msg: string): void;
+  /** Hear a sound (placing or picking a note). */
+  audition(ch: ChannelId): void;
 }
 
 type Orig = { id: NoteId; x: number; y: number; l: number };
@@ -136,6 +138,7 @@ export class PointerTool {
         return;
       }
       if (!sel.has(note.id)) h.doc.setSelection(additive ? [...sel, note.id] : [note.id], note.id);
+      if (!additive) h.audition(note.ch);
       const orig = [...h.doc.selection.ids]
         .map((id) => h.doc.index.get(id))
         .filter((n): n is NoteRec => !!n)
@@ -242,6 +245,7 @@ export class PointerTool {
           return;
         }
         placeNote(h.doc, { x: g.x, y: g.y0, l: g.l, ch: h.brush });
+        h.audition(h.brush);
         return;
       }
       case 'move':

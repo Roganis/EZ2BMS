@@ -75,7 +75,7 @@ pnpm tauri dev          # the desktop app
 - [x] M1.12 Playfield renderer: EZ2PORT's lanes and scroll in Pixi, neon skin, every mode on both sides, background rack, minimap
 - [ ] M1.12b The game's own skin from `.pvi`/`.abm`
 - [x] M1.13 Tools and drawers (draw, drag-to-hold, move, resize, rubber band, erase, step input; sounds, inspector, chart info, timing)
-- [ ] M1.14 Audio in the editor (plan sync, play from cursor, audition)
+- [x] M1.14 Audio in the editor (the publish compiler feeds the engine, play from cursor on the audio clock, audition, mute background, solo)
 - [ ] M1.15 Play mode (autoplay, keyboard test play, result card)
 - [ ] M1.16-18 Test in EZ2PORT, new chart, lint, hardening
 

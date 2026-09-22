@@ -236,3 +236,36 @@ pub fn resolve(base: &Path, rel: &str) -> PathBuf {
         base.join(rel)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The shapes apps/editor/src/bridge/types.ts sends; field names must match.
+    #[test]
+    fn the_front_end_shapes_deserialize() {
+        let e: EventDto = serde_json::from_value(serde_json::json!({
+            "ms": 400.5, "origin_ms": 0.0, "until_ms": null, "sample": 3, "voice": 7, "level": -120, "pan": 0
+        }))
+        .unwrap();
+        assert_eq!((e.sample, e.voice, e.level, e.until_ms), (3, 7, -120, None));
+        let t: TriggerDto = serde_json::from_value(
+            serde_json::json!({ "sample": 1, "voice": 65791, "offset_ms": 0, "until_ms": null }),
+        )
+        .unwrap();
+        assert_eq!((t.sample, t.voice, t.level, t.pan), (1, 65791, 0, 0));
+        let c = serde_json::to_value(ClockDto {
+            frame: 1,
+            host_ns: 2,
+            latency_frames: 3,
+            rate: 48000,
+            playing: true,
+            generation: 4,
+            now_ns: 5,
+        })
+        .unwrap();
+        for k in ["frame", "host_ns", "latency_frames", "rate", "playing", "generation", "now_ns"] {
+            assert!(c.get(k).is_some(), "{k}");
+        }
+    }
+}

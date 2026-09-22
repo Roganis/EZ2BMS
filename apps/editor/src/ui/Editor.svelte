@@ -9,6 +9,25 @@
 
   let { project }: { project: Project } = $props();
   const slot = $derived(project.active);
+
+  // Keep the engine's copy of the chart current: recompiled a moment after
+  // each edit (sooner while playing), with the same compiler as Publish.
+  $effect(() => {
+    if (!slot) return;
+    void slot.rev;
+    void app.audio.muteBgm;
+    void app.audio.solo;
+    app.audio.scheduleSync(slot);
+  });
+  // New sounds in the chart get loaded.
+  $effect(() => {
+    if (!slot) return;
+    void slot.rev;
+    void app.audio.load(
+      project,
+      slot.doc.data.channels.map((c) => c.name),
+    );
+  });
 </script>
 
 <div class="editor" class:play={app.view.mode === 'play'} data-testid="editor">
