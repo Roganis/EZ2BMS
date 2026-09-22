@@ -33,3 +33,8 @@ export { decodeCp949 } from './ez2data/initext';
 export * from './edit/note-index';
 export * from './edit/doc';
 export * from './edit/commands';
+export * from './publish/keysounds';
+export * from './publish/tracks';
+export * from './publish/chart-plan';
+export * from './publish/text';
+export * from './publish/package';
