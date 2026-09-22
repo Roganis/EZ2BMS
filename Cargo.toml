@@ -1,0 +1,34 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/ez2bms-audio",
+  "crates/ez2bms-launch",
+  "crates/ez2port-oracle",
+]
+# The Tauri app needs webkit2gtk (Linux) to build; everything else builds
+# anywhere. `cargo test` at the root runs the portable crates only.
+default-members = [
+  "crates/ez2bms-audio",
+  "crates/ez2bms-launch",
+  "crates/ez2port-oracle",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+repository = "https://github.com/Roganis/EZ2BMS"
+rust-version = "1.80"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[profile.dev.package."*"]
+# Decoding and resampling are unbearably slow unoptimised, even in debug builds.
+opt-level = 2
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

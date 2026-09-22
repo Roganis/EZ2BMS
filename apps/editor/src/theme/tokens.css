@@ -1,0 +1,48 @@
+/* EZ2BMS design tokens. The palette is derived from the EZ2 lane kinds so the
+ * chrome around the playfield speaks the same colour language as the field:
+ * white keys, blue keys, red turntable/effectors, gold pedal. */
+:root {
+  --bg-0: #05060a;
+  --bg-1: #0b0e17;
+  --bg-2: #121726;
+  --panel: rgba(14, 18, 32, 0.92);
+  --panel-edge: rgba(120, 190, 255, 0.28);
+  --ink: #e8eeff;
+  --ink-dim: #8a93b2;
+  --ink-faint: #4b5372;
+
+  --lane-white: #f2f2ff;
+  --lane-blue: #4d9eff;
+  --lane-red: #ed2e2e;
+  --lane-gold: #ffd11f;
+
+  --neon: #58e1ff;
+  --neon-2: #ff4fd8;
+  --ok: #56f39a;
+  --warn: #ffc247;
+  --err: #ff5470;
+
+  --glow: 0 0 12px rgba(88, 225, 255, 0.55);
+  --radius: 10px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --font-ui: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-num: 'JetBrains Mono', 'Cascadia Mono', ui-monospace, monospace;
+
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg-0);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  overflow: hidden;
+  user-select: none;
+}
+
+#app {
+  height: 100%;
+}
