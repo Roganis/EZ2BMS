@@ -35,6 +35,12 @@
     <span>{stats.sounds} sounds</span>
     {#if stats.selected}<span class="sel">{stats.selected} selected</span>{/if}
     {#if stats.undo}<span class="dim">last: {stats.undo}</span>{/if}
+    {#if app.classic.on && slot}
+      <span class="classic" data-testid="classic-status"
+        >CLASSIC{#if app.classic.cands.length}
+          · {app.classic.label(slot.doc)}{/if}</span
+      >
+    {/if}
   {/if}
   <span class="right">
     <button
@@ -65,6 +71,10 @@
 </footer>
 
 <style>
+  .classic {
+    color: #ff4fd8;
+    font-weight: 600;
+  }
   .status {
     display: flex;
     gap: 14px;

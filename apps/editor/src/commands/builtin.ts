@@ -110,7 +110,11 @@ export function registerBuiltins(app: App): void {
       group: 'Edit',
       keys: ['Delete', 'Backspace'],
       enabled: hasSel,
-      run: () => eraseNotes(app.doc!, app.doc!.selection.ids),
+      // In Classic mode a note is only un-keyed: the sound it plays stays in the background.
+      run: () =>
+        app.classic.on
+          ? app.classic.unkey(app.doc!, app.doc!.selection.ids)
+          : eraseNotes(app.doc!, app.doc!.selection.ids),
     },
     // ---- View
     {

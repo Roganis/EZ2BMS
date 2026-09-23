@@ -57,6 +57,13 @@
 
   <div class="actions">
     <button
+      class="classic"
+      class:on={app.classic.on}
+      onclick={() => app.commands.run('view.classic')}
+      title="Classic mode: placing a note keys the sound playing there (Ctrl+Shift+K)"
+      data-testid="classic-toggle">CLASSIC</button
+    >
+    <button
       class="icon"
       disabled={!canUndo}
       onclick={() => app.commands.run('edit.undo')}
@@ -210,6 +217,22 @@
   .icon:disabled {
     opacity: 0.3;
     cursor: default;
+  }
+  .classic {
+    all: unset;
+    cursor: pointer;
+    padding: 4px 9px;
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--ink-faint);
+    border: 1px solid rgba(255, 79, 216, 0.25);
+  }
+  .classic.on {
+    color: #1a0614;
+    background: #ff4fd8;
+    box-shadow: 0 0 14px rgba(255, 79, 216, 0.55);
   }
   .seg {
     display: flex;

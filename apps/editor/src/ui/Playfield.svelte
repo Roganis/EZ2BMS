@@ -23,6 +23,7 @@
   let hi = $state(0);
   let fieldBox = $state({ left: 0, right: 0, judgeY: 0 });
   let ghost = $state<{ x: number; y: number; l: number } | null>(null);
+  const classicOn = $derived(app.classic.on);
   let marquee = $state<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const tool = new PointerTool();
 
@@ -36,7 +37,11 @@
       snap: v.snap,
       brush: v.brush,
       setBrush: (ch) => (v.brush = ch),
-      setGhost: (g) => (ghost = g),
+      setGhost: (g) => {
+        // Classic mode works out what the note would key as the pointer moves.
+        if (g && classicOn) app.classic.hover(slot.doc, g.x, g.y, g.l);
+        ghost = g;
+      },
       setMarquee: (m) => (marquee = m),
       pan: (d) => (v.cursor = Math.max(0, v.cursor + d)),
       say: (m) => toast(m, 'warn'),
@@ -44,6 +49,21 @@
         const name = slot.doc.channel(ch)?.name;
         if (name && !v.playing) void app.audio.audition(name);
       },
+      ...(classicOn
+        ? {
+            classic: {
+              snap: (p, within) => app.classic.snap(slot.doc, p, within),
+              place: (x, y, l) => {
+                if (app.classic.key(slot.doc, x, y, l)) {
+                  const name = slot.doc.channel(v.brush ?? -1)?.name;
+                  if (name && !v.playing) void app.audio.audition(name);
+                }
+              },
+              right: (note, y) => app.classic.right(slot.doc, note, y),
+              canMove: (t) => app.classic.canMove(slot.doc, t),
+            },
+          }
+        : {}),
     };
   }
 
@@ -77,6 +97,14 @@
         return;
       }
     }
+    // While drawing a note in Classic mode, Tab picks the next sound (it is
+    // Edit/Play otherwise, which means nothing in the middle of a drag).
+    if (e.key === 'Tab' && classicOn && tool.placing) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      app.classic.cycle(e.shiftKey ? -1 : 1);
+      return;
+    }
     if (e.key === 'Escape' && tool.busy) {
       const h = host_();
       if (h) tool.cancel(h);
@@ -106,6 +134,16 @@
     const step = (d.resolution * 4) / v.snap;
     const y = Math.max(0, Math.round(v.cursor / step) * step);
     const there = d.index.at(x, y);
+    if (classicOn) {
+      // Classic: the key un-keys what is there, or keys what is sounding.
+      if (there.length)
+        app.classic.unkey(
+          d,
+          there.map((n) => n.id),
+        );
+      else app.classic.key(d, x, y, 0);
+      return;
+    }
     if (there.length)
       eraseNotes(
         d,
@@ -176,13 +214,21 @@
       snap: v.snap,
       selection: slot.doc.selection.ids,
       hoverLane: v.hoverLane,
-      ghost,
+      ghost:
+        ghost && classicOn
+          ? {
+              ...ghost,
+              label: app.classic.label(slot.doc),
+              bad: !app.classic.current || !!app.classic.current.bad,
+            }
+          : ghost,
       marquee,
       pressed: app.play.pressed,
       hidden: app.play.hidden,
       live: v.playing,
       skin: app.skin.current,
-      classic: false,
+      classic: classicOn,
+      classicHint: classicOn && ghost ? app.classic.hint : null,
       brush: v.brush,
       rackScroll: v.rackScroll,
     });

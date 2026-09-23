@@ -23,6 +23,8 @@ import { baseName, joinPath, type Backend } from '../bridge';
 export interface Sidecar {
   key: string;
   category?: number;
+  /** Classic-mode charting for this song (absent: on when a chart already has continuations). */
+  classic?: boolean;
   [k: string]: unknown;
 }
 
@@ -66,6 +68,11 @@ export class Project {
   activeIndex = $state(0);
   samples = $state<string[]>([]);
   sidecar = $state<Sidecar>({ key: '' });
+  /**
+   * Classic mode when the song file does not say: on for a song whose charts
+   * already continue sounds (it was built from stems or a converted BMS).
+   */
+  classicDefault = false;
 
   private constructor(
     public readonly dir: string,
@@ -103,6 +110,7 @@ export class Project {
     }
     slots.sort((a, b) => a.mode.localeCompare(b.mode) || TIER_ORDER[a.tier] - TIER_ORDER[b.tier]);
     p.charts = slots;
+    p.classicDefault = slots.some((s) => s.doc.data.notes.some((n) => n.c));
     return p;
   }
 
@@ -146,12 +154,17 @@ export class Project {
     const dirty = this.charts.filter((c) => c.dirty);
     for (const c of dirty) await this.save(c);
     if (dirty.length) this.onSaved?.(dirty);
+    await this.saveSidecar();
+    return dirty.length;
+  }
+
+  /** Write the song file (ez2bms.song.json) now. */
+  async saveSidecar(): Promise<void> {
     await this.backend.writeText(
       joinPath(this.dir, SIDECAR),
       JSON.stringify($state.snapshot(this.sidecar), null, 2) + '\n',
       false,
     );
-    return dirty.length;
   }
 
   /** Bytes of a chart as it would be saved (for tests and exports). */

@@ -22,20 +22,24 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 
 ## Edit
 
-| Command                                        | Keys                    | Palette |
-| ---------------------------------------------- | ----------------------- | ------- |
-| Copy                                           | `Ctrl+C`                |         |
-| Cut                                            | `Ctrl+X`                |         |
-| Delete selected notes                          | `Delete` `Backspace`    |         |
-| Draw tool                                      | `D`                     |         |
-| Duplicate after itself                         | `Ctrl+D`                |         |
-| Paste at the cursor                            | `Ctrl+V`                |         |
-| Redo                                           | `Ctrl+Shift+Z` `Ctrl+Y` |         |
-| Select all notes                               | `Ctrl+A`                |         |
-| Select nothing                                 | `Escape`                |         |
-| Select tool                                    | `V`                     |         |
-| Step input (place notes with the cabinet keys) | `Ctrl+E`                |         |
-| Undo                                           | `Ctrl+Z`                |         |
+| Command                                             | Keys                    | Palette |
+| --------------------------------------------------- | ----------------------- | ------- |
+| Classic mode on / off (key the sound playing there) | `Ctrl+Shift+K`          |         |
+| Classic: next sound to key                          | `Q`                     |         |
+| Classic: previous sound to key                      | `Shift+Q`               |         |
+| Classic: reset all notes to the background          |                         |         |
+| Copy                                                | `Ctrl+C`                |         |
+| Cut                                                 | `Ctrl+X`                |         |
+| Delete selected notes                               | `Delete` `Backspace`    |         |
+| Draw tool                                           | `D`                     |         |
+| Duplicate after itself                              | `Ctrl+D`                |         |
+| Paste at the cursor                                 | `Ctrl+V`                |         |
+| Redo                                                | `Ctrl+Shift+Z` `Ctrl+Y` |         |
+| Select all notes                                    | `Ctrl+A`                |         |
+| Select nothing                                      | `Escape`                |         |
+| Select tool                                         | `V`                     |         |
+| Step input (place notes with the cabinet keys)      | `Ctrl+E`                |         |
+| Undo                                                | `Ctrl+Z`                |         |
 
 ## Notes
 

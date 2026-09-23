@@ -11,6 +11,7 @@ import {
   KeysoundRegistry,
   modeDef,
   type ChartPlan,
+  type SampleLookup,
 } from '@ez2bms/chart-core';
 import { SvelteMap } from 'svelte/reactivity';
 import type { AudioEvent, Backend, ClockSnapshot, Loaded } from '../bridge';
@@ -46,6 +47,9 @@ export class AudioClient {
   lanesMuted = false;
   private reg: KeysoundRegistry | undefined;
   private planKey = '';
+  /** Bumped whenever the set of loaded sounds changes. */
+  private loadedRev = 0;
+  private lookup: { rev: number; fn: SampleLookup } | undefined;
 
   constructor(
     private readonly backend: Backend,
@@ -84,6 +88,7 @@ export class AudioClient {
       this.loaded.set(want[i]!, r);
       if (r.error) failed++;
     });
+    this.loadedRev++;
     if (failed)
       toast(
         `${failed} sound${failed === 1 ? '' : 's'} could not be read (see the Sounds drawer)`,
@@ -94,6 +99,27 @@ export class AudioClient {
 
   loadedInfo(name: string): Loaded | undefined {
     return this.loaded.get(name);
+  }
+
+  /**
+   * Sample lengths at 44.1 kHz by sound name - what the compiler and the
+   * Classic checks measure with. One function per set of loaded sounds, so
+   * whatever caches on it stays valid until a sound loads.
+   */
+  lengths(): SampleLookup {
+    if (!this.lookup || this.lookup.rev !== this.loadedRev) {
+      // A frozen copy: the function must not change under what cached on it.
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity
+      const known = new Map(this.loaded);
+      this.lookup = {
+        rev: this.loadedRev,
+        fn: (src) => {
+          const l = known.get(src);
+          return l && !l.error ? { frames: Math.round(l.seconds * PUBLISH_RATE) } : undefined;
+        },
+      };
+    }
+    return this.lookup.fn;
   }
 
   /** Recompile soon (after edits settle); play() compiles right away. */
@@ -113,10 +139,7 @@ export class AudioClient {
       columns: modeDef(slot.mode).columns,
       name: 'preview',
       keysounds: reg,
-      samples: (src) => {
-        const l = this.loaded.get(src);
-        return l && !l.error ? { frames: Math.round(l.seconds * PUBLISH_RATE) } : undefined;
-      },
+      samples: this.lengths(),
     });
     this.plan = plan;
     this.reg = reg;
@@ -228,6 +251,7 @@ export class AudioClient {
   forget(): void {
     void this.stop();
     this.loaded.clear();
+    this.loadedRev++;
     this.plan = undefined;
     this.reg = undefined;
     this.planSlot = undefined;

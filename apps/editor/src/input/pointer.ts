@@ -9,6 +9,11 @@
 //   middle button             pan
 //   Alt+click a note          take its sound as the brush
 //
+// In Classic mode (the host passes `classic`) placing keys the sound playing
+// there instead of the brush, the right button un-keys, heals or splits
+// instead of erasing, drags keep notes at their time, and positions snap to
+// the picked sound's group before the grid.
+//
 // Moves and resizes are drafts: the chart shows the result live, Esc puts
 // everything back, and the whole drag is one undo step.
 
@@ -45,6 +50,17 @@ export interface ToolHost {
   say(msg: string): void;
   /** Hear a sound (placing or picking a note). */
   audition(ch: ChannelId): void;
+  /** Classic mode: what placing, right-clicking, snapping and moving mean instead. */
+  classic?: ClassicHooks;
+}
+
+export interface ClassicHooks {
+  /** A position snapped to the sound's own notes, or undefined for the grid. */
+  snap(p: number, within: number): number | undefined;
+  place(x: number, y: number, l: number): void;
+  right(note: NoteRec | undefined, y: number): void;
+  /** Whether notes may go where a drag would put them (their time never changes). */
+  canMove(targets: { id: NoteId; x: number; y: number; l: number }[]): boolean;
 }
 
 type Orig = { id: NoteId; x: number; y: number; l: number };
@@ -76,6 +92,11 @@ export class PointerTool {
     return this.g.kind !== 'none';
   }
 
+  /** A note is being drawn (the button is down on an empty spot). */
+  get placing(): boolean {
+    return this.g.kind === 'place';
+  }
+
   private step(h: ToolHost): number {
     const res = h.doc.resolution;
     const grid = SNAP_GRIDS.find((g) => g.perMeasure === h.snap);
@@ -85,6 +106,8 @@ export class PointerTool {
   private snap(h: ToolHost, p: number, free: boolean): number {
     if (free) return Math.max(0, Math.round(p));
     const s = this.step(h);
+    const toSound = h.classic?.snap(p, s / 2);
+    if (toSound !== undefined) return toSound;
     return Math.max(0, Math.round(p / s) * s);
   }
 
@@ -108,6 +131,10 @@ export class PointerTool {
       hit = undefined;
     const chip = hit ? undefined : r.rackNoteAt(px, py);
     const note = hit?.note ?? chip;
+    if (e.button === 2 && h.classic) {
+      h.classic.right(note, this.snap(h, p, e.altKey));
+      return;
+    }
     if (e.button === 2) {
       if (note && h.doc.selection.ids.has(note.id) && h.doc.selection.ids.size > 1) {
         eraseNotes(h.doc, h.doc.selection.ids);
@@ -196,9 +223,11 @@ export class PointerTool {
       case 'move': {
         if (!g.draft && Math.hypot(px - g.sx, py - g.sy) < DRAG_PX) return;
         g.draft ??= h.doc.begin(g.orig.length === 1 ? 'Move note' : `Move ${g.orig.length} notes`);
-        const dy = this.snap(h, g.anchor.y + (p - g.p0), e.altKey) - g.anchor.y;
+        // Classic mode moves sounds between lanes, never in time.
+        const dy = h.classic ? 0 : this.snap(h, g.anchor.y + (p - g.p0), e.altKey) - g.anchor.y;
         const target = this.targets(h, g, px, dy);
         if (!target || movedConflict(h.doc, target)) return;
+        if (h.classic && !h.classic.canMove(target)) return;
         const draft = g.draft;
         draft.update((tx) =>
           tx.patchNotes(target.map((t) => ({ id: t.id, patch: { x: t.x, y: t.y } }))),
@@ -235,6 +264,10 @@ export class PointerTool {
     switch (g.kind) {
       case 'place': {
         h.setGhost(null);
+        if (h.classic) {
+          h.classic.place(g.x, g.y0, g.l);
+          return;
+        }
         if (h.brush === null || !h.doc.channel(h.brush)) {
           h.say('Pick a sound to draw with first (Sounds, on the left)');
           return;

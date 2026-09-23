@@ -4,6 +4,7 @@
   import { registerNoteCommands } from '../commands/notes';
   import { registerPlayCommands } from '../commands/play';
   import { registerPortCommands } from '../commands/port';
+  import { registerClassicCommands } from '../commands/classic';
   import { app } from '../state/app.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import Editor from './Editor.svelte';
@@ -15,6 +16,7 @@
   registerNoteCommands(app);
   registerPlayCommands(app);
   registerPortCommands(app);
+  registerClassicCommands(app);
 
   onMount(() => {
     void app.init();

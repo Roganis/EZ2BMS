@@ -131,14 +131,17 @@ export function demoFiles(modes = false, bench = false): Map<string, Uint8Array>
   for (const s of SAMPLES) files.set(`${DEMO_DIR}/${s}`, new Uint8Array(0));
   files.set(
     `${DEMO_DIR}/ez2bms.song.json`,
-    encodeUtf8(JSON.stringify({ key: 'neonparade', category: 0 }, null, 2) + '\n'),
+    // Classic mode off to start with, though the song slices a stem (tests switch it on).
+    encodeUtf8(JSON.stringify({ key: 'neonparade', category: 0, classic: false }, null, 2) + '\n'),
   );
   return files;
 }
 
 /** How long the silent web audio says a sample is. */
 export function demoSeconds(path: string): number {
-  if (/stem|pad|bgm/i.test(path)) return 1.6;
+  // The stem runs under the whole demo (24 measures at 150 BPM), sliced per measure.
+  if (/stem/i.test(path)) return 40;
+  if (/pad|bgm/i.test(path)) return 1.6;
   if (/bass|riser/i.test(path)) return 0.8;
   return 0.25;
 }

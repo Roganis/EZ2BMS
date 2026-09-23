@@ -43,8 +43,8 @@ export interface FieldState {
   snap: number;
   selection: ReadonlySet<NoteId>;
   hoverLane: number | null;
-  /** The note the draw tool would place. */
-  ghost: { x: number; y: number; l: number } | null;
+  /** The note the draw tool would place (in Classic mode, with what it would key). */
+  ghost: { x: number; y: number; l: number; label?: string; bad?: boolean } | null;
   /** Rubber band, screen pixels. */
   marquee: { x0: number; y0: number; x1: number; y1: number } | null;
   /** Lanes held down in Play (bmson x). */
@@ -61,6 +61,8 @@ export interface FieldState {
   brush: ChannelId | null;
   /** How far the rack is scrolled sideways, design units. */
   rackScroll: number;
+  /** Classic: the rack note whose sound the ghost would key, lit. */
+  classicHint: NoteId | null;
 }
 
 const HOLD_LABEL: Record<number, string> = {
@@ -153,6 +155,12 @@ export class PlayfieldRenderer {
     fontFamily: 'sans-serif',
     fontSize: 9,
     fill: 0xffffff,
+  });
+  private readonly ghostText = new TextPool(this.text, {
+    fontFamily: 'sans-serif',
+    fontSize: 11,
+    fill: 0xffffff,
+    fontWeight: 'bold',
   });
   private readonly groupText = new TextPool(this.text, {
     fontFamily: 'sans-serif',
@@ -284,6 +292,11 @@ export class PlayfieldRenderer {
       }
     }
     return undefined;
+  }
+
+  /** Where a background note's chip was last drawn (screen pixels), if it was. */
+  rackBox(id: NoteId): { x: number; y: number; w: number; h: number } | undefined {
+    return this.rackHits.find((h) => h.id === id);
   }
 
   /** Whether a screen x is over the background rack. */
@@ -922,9 +935,10 @@ export class PlayfieldRenderer {
         c.position.set(x - PAD, y - chipH / 2 - PAD);
         c.width = chipW + 2 * PAD;
         const sel = s.selection.has(n.id);
-        c.tint = sel ? 0xffffff : hsl(channelHue(ch?.name ?? ''), 0.8, 0.62);
+        const hinted = s.classicHint === n.id;
+        c.tint = sel || hinted ? 0xffffff : hsl(channelHue(ch?.name ?? ''), 0.8, 0.62);
         // A keyed note (Classic) stays in its place as a faint outline.
-        c.alpha = (ghost ? 0.22 : sel ? 1 : 0.8) * this.extras;
+        c.alpha = (hinted ? 1 : ghost ? 0.22 : sel ? 1 : 0.8) * this.extras;
         if (ghost) return;
         this.rackHits.push({ id: n.id, x, y: y - chipH / 2, w: chipW, h: chipH });
         if (n.c) {
@@ -978,12 +992,19 @@ export class PlayfieldRenderer {
     g.poly([hx - 10 * l.scale, jy - 6 * l.scale, hx, jy, hx - 10 * l.scale, jy + 6 * l.scale]).fill(
       { color: NEON, alpha: 1 },
     );
-    // The draw tool's ghost.
+    // The draw tool's ghost (in Classic mode, named after what it would key).
+    this.ghostText.begin();
     if (s.ghost && s.mode === 'edit') {
       const lane = [...l.lanes, ...l.offLanes].find((g2) => g2.x === s.ghost!.x);
       if (lane) {
         const y = vp.yOf(s.ghost.y);
-        const c = KIND_COLOR[lane.kind];
+        const c = s.ghost.bad ? 0x8a8fa8 : KIND_COLOR[lane.kind];
+        if (s.ghost.label) {
+          const t = this.ghostText.next(s.ghost.label);
+          t.tint = s.ghost.bad ? 0xff7a7a : NEON;
+          t.scale.set(Math.min(1.3, l.scale * 0.8));
+          t.position.set(lane.left + lane.width + 6, y - t.height / 2);
+        }
         if (s.ghost.l > 0) {
           const ye = vp.yOf(s.ghost.y + s.ghost.l);
           g.rect(lane.left + lane.width * 0.14, ye, lane.width * 0.72, y - ye).fill({
@@ -1002,6 +1023,7 @@ export class PlayfieldRenderer {
         });
       }
     }
+    this.ghostText.end();
     if (s.marquee) {
       const m = s.marquee;
       const x = Math.min(m.x0, m.x1);
