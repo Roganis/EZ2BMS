@@ -46,7 +46,7 @@ const tree = (page: Page, root: string) =>
         if (e.is_dir) await walk(`${dir}/${e.name}`, r);
         else {
           const bytes: Uint8Array = await b.readFile(`${dir}/${e.name}`);
-          const d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+          const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(bytes)));
           out[r] = Array.from(d, (x) => x.toString(16).padStart(2, '0')).join('');
         }
       }
