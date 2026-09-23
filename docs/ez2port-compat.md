@@ -282,6 +282,19 @@ Playwright on the synthetic game folder (`bridge/demo-skin.ts`).
   renders the lines rather than returning them. Without the manifest the
   title is the song's key.
 
+## Importing BMS (M5, not in the oracle)
+
+EZ2PORT reads no BMS, so there is nothing of the port's to compare with. The
+reading follows the BMS command memo as LR2, beatoraja (jbms-parser) and
+BmsTWO read it, and `bms.test.ts` checks it against the memo's own
+arithmetic: for random files (measure lengths, tempo changes on channels 03
+and 08, STOPs, any slot grid) every note's position is exact and its time
+within a nanosecond of the memo's. Where players disagree, EZ2BMS follows
+beatoraja: a later line wins a tempo change at one spot, `#BASE 62` is read
+before anything else, EUC-KR and Shift-JIS are both in the wild. What an
+EZ2 chart cannot hold - hidden notes, mines, scroll and speed changes,
+image BGAs - is left out or kept unplayed, and Issues says which.
+
 ## Port behaviour worth knowing
 
 - **A package is listed in one bank.** `ez2_usersongs_merge` adds it to

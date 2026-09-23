@@ -27,7 +27,20 @@ cannot read is kept as it is and reported, never silently changed.
   },
   "preview": { "startMs": 61500, "lengthMs": 25000 },
   "bga": { "file": "movie/intro.mp4", "startMs": -250 },
-  "published": { "root": "D:/EZ2AC/ez2port/songs", "key": "neonparade" }
+  "published": { "root": "D:/EZ2AC/ez2port/songs", "key": "neonparade" },
+  "source": {
+    "from": "bms",
+    "path": "D:/BMS/Neon Parade",
+    "charts": { "streetmix1p-neonparade.bmson": "neon_n.bme" },
+    "notes": [
+      {
+        "chart": "streetmix1p-neonparade.bmson",
+        "rule": "bms-mines",
+        "severity": "info",
+        "message": "12 mines (D/E): EZ2 has none; left out"
+      }
+    ]
+  }
 }
 ```
 

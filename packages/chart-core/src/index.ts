@@ -24,6 +24,7 @@ export * from './io/ez/ezff';
 export * from './io/ez/ezi';
 export * from './io/ez/import';
 export * from './io/ez/game';
+export * from './io/bms';
 export { lowerBound, upperBound } from './util/sorted';
 export * from './modes/lanes';
 export * from './modes/registry';
