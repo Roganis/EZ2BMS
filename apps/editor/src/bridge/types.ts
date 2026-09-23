@@ -102,6 +102,10 @@ export interface AudioBackend {
   peaks(id: number, framesPerPx: number): Promise<Int16Array>;
   /** Thumbnails: `width` [min, max] pairs per id, in order (zeros for an unknown id). */
   thumbs(ids: number[], width: number): Promise<Int16Array>;
+  /** Part of one level of a sample's waveform mipmap: `count` buckets from `from`. */
+  peakRange(id: number, level: number, from: number, count: number): Promise<PeakRange>;
+  /** A sample's onsets and tempo (computed once; kept on disk for long files). */
+  analysis(id: number): Promise<SoundAnalysis>;
   setEvents(events: AudioEvent[]): Promise<void>;
   play(fromMs: number): Promise<void>;
   seek(ms: number): Promise<void>;
@@ -122,6 +126,29 @@ export interface AudioBackend {
   /** Its limit, MB; 0 turns it off and empties it. */
   cacheSetCap(mb: number): Promise<void>;
   cacheClear(): Promise<void>;
+}
+
+/**
+ * Part of a waveform mipmap: level k has buckets of `base << k` frames (at
+ * the device rate), each the [min, max] of the sample over it as i16.
+ */
+export interface PeakRange {
+  base: number;
+  levels: number;
+  frames: number;
+  /** Buckets in the level asked for. */
+  length: number;
+  /** The first bucket in `data`. */
+  from: number;
+  /** [min, max] pairs. */
+  data: Int16Array;
+}
+
+export interface SoundAnalysis {
+  /** [seconds from the file's start, strength 0..1], in time order. */
+  onsets: [number, number][];
+  /** Best first. `first_beat` is seconds from the file's start, under a beat. */
+  tempo: { bpm: number; first_beat: number; confidence: number }[];
 }
 
 export interface AudioCacheInfo {

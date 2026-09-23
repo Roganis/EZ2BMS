@@ -170,3 +170,56 @@ export function demoSeconds(path: string): number {
   if (/bass|riser/i.test(path)) return 0.8;
   return 0.25;
 }
+
+/** A hit in the demo stem: when (seconds) and how loud (0..1). */
+export interface DemoHit {
+  sec: number;
+  amp: number;
+}
+
+export interface DemoStem {
+  seconds: number;
+  bpm: number;
+  hits: DemoHit[];
+  /** A bar of silence, seconds [from, to). */
+  silent: [number, number];
+}
+
+/**
+ * What the demo stem "sounds like", for the browser build's waveforms and
+ * onsets (it decodes nothing): a 150 BPM pattern, loud on the beats and
+ * softer on the eighths between, over a quiet bed, with measure 9 silent.
+ */
+export function demoStem(path: string): DemoStem | undefined {
+  if (!/stem/i.test(path)) return undefined;
+  const seconds = demoSeconds(path);
+  const beat = 60 / 150;
+  const silent: [number, number] = [8 * 4 * beat, 9 * 4 * beat];
+  const hits: DemoHit[] = [];
+  for (let k = 0; (k * beat) / 2 < seconds; k++) {
+    const sec = (k * beat) / 2;
+    if (sec >= silent[0] && sec < silent[1]) continue;
+    hits.push({ sec, amp: k % 2 === 0 ? 0.8 : 0.3 });
+  }
+  return { seconds, bpm: 150, hits, silent };
+}
+
+/** The demo stem's peak level over [t0, t1) seconds: the loudest hit's decay over the bed. */
+export function demoStemLevel(stem: DemoStem, t0: number, t1: number): number {
+  const bed = t0 < stem.silent[1] && t1 > stem.silent[0] && t0 >= stem.silent[0] ? 0 : 0.06;
+  let level = bed;
+  // Hits are 0.2 s apart and fade within half a second.
+  let lo = 0;
+  let hi = stem.hits.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (stem.hits[mid]!.sec < t0 - 0.5) lo = mid + 1;
+    else hi = mid;
+  }
+  for (let i = lo; i < stem.hits.length && stem.hits[i]!.sec < t1; i++) {
+    const h = stem.hits[i]!;
+    const v = h.amp * Math.exp(-(Math.max(t0, h.sec) - h.sec) / 0.06);
+    if (v > level) level = v;
+  }
+  return level;
+}

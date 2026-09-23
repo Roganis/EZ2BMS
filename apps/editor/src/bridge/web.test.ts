@@ -46,6 +46,42 @@ describe('the browser backend', () => {
     expect(new TextDecoder().decode(await b.readFile('/song/kick.wav'))).toBe('old kick');
   });
 
+  it("lays waveform levels out as the desktop's mipmap and draws a test WAV from its samples", async () => {
+    const w = wav(44100);
+    const dv = new DataView(w.buffer);
+    // One loud frame, half a second in (left channel).
+    dv.setInt16(44 + 22050 * 4, 20000, true);
+    const b = webBackend(new Map([['/s/click.wav', w]]));
+    const [l] = await b.audio.load(['/s/click.wav']);
+    // A second at the browser's 48 kHz: 750 buckets of 64, halving to 1.
+    const r = await b.audio.peakRange(l!.id!, 0, 370, 10);
+    expect([r.base, r.frames, r.length, r.levels, r.from]).toEqual([64, 48000, 750, 11, 370]);
+    const hi = Array.from({ length: 10 }, (_, i) => r.data[2 * i + 1]);
+    expect(hi.filter((v) => v === 20000)).toHaveLength(1);
+    expect(hi[5]).toBe(20000); // bucket 375 holds 0.5 s
+    expect((await b.audio.peakRange(l!.id!, 10, 0, 5)).data).toHaveLength(2);
+    expect((await b.audio.peakRange(l!.id!, 0, 900, 5)).data).toHaveLength(0);
+  });
+
+  it("gives the demo stem's beats as onsets, and silence in its quiet bar", async () => {
+    const b = webBackend(new Map());
+    const [l] = await b.audio.load(['/demo/stem_pad.wav']);
+    const a = await b.audio.analysis(l!.id!);
+    expect(a.tempo[0]!.bpm).toBe(150);
+    expect(a.onsets.slice(0, 3).map(([t, s]) => [+t.toFixed(6), +s.toFixed(6)])).toEqual([
+      [0, 1],
+      [0.2, 0.375],
+      [0.4, 1],
+    ]);
+    // Measure 9 (12.8-14.4 s) is silent: once the last hit has faded, flat.
+    const bucket = 64 / 48000;
+    const r = await b.audio.peakRange(l!.id!, 0, Math.ceil(13.2 / bucket), 800);
+    expect(Math.max(...r.data)).toBe(0);
+    expect(
+      (await b.audio.analysis((await b.audio.load(['/demo/kick.wav']))[0]!.id!)).onsets,
+    ).toEqual([]);
+  });
+
   it('renames without replacing another file, case changes allowed', async () => {
     const b = webBackend(
       new Map([

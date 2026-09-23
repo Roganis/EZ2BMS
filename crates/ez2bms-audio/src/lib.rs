@@ -8,6 +8,7 @@
 //! - [`engine::Engine`] plays a schedule live, from any point, picking up
 //!   sounds already under way mid-sample; its [`clock`] says what is being
 //!   heard. [`offline`] renders through the same mixer.
+//! - [`analysis`] finds a stem's onsets and tempo, suggestions for slicing.
 //! - [`cut`] and [`ssf`] write published keysounds: 16-bit 44.1 kHz stereo,
 //!   sliced sample-exactly.
 //!
@@ -15,6 +16,7 @@
 //! compiles the chart exactly as it will be published; this crate only plays
 //! what it is given.
 
+pub mod analysis;
 pub mod backend;
 pub mod cache;
 pub mod clock;

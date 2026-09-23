@@ -15,7 +15,7 @@ import {
   type ArtJob,
   type PlateSpec,
 } from '@ez2bms/chart-core';
-import { demoFiles, demoSeconds, DEMO_DIR } from './demo';
+import { demoFiles, demoSeconds, demoStem, demoStemLevel, DEMO_DIR } from './demo';
 import type {
   ArtPixels,
   PlatePixels,
@@ -49,6 +49,35 @@ export function wavSeconds(b: Uint8Array): number | undefined {
     if (tag(o) === 'fmt ' && o + 20 <= b.length) bytesPerSecond = dv.getUint32(o + 16, true);
     if (tag(o) === 'data')
       return bytesPerSecond ? Math.min(size, b.length - o - 8) / bytesPerSecond : undefined;
+    o += 8 + size + (size & 1);
+  }
+  return undefined;
+}
+
+/** A 16-bit PCM WAV's samples, for the browser build's waveforms of test files. */
+export function wavPcm(
+  b: Uint8Array,
+): { rate: number; channels: number; pcm: Int16Array } | undefined {
+  if (b.length < 12) return undefined;
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const tag = (o: number) => String.fromCharCode(b[o]!, b[o + 1]!, b[o + 2]!, b[o + 3]!);
+  if (tag(0) !== 'RIFF' || tag(8) !== 'WAVE') return undefined;
+  let fmt: { rate: number; channels: number; bits: number } | undefined;
+  for (let o = 12; o + 8 <= b.length;) {
+    const size = dv.getUint32(o + 4, true);
+    if (tag(o) === 'fmt ' && o + 24 <= b.length)
+      fmt = {
+        channels: dv.getUint16(o + 10, true),
+        rate: dv.getUint32(o + 12, true),
+        bits: dv.getUint16(o + 22, true),
+      };
+    if (tag(o) === 'data') {
+      if (!fmt || fmt.bits !== 16) return undefined;
+      const n = Math.min(size, b.length - o - 8) >> 1;
+      const pcm = new Int16Array(n);
+      for (let i = 0; i < n; i++) pcm[i] = dv.getInt16(o + 8 + 2 * i, true);
+      return { rate: fmt.rate, channels: fmt.channels, pcm };
+    }
     o += 8 + size + (size & 1);
   }
   return undefined;
@@ -502,6 +531,59 @@ export function webBackend(
         seconds: job.length_ms / 1000,
         voice: (1 << 16) + 255,
       }),
+      // Mipmap buckets as ez2bms-audio lays them out (64 frames at level 0,
+      // doubling): the demo stem's pattern, a test's WAV from its samples,
+      // anything else a made-up decay.
+      peakRange: async (id, level, from, count) => {
+        const path = [...ids].find(([, v]) => v === id)?.[0] ?? '';
+        const bytes = files.get(norm(path));
+        const wav = bytes && wavPcm(bytes);
+        const seconds = (bytes && wavSeconds(bytes)) ?? demoSeconds(path);
+        const frames = Math.round(seconds * RATE);
+        const base = 64;
+        const len0 = Math.max(1, Math.ceil(frames / base));
+        const levels = len0 > 1 ? Math.ceil(Math.log2(len0)) + 1 : 1;
+        const k = Math.min(level, levels - 1);
+        const bucket = base * 2 ** k;
+        const length = Math.ceil(frames / bucket);
+        const a = Math.min(from, length);
+        const b = Math.min(a + count, length);
+        const data = new Int16Array((b - a) * 2);
+        const stem = demoStem(path);
+        for (let i = a; i < b; i++) {
+          const t0 = (i * bucket) / RATE;
+          const t1 = Math.min(((i + 1) * bucket) / RATE, seconds);
+          let lo = 0;
+          let hi = 0;
+          if (stem) {
+            hi = Math.round(demoStemLevel(stem, t0, t1) * 32767);
+            lo = -hi;
+          } else if (wav) {
+            const s0 = Math.floor(t0 * wav.rate) * wav.channels;
+            const s1 = Math.max(s0 + 1, Math.ceil(t1 * wav.rate) * wav.channels);
+            for (let j = s0; j < Math.min(s1, wav.pcm.length); j++) {
+              lo = Math.min(lo, wav.pcm[j]!);
+              hi = Math.max(hi, wav.pcm[j]!);
+            }
+          } else {
+            hi = Math.round(30000 * Math.exp((-4 * t0) / Math.max(seconds, 1e-3)));
+            lo = -hi;
+          }
+          data[(i - a) * 2] = lo;
+          data[(i - a) * 2 + 1] = hi;
+        }
+        return { base, levels, frames, length, from: a, data };
+      },
+      // The demo stem's hits and tempo, as the Rust analysis would find them.
+      analysis: async (id) => {
+        const path = [...ids].find(([, v]) => v === id)?.[0] ?? '';
+        const stem = demoStem(path);
+        if (!stem) return { onsets: [], tempo: [] };
+        return {
+          onsets: stem.hits.map((h): [number, number] => [h.sec, Math.min(1, h.amp / 0.8)]),
+          tempo: [{ bpm: stem.bpm, first_beat: 0, confidence: 0.9 }],
+        };
+      },
       // The browser decodes nothing, so there is nothing to keep on disk.
       cacheInfo: async () => ({ dir: null, entries: 0, bytes: 0, cap: cacheCap }),
       cacheSetCap: async (mb) => {

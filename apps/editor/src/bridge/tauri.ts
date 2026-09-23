@@ -21,6 +21,7 @@ import type {
   ProjectScan,
   Published,
   RunEvent,
+  SoundAnalysis,
   TestSpec,
   Trigger,
 } from './types';
@@ -99,6 +100,21 @@ export function tauriBackend(): Backend {
         const b = bytesOf(await invoke('audio_thumbs', { ids, width }));
         return new Int16Array(b.buffer, b.byteOffset, b.byteLength >> 1);
       },
+      peakRange: async (id, level, from, count) => {
+        const b = bytesOf(await invoke('audio_peak_range', { id, level, from, count }));
+        const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+        // A copy, so the pairs are aligned whatever the response's offset.
+        const body = b.slice(24);
+        return {
+          base: dv.getUint32(0, true),
+          levels: dv.getUint32(4, true),
+          frames: Number(dv.getBigUint64(8, true)),
+          length: dv.getUint32(16, true),
+          from: dv.getUint32(20, true),
+          data: new Int16Array(body.buffer, 0, body.byteLength >> 1),
+        };
+      },
+      analysis: (id) => invoke<SoundAnalysis>('audio_analysis', { id }),
       cacheInfo: () => invoke<AudioCacheInfo>('audio_cache_info'),
       cacheSetCap: (mb) => invoke('audio_cache_set_cap', { mb }),
       cacheClear: () => invoke('audio_cache_clear'),

@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
+use ez2bms_audio::analysis::{analyse, Analysis};
 use ez2bms_audio::cache::SampleCache;
 use ez2bms_audio::disk::{CacheInfo, DiskCache};
 use ez2bms_audio::level::ds_gains;
@@ -23,11 +24,13 @@ pub struct Audio {
     bank: Mutex<Bank>,
     /// Waveform mipmaps per sample id, kept while the id still holds the same
     /// decoded sample (a reload replaces it, and the entry no longer matches).
-    peaks: Mutex<PeakCache>,
+    peaks: Mutex<PerSample<Peaks>>,
+    /// Onsets and tempo per sample id, kept the same way.
+    analyses: Mutex<PerSample<Analysis>>,
 }
 
-/// Per sample id: the decoded sample a mipmap was built from, and the mipmap.
-type PeakCache = HashMap<u32, (Weak<Sample>, Arc<Peaks>)>;
+/// Per sample id: the decoded sample something was built from, and it.
+type PerSample<T> = HashMap<u32, (Weak<Sample>, Arc<T>)>;
 
 /// Frames per bucket at a waveform mipmap's finest level.
 const PEAK_BASE: u32 = 64;
@@ -213,6 +216,7 @@ impl Audio {
             cache,
             bank: Mutex::default(),
             peaks: Mutex::default(),
+            analyses: Mutex::default(),
         }
     }
 
@@ -319,6 +323,59 @@ impl Audio {
             out.extend_from_slice(&hi.to_le_bytes());
         }
         Ok(out)
+    }
+
+    /// Part of one mip level: `count` `[min, max]` pairs from bucket `from`
+    /// (fewer at the end), after a header saying what the mipmap is -
+    /// `[u32 base][u32 levels][u64 frames][u32 level length][u32 from]`, all
+    /// little-endian. A stem strip asks for what is on screen at its zoom.
+    pub fn peak_range(&self, id: u32, level: u32, from: u32, count: u32) -> CmdResult<Vec<u8>> {
+        let p = self.peaks_of(id)?;
+        let k = (level as usize).min(p.levels.len() - 1);
+        let lv = &p.levels[k];
+        let a = (from as usize).min(lv.len());
+        let b = a.saturating_add(count as usize).min(lv.len());
+        let mut out = Vec::with_capacity(24 + (b - a) * 4);
+        out.extend_from_slice(&p.base.to_le_bytes());
+        out.extend_from_slice(&(p.levels.len() as u32).to_le_bytes());
+        out.extend_from_slice(&p.frames.to_le_bytes());
+        out.extend_from_slice(&(lv.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(a as u32).to_le_bytes());
+        for [lo, hi] in &lv[a..b] {
+            out.extend_from_slice(&lo.to_le_bytes());
+            out.extend_from_slice(&hi.to_le_bytes());
+        }
+        Ok(out)
+    }
+
+    /// The sample's onsets and tempo: kept in memory per decoded sample, and
+    /// for a long file on disk beside it; computed (about a second for a
+    /// 3-minute stem) only when neither has it.
+    pub fn analysis(&self, id: u32) -> CmdResult<Arc<Analysis>> {
+        let s = self.sample(id)?;
+        if let Some((w, a)) = self.analyses.lock().unwrap().get(&id) {
+            if w.upgrade().is_some_and(|cur| Arc::ptr_eq(&cur, &s)) {
+                return Ok(a.clone());
+            }
+        }
+        let path = self.bank.lock().unwrap().paths.get(id as usize).cloned();
+        let disk = self.cache.disk().zip(path.and_then(|p| self.cache.disk_key(&p)));
+        let stored = disk
+            .as_ref()
+            .and_then(|(d, k)| d.load(k, "analysis"))
+            .and_then(|b| Analysis::from_bytes(&b));
+        let a = Arc::new(match stored {
+            Some(a) => a,
+            None => {
+                let a = analyse(&s);
+                if let Some((d, k)) = &disk {
+                    d.store(k, "analysis", &a.to_bytes());
+                }
+                a
+            }
+        });
+        self.analyses.lock().unwrap().insert(id, (Arc::downgrade(&s), a.clone()));
+        Ok(a)
     }
 
     /// Thumbnails for many samples at once: `width` `[min, max]` pairs per
@@ -457,6 +514,37 @@ pub fn publish_cache() -> SampleCache {
     }
 }
 
+/// Onsets as `[seconds, strength]`, tempi best first.
+#[derive(Debug, Clone, Serialize)]
+pub struct AnalysisDto {
+    pub onsets: Vec<[f64; 2]>,
+    pub tempo: Vec<TempoDto>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TempoDto {
+    pub bpm: f64,
+    pub first_beat: f64,
+    pub confidence: f32,
+}
+
+impl From<&Analysis> for AnalysisDto {
+    fn from(a: &Analysis) -> Self {
+        AnalysisDto {
+            onsets: a.onsets.iter().map(|o| [o.sec, o.strength as f64]).collect(),
+            tempo: a
+                .tempo
+                .iter()
+                .map(|t| TempoDto {
+                    bpm: t.bpm,
+                    first_beat: t.first_beat,
+                    confidence: t.confidence,
+                })
+                .collect(),
+        }
+    }
+}
+
 /// What the disk cache holds, for the settings panel.
 #[derive(Debug, Clone, Serialize)]
 pub struct CacheDto {
@@ -558,6 +646,47 @@ mod tests {
         audio.load(std::slice::from_ref(&a));
         let after = pairs(&audio.thumbs(&[ids[0]], 8));
         assert!(after[1] < 2_000, "reloaded: {:?}", &after[..2]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_sample_gives_its_onsets_once_and_its_waveform_in_parts() {
+        let dir = std::env::temp_dir().join(format!("ez2bms-analysis-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // Clicks at 0.5, 1.0 and 1.5 s in 2 s of silence.
+        let mut pcm = vec![0i16; 96_000];
+        for at in [24_000usize, 48_000, 72_000] {
+            for i in 0..480 {
+                pcm[at + i] = if i % 2 == 0 { 20_000 } else { -20_000 };
+            }
+        }
+        let path = dir.join("clicks.wav");
+        std::fs::write(&path, ez2bms_audio::wav::encode_pcm16(1, 48_000, &pcm)).unwrap();
+        let audio = Audio::from_engine(Engine::start_null(48_000), "null", None);
+        let id = audio.load(std::slice::from_ref(&path))[0].id.unwrap();
+
+        let a = audio.analysis(id).unwrap();
+        let at: Vec<f64> = a.onsets.iter().map(|o| o.sec).collect();
+        assert_eq!(at.len(), 3, "{at:?}");
+        for (got, want) in at.iter().zip([0.5, 1.0, 1.5]) {
+            assert!((got - want).abs() < 0.001, "{at:?}");
+        }
+        assert!(Arc::ptr_eq(&a, &audio.analysis(id).unwrap()), "computed once");
+        let dto = AnalysisDto::from(&*a);
+        assert_eq!(dto.onsets.len(), 3);
+
+        // Level 0 from bucket 370: the header, then the click at 0.5 s
+        // (bucket 375 of 64 frames) among silence.
+        let b = audio.peak_range(id, 0, 370, 10).unwrap();
+        let u32_at = |i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
+        assert_eq!((u32_at(0), u64::from_le_bytes(b[8..16].try_into().unwrap())), (64, 96_000));
+        assert_eq!((u32_at(16), u32_at(20)), (1500, 370));
+        let pairs: Vec<i16> = b[24..].chunks(2).map(|c| i16::from_le_bytes([c[0], c[1]])).collect();
+        assert_eq!(pairs.len(), 20);
+        assert_eq!(pairs[9], 0, "bucket 374 is silent");
+        assert!(pairs[11] > 19_000, "bucket 375 has the click");
+        // Past the end: the header and nothing more.
+        assert_eq!(audio.peak_range(id, 0, 5_000, 10).unwrap().len(), 24);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

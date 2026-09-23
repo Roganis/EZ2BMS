@@ -202,6 +202,28 @@ async fn audio_thumbs(
     Ok(Response::new(bytes))
 }
 
+/// Part of a sample's waveform mipmap (see `Audio::peak_range`).
+#[tauri::command]
+fn audio_peak_range(
+    audio: State<'_, Arc<Audio>>,
+    id: u32,
+    level: u32,
+    from: u32,
+    count: u32,
+) -> CmdResult<Response> {
+    Ok(Response::new(audio.peak_range(id, level, from, count.min(1 << 20))?))
+}
+
+/// A sample's onsets and tempo, off the main thread (a second or so the
+/// first time for a long stem).
+#[tauri::command]
+async fn audio_analysis(audio: State<'_, Arc<Audio>>, id: u32) -> CmdResult<audio::AnalysisDto> {
+    let audio = audio.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || audio.analysis(id).map(|a| (&*a).into()))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))?
+}
+
 /// What the disk cache for long files holds.
 #[tauri::command]
 async fn audio_cache_info() -> CmdResult<audio::CacheDto> {
@@ -411,6 +433,8 @@ pub fn run() {
             audio_load,
             audio_peaks,
             audio_thumbs,
+            audio_peak_range,
+            audio_analysis,
             audio_cache_info,
             audio_cache_set_cap,
             audio_cache_clear,

@@ -78,3 +78,34 @@ fn a_five_minute_stem_decoded_then_read_back_from_the_disk_cache() {
     assert!(warm < 60_000.0, "{warm} ms");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn onsets_and_tempo_of_a_three_minute_stem() {
+    use ez2bms_audio::analysis::analyse;
+    // Drum-like hits on sixteenths at 150 BPM over a noise bed, stereo 48 kHz
+    // (a minute in a debug build).
+    let rate = 48_000;
+    let seconds = if cfg!(debug_assertions) { 60 } else { 180 };
+    let mut rng = Lcg(5);
+    let mut x: Vec<f32> = (0..seconds * rate).map(|_| rng.unit() * 0.01).collect();
+    let step = (rate as f64 * 60.0 / 150.0 / 4.0) as usize;
+    for (k, at) in (0..x.len()).step_by(step).enumerate() {
+        let amp = if k % 4 == 0 { 0.8 } else { 0.3 };
+        for i in 0..(0.1 * rate as f64) as usize {
+            if let Some(v) = x.get_mut(at + i) {
+                *v += rng.unit() * amp * (-(i as f32) / (0.02 * rate as f32)).exp();
+            }
+        }
+    }
+    let s = ez2bms_audio::Sample::new(rate as u32, 2, x.iter().flat_map(|&v| [v, v]).collect());
+    let t = Instant::now();
+    let a = analyse(&s);
+    let ms = t.elapsed().as_secs_f64() * 1000.0;
+    eprintln!(
+        "onsets and tempo, {seconds} s stereo stem: {ms:.0} ms ({} onsets, {:.2} BPM)",
+        a.onsets.len(),
+        a.tempo.first().map_or(0.0, |t| t.bpm)
+    );
+    assert!((a.tempo[0].bpm - 150.0).abs() < 0.05);
+    assert!(ms < 120_000.0, "{ms} ms");
+}
