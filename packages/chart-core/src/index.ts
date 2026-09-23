@@ -46,6 +46,8 @@ export * from './edit/commands';
 export * from './edit/classic';
 export * from './slice/view';
 export * from './slice/ops';
+export * from './slice/midi';
+export * from './io/midi/smf';
 export * from './publish/keysounds';
 export * from './publish/songini-read';
 export * from './publish/rankings';

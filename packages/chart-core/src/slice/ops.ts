@@ -16,7 +16,7 @@
 import { analysis, type Analysis } from '../edit/analysis';
 import { classicCheck, classicHeal, type ClassicEnv, type Verdict } from '../edit/classic';
 import { BGM, movedConflict, placementConflict } from '../edit/commands';
-import type { ChartDoc } from '../edit/doc';
+import type { ChartDoc, TransactOptions } from '../edit/doc';
 import type { ChannelId, NoteId, NoteRec } from '../model/types';
 import { OUT_RATE } from '../publish/keysounds';
 import { TICKS_PER_BEAT } from '../timing/ticks';
@@ -99,6 +99,7 @@ export function applyCuts(
   cuts: readonly Cut[],
   env: SliceEnv = {},
   label = 'Cut stem',
+  opts: TransactOptions = {},
 ): SliceResult {
   if (!cuts.length) return { ok: false, reason: 'nothing to cut there' };
   let keep = [...cuts];
@@ -113,10 +114,14 @@ export function applyCuts(
     v = keep.length ? classicCheck(doc, { insert: keep }, env) : first;
   }
   if (!v.ok) return v;
-  const ids = doc.transact(label, (tx) => {
-    const stored = tx.insertNotes(keep.map((c) => ({ ...c, id: doc.newNoteId() })));
-    return stored.map((n) => n.id);
-  });
+  const ids = doc.transact(
+    label,
+    (tx) => {
+      const stored = tx.insertNotes(keep.map((c) => ({ ...c, id: doc.newNoteId() })));
+      return stored.map((n) => n.id);
+    },
+    opts,
+  );
   return { ok: true, ids };
 }
 

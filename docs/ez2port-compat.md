@@ -295,6 +295,14 @@ before anything else, EUC-KR and Shift-JIS are both in the wild. What an
 EZ2 chart cannot hold - hidden notes, mines, scroll and speed changes,
 image BGAs - is left out or kept unplayed, and Issues says which.
 
+## Cutting a stem at a MIDI file's notes (M5, not in the oracle)
+
+EZ2PORT reads no MIDI. The file says only where to cut: the cuts are M4's
+(standard continuation notes, each checked to keep the sound), so what the
+package holds is covered by the chopped-stem row above. Taking the MIDI's
+tempo is an ordinary tempo edit, published like any other; the plan counts
+the other notes it moves in time before you agree to it.
+
 ## Port behaviour worth knowing
 
 - **A package is listed in one bank.** `ez2_usersongs_merge` adds it to
