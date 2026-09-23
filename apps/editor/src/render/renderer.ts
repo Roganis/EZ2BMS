@@ -77,6 +77,8 @@ export interface FieldState {
   hoverSlice: NoteId | null;
   /** Where a cut would go, or is being moved to: a line across that strip. */
   stripGhost: { strip: number; y: number } | null;
+  /** Cuts the stem's onsets would make, drawn on that strip. */
+  stripSuggest: { strip: number; ys: readonly number[] } | null;
 }
 
 /** Background slices alternate between two tints so neighbours read apart. */
@@ -1072,6 +1074,18 @@ export class PlayfieldRenderer {
             color: ONSET,
             alpha: (0.3 + 0.7 * o.strength) * this.extras,
           });
+        }
+      }
+      // Cuts at onsets, suggested.
+      if (s.stripSuggest?.strip === i) {
+        for (const q of s.stripSuggest.ys) {
+          if (q < p0 || q > p1) continue;
+          const y = vp.yOf(q);
+          for (let x = box.left; x < box.left + box.width; x += 5)
+            g.rect(x, y - 0.75, Math.min(3, box.left + box.width - x), 1.5).fill({
+              color: ONSET,
+              alpha: 0.9 * this.extras,
+            });
         }
       }
       // Where a cut would go.

@@ -13,6 +13,7 @@
   import PlayHud from './PlayHud.svelte';
   import ResultCard from './ResultCard.svelte';
   import RunLog from './RunLog.svelte';
+  import StripPanel from './strip/StripPanel.svelte';
 
   let { slot }: { slot: ChartSlot } = $props();
   const v = app.view;
@@ -100,8 +101,27 @@
         if (g?.strip !== cur?.strip || g?.y !== cur?.y) app.strips.ghost = g;
       },
       knife: (y) => app.strips.knife(d, y),
+      onHeader: (i, py) => py < (r.stripBox(i)?.header ?? 0),
+      openPanel: (i) => {
+        const src = srcOf(i);
+        if (src !== undefined) app.strips.panel = src;
+      },
     };
   }
+
+  // The open strip panel beside its strip - right of it when there is room,
+  // else left - so the strip and what the panel suggests stay in sight.
+  const PANEL_W = 270;
+  const panel = $derived.by(() => {
+    const src = app.strips.panel;
+    const i = src === null ? -1 : stripSpecs.findIndex((x) => x.src === src);
+    const b = i < 0 || !renderer ? undefined : renderer.stripBox(i);
+    if (!b || !src || !fieldBox.right) return undefined;
+    const width = host?.clientWidth ?? 0;
+    const right = b.left + b.width + 8;
+    const left = right + PANEL_W <= width - 4 ? right : Math.max(4, b.left - PANEL_W - 8);
+    return { src, box: { left, top: b.header + 4 } };
+  });
 
   function onDown(e: PointerEvent) {
     const h = host_();
@@ -195,6 +215,18 @@
     void slot.rev;
     return v.mode === 'edit' ? app.strips.specs(slot.doc) : [];
   });
+  /** Onset cuts to draw, on the strip whose panel shows them. */
+  const suggested = $derived.by(() => {
+    void slot.rev;
+    void app.strips.rev;
+    const src = app.strips.panel;
+    if (!app.strips.suggest || src === null) return null;
+    const strip = stripSpecs.findIndex((x) => x.src === src);
+    if (strip < 0) return null;
+    const step = (slot.doc.resolution * 4) / v.snap;
+    const ys = app.strips.suggestions(slot.doc, src, step).map((x) => x.y);
+    return { strip, ys };
+  });
   const timing = $derived.by(() => {
     void slot.rev;
     return chartTiming(slot.doc);
@@ -275,6 +307,7 @@
       stripsRev: app.strips.rev,
       hoverSlice: app.strips.hover,
       stripGhost: app.strips.ghost,
+      stripSuggest: suggested,
     });
   });
 
@@ -348,6 +381,9 @@
   >
     {#if failed}<p class="fail">The playfield needs WebGL: {failed}</p>{/if}
   </div>
+  {#if panel}
+    <StripPanel {slot} src={panel.src} box={panel.box} />
+  {/if}
   <Minimap {slot} {lo} {hi} />
   {#if app.play.hud && (app.play.active || v.mode === 'play')}
     <PlayHud hud={app.play.hud} box={fieldBox} active={!!app.play.active} />

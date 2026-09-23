@@ -170,3 +170,99 @@ test('a slice hovered a moment plays', async ({ page }) => {
     .poll(() => page.evaluate(() => (window as unknown as { heard: any[] }).heard.at(-1)))
     .toMatchObject({ offset_ms: expect.closeTo(4800, 1), until_ms: expect.closeTo(6400, 1) });
 });
+
+// ---- the strip's panel: chop, onsets, tempo ----------------------------------------
+
+/** The number of cuts a panel count says (a failed read throws, never NaN). */
+async function count(page: Page, id: string): Promise<number> {
+  const text = (await page.getByTestId(id).textContent()) ?? '';
+  const m = /(\d+)\s+cuts?\b/.exec(text);
+  if (!m) throw new Error(`no count in ${JSON.stringify(text)}`);
+  return Number(m[1]);
+}
+
+test('chop cuts the selected slices on the grid in one step', async ({ page }) => {
+  await open(page);
+  const sound = await fp(page);
+  const before = await stem(page);
+  // The slices from measures 2 and 3, selected: chopped from 2 to 4.
+  await page.evaluate((m) => {
+    const a = (window as unknown as W).__ez2bms;
+    const ch = a.doc.data.channels.find((c: { name: string }) => c.name === 'stem_pad.wav').id;
+    const ids = a.doc.index
+      .channel(ch)
+      .filter((n: { y: number }) => n.y === 2 * m || n.y === 3 * m)
+      .map((n: { id: number }) => n.id);
+    a.doc.setSelection(ids);
+  }, M);
+  await page.keyboard.press('Control+Shift+g');
+  await expect(page.getByTestId('strip-panel')).toBeVisible();
+  await page.getByTestId('chop-grid').selectOption('8');
+  // Every eighth from measure 2 to 4, less the cut at measure 3.
+  await expect.poll(() => count(page, 'chop-count')).toBe(14);
+  await page.getByTestId('chop-go').click();
+  await expect.poll(async () => (await stem(page)).length).toBe(before.length + 14);
+  expect(await stem(page)).toContainEqual([2 * M + 120, 0, true]);
+  expect(await fp(page)).toBe(sound);
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('strip-panel')).toBeHidden();
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => stem(page)).toEqual(before);
+});
+
+test('chop leaves the silent bar whole, and warns past what EZ2AC loads', async ({ page }) => {
+  await open(page);
+  await page.keyboard.press('Control+Shift+g');
+  await page.getByTestId('chop-grid').selectOption('4');
+  const quiet = await count(page, 'chop-count');
+  await page.getByTestId('chop-silence').uncheck();
+  // Measure 9 (y 7680-8640) is silent: three more quarters cut without the check.
+  await expect.poll(() => count(page, 'chop-count')).toBe(quiet + 3);
+  await page.getByTestId('chop-silence').check();
+  await page.getByTestId('chop-go').click();
+  const ys = (await stem(page)).map(([y]) => y);
+  expect(ys).toContain(7 * M + 720);
+  for (const q of [240, 480, 720]) expect(ys).not.toContain(8 * M + q);
+  // Every 1/192 of the 40 s stem is thousands of keysounds.
+  await page.getByTestId('chop-grid').selectOption('192');
+  await expect(page.getByTestId('chop-count')).toContainText('more than the 2047');
+});
+
+test('onsets show on the strip and cut there', async ({ page }) => {
+  await open(page);
+  const sound = await fp(page);
+  await page.keyboard.press('Control+Shift+o');
+  await expect(page.getByTestId('onset-show')).toBeChecked();
+  // The demo's hits: every eighth (120 pulses), on the 1/16 grid.
+  const ys = await page.evaluate(
+    () => (window as unknown as W).__ez2bmsField.state.stripSuggest.ys as number[],
+  );
+  expect(ys).toContain(2 * M + 120);
+  expect(ys.every((y) => y % 60 === 0)).toBe(true);
+  const n = await count(page, 'onset-count');
+  expect(n).toBe(ys.length);
+  await page.getByTestId('onsets-go').click();
+  await expect.poll(() => stem(page)).toContainEqual([2 * M + 120, 0, true]);
+  expect(await fp(page)).toBe(sound);
+  // Cut there now: nothing more to suggest at those spots.
+  await expect.poll(() => count(page, 'onset-count')).toBeLessThan(n);
+});
+
+test("the stem's tempo can become the chart's", async ({ page }) => {
+  await open(page);
+  await page.keyboard.press('Control+Shift+o');
+  await expect(page.getByTestId('strip-tempo')).toContainText('150.00');
+  // The demo changes tempo at measure 12: set it on the Timing tab instead.
+  await expect(page.getByTestId('strip-use-bpm')).toBeDisabled();
+  await page.evaluate(() => {
+    const a = (window as unknown as W).__ez2bms;
+    a.doc.transact('One tempo', (tx: any) => {
+      tx.setBpmEvents([]);
+      tx.setInfo({ initBpm: 140 });
+    });
+  });
+  await page.getByTestId('strip-use-bpm').click();
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as W).__ez2bms.doc.data.info.initBpm))
+    .toBe(150);
+});

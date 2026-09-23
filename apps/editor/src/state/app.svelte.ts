@@ -1,7 +1,7 @@
 // The editor's one root object: the backend, settings, the open project, how
 // it is viewed, and every command. Components import `app` and read from it.
 
-import type { ChartDoc, Clip } from '@ez2bms/chart-core';
+import { setBpmAt, type ChartDoc, type Clip } from '@ez2bms/chart-core';
 import { AudioClient } from '../audio/client.svelte';
 import { createBackend, joinPath, type AudioInfo, type Backend } from '../bridge';
 import { laneKeysFromIni } from '../input/lanekeys';
@@ -91,6 +91,15 @@ export class App {
 
   get slot(): ChartSlot | undefined {
     return this.project?.active;
+  }
+
+  /** Set the chart's start tempo (the stem panel's "Use this BPM"), to 1/100 BPM. */
+  setStartBpm(bpm: number): void {
+    const d = this.doc;
+    if (!d) return;
+    const v = Math.round(bpm * 100) / 100;
+    setBpmAt(d, 0, v);
+    toast(`${v} BPM from the start`, 'ok');
   }
 
   get doc(): ChartDoc | undefined {

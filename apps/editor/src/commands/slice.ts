@@ -1,5 +1,6 @@
-// Stem strips and slicing: which sounds have strips, and (M4.5, M4.6) the
-// knife, chopping to the grid and cutting at onsets.
+// Stem strips and slicing: which sounds have strips, and the panel that
+// chops a stem to the grid and cuts it at its onsets (the knife tool is
+// with the other tools, in notes.ts).
 
 import type { App } from '../state/app.svelte';
 import { toast } from '../state/toasts.svelte';
@@ -18,6 +19,29 @@ export function registerSliceCommands(app: App): void {
       enabled: () => !!app.doc,
       run: () => {
         app.strips.show = !app.strips.show;
+      },
+    },
+    {
+      id: 'strip.chop',
+      title: 'Chop the stem to the grid…',
+      group: 'Edit',
+      keys: ['Mod+Shift+G'],
+      enabled: () => !!app.doc && app.strips.focused(app.doc) !== undefined,
+      run: () => {
+        app.strips.show = true;
+        app.strips.panel = app.strips.focused(app.doc!)!;
+      },
+    },
+    {
+      id: 'strip.onsets',
+      title: 'Cut the stem at its onsets…',
+      group: 'Edit',
+      keys: ['Mod+Shift+O'],
+      enabled: () => !!app.doc && app.strips.focused(app.doc) !== undefined,
+      run: () => {
+        app.strips.show = true;
+        app.strips.panel = app.strips.focused(app.doc!)!;
+        app.strips.suggest = true;
       },
     },
     {

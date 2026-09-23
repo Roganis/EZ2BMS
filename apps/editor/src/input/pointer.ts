@@ -82,6 +82,9 @@ export interface StripHooks {
   ghost(g: { strip: number; y: number } | null): void;
   /** The knife on a lane or the rack. */
   knife(y: number): void;
+  /** Whether a screen y is on a strip's header (which opens its panel). */
+  onHeader(strip: number, py: number): boolean;
+  openPanel(strip: number): void;
 }
 
 export interface ClassicHooks {
@@ -157,6 +160,10 @@ export class PointerTool {
     const py = e.offsetY;
     const p = h.renderer.pulseAt(py);
     s.focus(strip);
+    if (s.onHeader(strip, py)) {
+      if (e.button === 0) s.openPanel(strip);
+      return;
+    }
     const hit = s.sliceAt(strip, py);
     if (e.button === 2) {
       if (hit?.part === 'line' && !hit.slice.fresh) s.heal(hit.slice.id);

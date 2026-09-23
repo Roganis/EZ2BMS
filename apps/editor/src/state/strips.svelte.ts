@@ -8,8 +8,15 @@
 // ones - longest first.
 
 import {
+  applyCuts,
   BGM,
+  chopPlan,
   classicSplit,
+  compileChart,
+  KeysoundRegistry,
+  modeDef,
+  onsetSuggestions,
+  segmentEnd,
   sliceHeal,
   sliceKey,
   sliceMove,
@@ -20,8 +27,11 @@ import {
   timelineOf,
   whenHeard,
   type ChartDoc,
+  type Cut,
+  type ModeId,
   type NoteId,
   type SliceEnv,
+  type Suggestion,
 } from '@ez2bms/chart-core';
 import { AnalysisCache } from '../audio/analysis';
 import { PeakTiles } from '../audio/peaktiles';
@@ -51,6 +61,14 @@ export class StripsState {
   focus = $state<string | null>(null);
   /** Where a cut would go, or where one is being moved to: a line across a strip. */
   ghost = $state<{ strip: number; y: number } | null>(null);
+  /** The strip whose panel (chop, onsets, tempo) is open. */
+  panel = $state<string | null>(null);
+  /** Onset cuts drawn on the focused strip. */
+  suggest = $state(false);
+  /** Onsets placed on the nearest EZ2 tick rather than the grid. */
+  exact = $state(false);
+  /** Chop leaves steps whose slice would be quieter than this (dBFS) uncut; null cuts everything. */
+  silenceDb = $state<number | null>(-48);
   private dwell: ReturnType<typeof setTimeout> | undefined;
   readonly peaks: PeakTiles;
   readonly analyses: AnalysisCache;
@@ -186,6 +204,112 @@ export class StripsState {
       }
     }
     return best;
+  }
+
+  /** Whether the file is quieter than the silence level over seconds [a, b) (false while unknown). */
+  private silent(src: string): ((a: number, b: number) => boolean) | undefined {
+    const db = this.silenceDb;
+    const l = this.app.audio.loadedInfo(src);
+    if (db === null || !l || l.id === null) return undefined;
+    const limit = 32767 * 10 ** (db / 20);
+    return (a, b) => {
+      const p = this.peaks.range(l, a, b);
+      return !!p && Math.max(-p[0], p[1]) < limit;
+    };
+  }
+
+  /**
+   * The pulses a chop covers: the selected slices of `src` (from the first's
+   * start to the last's end), else the whole stem.
+   */
+  chopRange(doc: ChartDoc, src: string): { from: number; to: number; selection: boolean } {
+    const view = stemView(doc, src, this.app.audio.lengths());
+    const tl = timelineOf(doc);
+    const sel = doc.selection.ids;
+    const chosen = view.slices.filter((sl) => sel.has(sl.id));
+    const endOf = (i: number) => {
+      const sl = view.slices[i]!;
+      const next = view.slices.slice(i + 1).find((n) => n.ch === sl.ch);
+      if (next) return next.y;
+      const seg = view.segments.at(-1);
+      const end = seg ? segmentEnd(view, seg) : Infinity;
+      return Number.isFinite(end) ? Math.ceil(tl.pulseAt(end)) : sl.y + 1;
+    };
+    if (chosen.length) {
+      const idx = chosen.map((c) => view.slices.indexOf(c));
+      return {
+        from: Math.min(...chosen.map((c) => c.y)),
+        to: Math.max(...idx.map(endOf)),
+        selection: true,
+      };
+    }
+    if (!view.slices.length) return { from: 0, to: 0, selection: false };
+    return {
+      from: view.slices[0]!.y,
+      to: Math.max(...view.slices.map((_, i) => endOf(i))),
+      selection: false,
+    };
+  }
+
+  /** The cuts chopping `src` every `step` pulses would make (nothing changes). */
+  chopPlan(doc: ChartDoc, src: string, step: number): Cut[] {
+    const r = this.chopRange(doc, src);
+    const isSilent = this.silent(src);
+    return chopPlan(doc, src, r.from, r.to, step, this.env(), isSilent ? { isSilent } : {});
+  }
+
+  chop(doc: ChartDoc, src: string, step: number): boolean {
+    const cuts = this.chopPlan(doc, src, step);
+    if (!cuts.length) {
+      toast('Nothing to chop there: it is cut on that grid already', 'info');
+      return false;
+    }
+    const r = applyCuts(doc, cuts, this.env(), 'Chop to grid');
+    if (r.ok) toast(`${r.ids!.length} cuts`, 'ok');
+    return this.refused('chop there', r);
+  }
+
+  /** Where the file's onsets would cut it (on the grid `step`, or exact). */
+  suggestions(doc: ChartDoc, src: string, step: number): Suggestion[] {
+    const l = this.app.audio.loadedInfo(src);
+    const a = l && l.id !== null ? this.analyses.get(l) : undefined;
+    if (!a) return [];
+    const onsets = a.onsets.map(([sec, strength]) => ({ sec, strength }));
+    return onsetSuggestions(
+      doc,
+      src,
+      onsets,
+      { step, exact: this.exact, minStrength: this.sensitivity },
+      this.env(),
+    );
+  }
+
+  cutAtOnsets(doc: ChartDoc, src: string, step: number): boolean {
+    const s = this.suggestions(doc, src, step);
+    if (!s.length) {
+      toast('No onsets to cut at: lower the sensitivity, or it is cut there already', 'info');
+      return false;
+    }
+    const r = applyCuts(
+      doc,
+      s.map((x) => x.cut),
+      this.env(),
+      'Cut at onsets',
+    );
+    if (r.ok) toast(`${r.ids!.length} cuts at onsets`, 'ok');
+    return this.refused('cut at the onsets', r);
+  }
+
+  /** Keysounds the chart makes now (each slice of a file is one). */
+  keysounds(doc: ChartDoc, mode: ModeId): number {
+    const reg = new KeysoundRegistry();
+    compileChart(doc.data, {
+      columns: modeDef(mode).columns,
+      name: 'count',
+      keysounds: reg,
+      samples: this.app.audio.lengths(),
+    });
+    return reg.defs.length;
   }
 
   /** The pointer is over a slice (or none): light it, and after a moment play it. */

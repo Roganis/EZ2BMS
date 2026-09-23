@@ -24,12 +24,14 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 
 | Command                                             | Keys                    | Palette |
 | --------------------------------------------------- | ----------------------- | ------- |
+| Chop the stem to the grid…                          | `Ctrl+Shift+G`          |         |
 | Classic mode on / off (key the sound playing there) | `Ctrl+Shift+K`          |         |
 | Classic: next sound to key                          | `Q`                     |         |
 | Classic: previous sound to key                      | `Shift+Q`               |         |
 | Classic: reset all notes to the background          |                         |         |
 | Copy                                                | `Ctrl+C`                |         |
 | Cut                                                 | `Ctrl+X`                |         |
+| Cut the stem at its onsets…                         | `Ctrl+Shift+O`          |         |
 | Delete selected notes                               | `Delete` `Backspace`    |         |
 | Draw tool                                           | `D`                     |         |
 | Duplicate after itself                              | `Ctrl+D`                |         |
