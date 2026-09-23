@@ -486,9 +486,14 @@ export function convertBms(doc: BmsDoc, opts: BmsConvertOptions = {}): Converted
     say(
       'bms-hidden',
       'info',
-      `${counts.hidden} hidden notes (3x/4x, heard only when hit): ${opts.hiddenAsBackground ? 'made background sounds' : 'left out'}`,
+      `${counts.hidden} hidden note${counts.hidden === 1 ? '' : 's'} (3x/4x, heard only when hit): ${opts.hiddenAsBackground ? 'made background sounds' : 'left out'}`,
     );
-  if (counts.mines) say('bms-mines', 'info', `${counts.mines} mines (D/E): EZ2 has none; left out`);
+  if (counts.mines)
+    say(
+      'bms-mines',
+      'info',
+      `${counts.mines} mine${counts.mines === 1 ? '' : 's'} (D/E): EZ2 has none; left out`,
+    );
   if (counts.unmapped.size)
     say(
       'bms-lanes',

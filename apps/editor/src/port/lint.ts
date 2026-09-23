@@ -39,7 +39,7 @@ export function songFindings(app: App): Finding[] {
   const root = app.settings.data.songsRoot;
   const norm = (d: string) => d.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
   const insideSongsRoot = !!root && norm(p.dir).startsWith(norm(root) + '/');
-  const key = `${p.sidecar.key}|${JSON.stringify(p.sidecar.category)}|${revs.join(',')}|${p.charts.map((c) => c.file + c.tier).join(',')}|${[...missing].join(',')}|${JSON.stringify(art)}|${JSON.stringify(plate)}|${JSON.stringify(preview)}|${JSON.stringify(bga)}|${insideSongsRoot}`;
+  const key = `${p.sidecar.key}|${JSON.stringify(p.sidecar.category)}|${revs.join(',')}|${p.charts.map((c) => c.file + c.tier + c.importNotes.length).join(',')}|${p.importNotes.length}|${[...missing].join(',')}|${JSON.stringify(art)}|${JSON.stringify(plate)}|${JSON.stringify(preview)}|${JSON.stringify(bga)}|${insideSongsRoot}`;
   if (memo && memo.project === p && memo.key === key) return memo.findings;
   const findings = lintSong({
     key: p.sidecar.key,
@@ -49,8 +49,9 @@ export function songFindings(app: App): Finding[] {
       data: c.doc.data,
       mode: c.mode,
       tier: c.tier,
-      notes: c.notes,
+      notes: [...c.notes, ...c.importNotes],
     })),
+    notes: p.importNotes,
     missingSounds: missing,
     art,
     ...(plate ? { plate } : {}),

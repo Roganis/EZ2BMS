@@ -4,6 +4,8 @@
   // art, movies on its BGA page, sounds everywhere else. The backend says what is being dragged - in
   // the desktop app that is Tauri's own event, which sees OS drops before the
   // page does; in a browser, the DOM's.
+  import { BMS_FILE } from '@ez2bms/chart-core';
+  import { dirName } from '../bridge';
   import { app } from '../state/app.svelte';
   import type { Project } from '../state/project.svelte';
 
@@ -19,7 +21,12 @@
     app.backend.onFileDrop((d) => {
       over = d.kind === 'over';
       if (d.kind !== 'drop' || !d.paths.length) return;
-      if (images) void app.art.import(d.paths);
+      // A BMS file is a song to import, not a sound.
+      const bms = d.paths.find((p) => BMS_FILE.test(p));
+      if (bms) {
+        app.importer.show('bms');
+        void app.importer.loadBms(dirName(bms));
+      } else if (images) void app.art.import(d.paths);
       else if (movies) void app.bga.import(d.paths);
       else void app.sounds.import(d.paths);
     }),

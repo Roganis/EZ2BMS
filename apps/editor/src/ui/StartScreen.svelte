@@ -48,6 +48,15 @@
       <span class="vinyl"><span class="plus">↗</span></span>
       <span class="name">Open song folder</span>
     </button>
+    <button
+      class="disc new"
+      onclick={() => app.importer.show()}
+      disabled={busy}
+      data-testid="import"
+    >
+      <span class="vinyl"><span class="plus">⇣</span></span>
+      <span class="name">Import…</span>
+    </button>
     {#if app.backend.kind !== 'web'}
       <button class="disc new" onclick={() => app.newSong()} disabled={busy} data-testid="new-song">
         <span class="vinyl"><span class="plus">+</span></span>

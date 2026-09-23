@@ -2,8 +2,20 @@
   // A stem strip's panel, opened from its header: the stem's tempo, chopping
   // it to the grid, and cutting it at its onsets. Nothing here edits until a
   // button is pressed; every count is what that button would do.
-  import { gridsFor, stepPulses, TICKS_PER_BEAT, type SnapGrid } from '@ez2bms/chart-core';
+  import {
+    applyMidiCuts,
+    gridsFor,
+    parseSmf,
+    planCuts,
+    planMidiCuts,
+    stepPulses,
+    TICKS_PER_BEAT,
+    type Smf,
+    type SnapGrid,
+  } from '@ez2bms/chart-core';
+  import { baseName } from '../../bridge';
   import { app } from '../../state/app.svelte';
+  import { toast } from '../../state/toasts.svelte';
   import type { ChartSlot } from '../../state/project.svelte';
 
   let { slot, src, box }: { slot: ChartSlot; src: string; box: { left: number; top: number } } =
@@ -54,6 +66,49 @@
   });
   /** EZ2AC's own executable loads at most this many keysounds a chart. */
   const SLOTS = 2047;
+
+  // A MIDI file of the same song: cut where its notes start.
+  let midi = $state.raw<{ name: string; smf: Smf } | null>(null);
+  let midiTracks = $state<number[]>([]);
+  let midiTempo = $state<'midi' | 'chart'>('chart');
+  let midiOnGrid = $state(false);
+  const midiPlan = $derived.by(() => {
+    void slot.rev;
+    if (!midi) return null;
+    return planMidiCuts(doc, src, midi.smf, {
+      tracks: midiTracks,
+      tempo: midiTempo,
+      ...(midiOnGrid ? { step: step(app.view.snap) } : {}),
+    });
+  });
+  // With the chart's tempo, the cuts are checked now; with the MIDI's they
+  // can only be once the tempo is set (Apply does both).
+  const midiCuts = $derived.by(() => {
+    const p = midiPlan;
+    if (!p || 'error' in p) return 0;
+    return p.tempo ? p.ys.length : planCuts(doc, src, p.ys, s.env()).length;
+  });
+
+  async function pickMidi() {
+    const [path] = await app.backend.pickFiles('A MIDI file of the song', ['mid', 'midi', 'rmi']);
+    if (!path) return;
+    try {
+      const smf = parseSmf(await app.backend.readFile(path));
+      midi = { name: baseName(path), smf };
+      midiTracks = smf.tracks.flatMap((t, i) => (t.notes ? [i] : []));
+    } catch (e) {
+      toast(`Not a MIDI file EZ2BMS reads: ${e instanceof Error ? e.message : String(e)}`, 'error');
+    }
+  }
+
+  function cutAtMidi() {
+    const p = midiPlan;
+    if (!p || 'error' in p) return;
+    const r = applyMidiCuts(doc, src, p, s.env());
+    if (r.ok)
+      toast(`${r.ids?.length ?? 0} cuts at ${midi!.name}'s notes (Ctrl+Z undoes them)`, 'ok');
+    else toast(`Not cut: ${r.reason}`, 'warn');
+  }
 
   function close() {
     s.panel = null;
@@ -175,6 +230,67 @@
       disabled={!onsetCuts}
       onclick={() => s.cutAtOnsets(doc, src, step(app.view.snap))}>Cut at onsets</button
     >
+  </section>
+
+  <section data-testid="strip-midi">
+    <h3>Cut at a MIDI file's notes</h3>
+    <button class="ez-btn" onclick={pickMidi} data-testid="midi-pick"
+      >{midi ? midi.name : 'MIDI file…'}</button
+    >
+    {#if midi}
+      {#each midi.smf.tracks as t, i (i)}
+        {#if t.notes}
+          <label class="check"
+            ><input
+              type="checkbox"
+              checked={midiTracks.includes(i)}
+              onchange={(e) =>
+                (midiTracks = e.currentTarget.checked
+                  ? [...midiTracks, i]
+                  : midiTracks.filter((x) => x !== i))}
+            />
+            {t.name || `Track ${i + 1}`} <span class="dim">{t.notes} notes</span></label
+          >
+        {/if}
+      {/each}
+      <label class="check"
+        ><input
+          type="radio"
+          name="midi-tempo"
+          checked={midiTempo === 'chart'}
+          onchange={() => (midiTempo = 'chart')}
+        /> Keep the chart's tempo</label
+      >
+      <label class="check"
+        ><input
+          type="radio"
+          name="midi-tempo"
+          checked={midiTempo === 'midi'}
+          onchange={() => (midiTempo = 'midi')}
+          data-testid="midi-tempo-midi"
+        /> Take the MIDI's tempo from the stem's first hit</label
+      >
+      <label class="check"
+        ><input type="checkbox" bind:checked={midiOnGrid} /> On the snap grid, not the nearest 1/48 beat</label
+      >
+      <p class="hint" data-testid="midi-count">
+        {#if midiPlan && 'error' in midiPlan}
+          <span class="warn">{midiPlan.error}</span>
+        {:else if midiPlan}
+          {`${midiCuts} ${midiCuts === 1 ? 'cut' : 'cuts'}`} · furthest {midiPlan.worstMs.toFixed(
+            1,
+          )} ms from its note
+          {#if midiPlan.moves}
+            <span class="warn"
+              >- the new tempo moves {midiPlan.moves} other note{midiPlan.moves === 1 ? '' : 's'} in time</span
+            >
+          {/if}
+        {/if}
+      </p>
+      <button class="ez-btn" data-testid="midi-go" disabled={!midiCuts} onclick={cutAtMidi}
+        >Cut</button
+      >
+    {/if}
   </section>
 
   <footer>

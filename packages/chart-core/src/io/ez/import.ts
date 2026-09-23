@@ -453,7 +453,7 @@ function importChart(
     say(
       'import-kept',
       'info',
-      `${bgHolds} background notes have a length: kept as x_len; publishing writes them as taps, as the game plays them`,
+      `${bgHolds} background note${bgHolds === 1 ? ' has' : 's have'} a length: kept as x_len; publishing writes them as taps, as the game plays them`,
     );
   if (missing.size)
     say(

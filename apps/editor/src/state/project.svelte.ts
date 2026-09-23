@@ -25,6 +25,7 @@ import {
   type SongArt,
   type SongBga,
   type SongFile,
+  type SourceNote,
   type Tier,
 } from '@ez2bms/chart-core';
 import { baseName, joinPath, type Backend } from '../bridge';
@@ -41,6 +42,8 @@ export class ChartSlot {
   tier = $state<Tier>('NM');
   /** What opening it said (a 0.21 upgrade, a renumbering, members it could not read): shown in Issues. */
   notes: OpenNote[] = [];
+  /** What importing it said (the song file's `source.notes` for this chart), until cleared. */
+  importNotes = $state.raw<OpenNote[]>([]);
 
   constructor(
     file: string,
@@ -72,8 +75,12 @@ export class ChartSlot {
 
 const TIER_ORDER: Record<Tier, number> = { NM: 0, HD: 1, SHD: 2, EX: 3 };
 
+const noteOf = ({ chart: _chart, ...n }: SourceNote): OpenNote => n;
+
 export class Project {
   charts = $state<ChartSlot[]>([]);
+  /** What importing the song said about it as a whole, until cleared. */
+  importNotes = $state.raw<OpenNote[]>([]);
   activeIndex = $state(0);
   samples = $state<string[]>([]);
   /** Images in the folder (relative, forward slashes), for the disc and eyecatch. */
@@ -171,6 +178,10 @@ export class Project {
       slots.push(Project.slotFor(e.name, bytes));
     }
     slots.sort((a, b) => a.mode.localeCompare(b.mode) || TIER_ORDER[a.tier] - TIER_ORDER[b.tier]);
+    // What the import said, by chart; the rest is the song's.
+    const said = p.sidecar.source?.notes ?? [];
+    for (const s of slots) s.importNotes = said.filter((n) => n.chart === s.file).map(noteOf);
+    p.importNotes = said.filter((n) => !slots.some((s) => s.file === n.chart)).map(noteOf);
     p.charts = slots;
     p.classicDefault = slots.some((s) => s.doc.data.notes.some((n) => n.c));
     return p;
@@ -265,6 +276,16 @@ export class Project {
     if (due.length) this.onSaved?.(due, oldNames);
     await this.saveSidecar();
     return due.length;
+  }
+
+  /** Forget what the import said (it stays in Issues until this). */
+  async clearImportNotes(): Promise<void> {
+    for (const c of this.charts) c.importNotes = [];
+    this.importNotes = [];
+    if (this.sidecar.source?.notes) {
+      delete this.sidecar.source.notes;
+      await this.saveSidecar();
+    }
   }
 
   /** Write the song file (ez2bms.song.json) now. */

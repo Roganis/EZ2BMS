@@ -266,3 +266,43 @@ test("the stem's tempo can become the chart's", async ({ page }) => {
     .poll(() => page.evaluate(() => (window as unknown as W).__ez2bms.doc.data.info.initBpm))
     .toBe(150);
 });
+
+// ---- a MIDI file of the song -------------------------------------------------------
+
+/** A format-0 SMF at 150 BPM (ppq 480): a note on every quarter from 0 to `beats`. */
+function midi(beats: number): Buffer {
+  const vlq = (v: number) => {
+    const out = [v & 0x7f];
+    while ((v >>= 7)) out.unshift((v & 0x7f) | 0x80);
+    return out;
+  };
+  const us = 400000;
+  const ev = [0, 0xff, 0x51, 3, (us >> 16) & 255, (us >> 8) & 255, us & 255];
+  for (let b = 0; b <= beats; b++) ev.push(...vlq(b ? 480 : 0), 0x90, 60, 100);
+  ev.push(0, 0xff, 0x2f, 0);
+  const u32 = (v: number) => [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255];
+  return Buffer.from([
+    ...[0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, 0x01, 0xe0],
+    ...[0x4d, 0x54, 0x72, 0x6b, ...u32(ev.length), ...ev],
+  ]);
+}
+
+test("a MIDI file's notes cut the stem where they sound, in one step", async ({ page }) => {
+  await open(page);
+  const sound = await fp(page);
+  const before = await stem(page);
+  await page.keyboard.press('Control+Shift+g');
+  await expect(page.getByTestId('strip-panel')).toBeVisible();
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByTestId('midi-pick').click();
+  await (await chooser).setFiles({ name: 'song.mid', mimeType: 'audio/midi', buffer: midi(8) });
+  // Quarters 1-8 after the stem's hit at 0, less the cuts already at measures 1 and 2.
+  await expect.poll(() => count(page, 'midi-count')).toBe(6);
+  await page.getByTestId('midi-go').click();
+  await expect.poll(async () => (await stem(page)).length).toBe(before.length + 6);
+  expect(await stem(page)).toContainEqual([240, 0, true]);
+  expect(await fp(page)).toBe(sound);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => stem(page)).toEqual(before);
+});

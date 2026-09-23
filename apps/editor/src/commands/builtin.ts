@@ -54,6 +54,23 @@ export function registerBuiltins(app: App): void {
       run: () => app.newSong(),
     },
     {
+      id: 'file.import',
+      title: 'Import a song… (EZ2AC, BMS, bmson)',
+      group: 'File',
+      global: true,
+      run: () => app.importer.show(),
+    },
+    {
+      id: 'song.clearImportNotes',
+      title: 'Forget what the import said (clear it from Issues)',
+      group: 'Song',
+      enabled: () =>
+        !!app.project &&
+        (app.project.importNotes.length > 0 ||
+          app.project.charts.some((c) => c.importNotes.length > 0)),
+      run: () => app.project!.clearImportNotes(),
+    },
+    {
       id: 'chart.new',
       title: 'New chart…',
       group: 'Chart',

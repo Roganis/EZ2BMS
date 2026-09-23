@@ -76,6 +76,8 @@ export interface LintSong {
   bga?: BgaCheck;
   /** The song folder lies inside the songs folder it publishes to. */
   insideSongsRoot?: boolean;
+  /** What opening or importing the song said about it as a whole (the song file's `source.notes`). */
+  notes?: readonly OpenNote[];
 }
 
 /** The song's BGA as a publish would use it, and its probe (the host reads the headers). */
@@ -489,6 +491,7 @@ export function lintSong(s: LintSong): Finding[] {
       );
     }
   }
+  for (const n of s.notes ?? []) f(n.rule, n.severity, n.message);
   for (const c of s.charts) out.push(...lintChart(c, s.missingSounds));
   return out;
 }
