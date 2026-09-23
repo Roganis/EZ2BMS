@@ -68,6 +68,7 @@ export * from './engine/score';
 export * from './engine/session';
 export * from './engine/judge-sim';
 export * from './lint/lint';
+export * from './lint/cabinet';
 export * from './lint/fixes';
 export * from './sound/resolve';
 export * from './sound/grouping';
