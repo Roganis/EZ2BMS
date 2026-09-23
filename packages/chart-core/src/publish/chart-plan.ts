@@ -14,17 +14,29 @@
 //   mode lacks) to a voice-aware backing track;
 // - a closing tempo record keeps the stage open until the last sound ends
 //   (EZ2PORT ends a stage 26 frames after its last record).
+//
+// `target: 'cabinet'` compiles for the original game instead (M6, publish/
+// cabinet.ts): a chart imported from the game keeps what the import kept of
+// it - its background tracks (`x_track`, so the one-voice-per-track cuts are
+// the original's), the raw length of background notes (`x_len`), the records
+// bmson has no place for (`x_ez_records`: scroll, volume, beats, marks), its
+// header names in CP949, its second BPM, track count and length - so an
+// unedited chart goes back as the game had it, record for record (the
+// cabinet oracle test). Anything new is placed around it. EZ2PORT packages
+// never read any of that; publish-golden.test.ts pins their bytes.
 
 import type { ChartData, NoteId, NoteRec } from '../model/types';
 import {
   EZ_BPM,
   EZ_NOTE,
+  EZ_VOLUME,
   HOLD_BIAS,
   nameField,
   type EzffChart,
   type EzffRecord,
   type EzffVersion,
 } from '../io/ez/ezff';
+import { cp949Field } from '../io/legacy-text';
 import { EngineTempo } from '../timing/engine-tempo';
 import { TICKS_PER_BEAT, TICKS_PER_MEASURE, TickConverter } from '../timing/ticks';
 import type { Column } from '../modes/registry';
@@ -78,6 +90,22 @@ export interface ChartPlanStats {
   worstRounding: number;
 }
 
+/** What a cabinet compile kept of the game's chart, and where it had to differ. */
+export interface CabinetPlanStats {
+  /** Background notes on the track the game had them on. */
+  pinned: number;
+  /** Background notes whose track could not be kept (a lane track in this mode, out of range). */
+  repinned: number;
+  /** Pinned sounds that start while an earlier pinned sound on their track rings (the original's own cuts). */
+  pinnedCuts: number;
+  /** Records written back from `x_ez_records`. */
+  kept: number;
+  /** Tracks added past the game chart's count because every track was busy. */
+  grown: number;
+  /** Characters of the header names CP949 has no bytes for (written as '?'). */
+  nameUnmappable: string[];
+}
+
 export interface ChartPlan {
   ezff: EzffChart;
   tempo: EngineTempo;
@@ -88,6 +116,8 @@ export interface ChartPlan {
   /** When the last sound ends, ms. */
   endMs: number;
   stats: ChartPlanStats;
+  /** Set for `target: 'cabinet'`. */
+  cabinet?: CabinetPlanStats;
 }
 
 export interface CompileOptions {
@@ -98,6 +128,8 @@ export interface CompileOptions {
   keysounds: KeysoundRegistry;
   samples?: SampleLookup;
   version?: EzffVersion;
+  /** 'port' (default): an EZ2PORT package. 'cabinet': the original game's layout (see the header). */
+  target?: 'port' | 'cabinet';
 }
 
 const f32 = Math.fround;
@@ -226,6 +258,140 @@ export const planOrder = (
   b: { tick: number; n: NoteRec },
 ): number => a.tick - b.tick || a.n.x - b.n.x || a.n.id - b.n.id;
 
+/** One note as the sound it plays, placed in time: what the compiler turns into a record. */
+export interface PlannedSound {
+  n: NoteRec;
+  tick: number;
+  ms: number;
+  /** Song-wide keysound index (KeysoundRegistry). */
+  ks: number;
+  /** How long it rings, ms (Infinity when the sample's length is unknown). */
+  durMs: number;
+  originMs: number;
+  untilMs: number | null;
+  whole: boolean;
+}
+
+/**
+ * Every note as a sound, in plan order: channel by channel (so keysounds are
+ * registered, and slots numbered, in the same order every time), then sorted
+ * by tick, lane and note. Shared by the EZ2PORT and cabinet compiles and the
+ * BMS export, which all cut the same keysounds.
+ */
+export function chartSounds(
+  chart: ChartData,
+  clock: ChartClock,
+  keysounds: KeysoundRegistry,
+  samples?: SampleLookup,
+): { sounds: PlannedSound[]; slices: number; droppedUp: number } {
+  let slices = 0;
+  let droppedUp = 0;
+  const sounds: PlannedSound[] = [];
+  const byChannel = new Map<number, NoteRec[]>();
+  for (const n of chart.notes) {
+    // An `up` note is still a note; only its re-trigger at the release is
+    // dropped (EZ2 has none). EZ2PORT's importer drops the whole note.
+    if (n.up) droppedUp++;
+    const list = byChannel.get(n.ch);
+    if (list) list.push(n);
+    else byChannel.set(n.ch, [n]);
+  }
+  for (const ch of chart.channels) {
+    for (const e of channelEvents(clock, byChannel.get(ch.id) ?? [])) {
+      const ks = keysounds.get(ch.name, e.startF, e.endF);
+      if (!e.whole) slices++;
+      const info = samples?.(ch.name);
+      const durFrames = e.whole
+        ? (info?.frames ?? Infinity)
+        : e.endF === null
+          ? Math.max(0, (info?.frames ?? Infinity) - e.startF)
+          : e.endF - e.startF;
+      sounds.push({
+        n: e.n,
+        tick: e.tick,
+        ms: e.ms,
+        ks,
+        durMs: (durFrames * 1000) / OUT_RATE,
+        originMs: e.originMs,
+        untilMs: e.untilMs,
+        whole: e.whole,
+      });
+    }
+  }
+  sounds.sort(planOrder);
+  return { sounds, slices, droppedUp };
+}
+
+/** The game chart's header as the import kept it (`x_ez`), if this chart came from the game. */
+interface GameHeader {
+  name: string;
+  name2: string;
+  bpm: number;
+  bpm2: number;
+  totalTicks: number;
+  /** The game chart's last record (undefined: imported before EZ2BMS kept it). */
+  lastTick?: number;
+  tracks: number;
+}
+
+function gameHeader(chart: ChartData): GameHeader | undefined {
+  const x = chart.extra.x_ez;
+  if (!x || typeof x !== 'object' || Array.isArray(x)) return undefined;
+  const o = x as Record<string, unknown>;
+  const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+  const str = (v: unknown) => (typeof v === 'string' ? v : '');
+  return {
+    name: str(o.name),
+    name2: str(o.name2),
+    bpm: num(o.bpm, NaN),
+    bpm2: num(o.bpm2, NaN),
+    totalTicks: Math.max(0, Math.floor(num(o.total_ticks, 0))),
+    ...(typeof o.last_tick === 'number' ? { lastTick: o.last_tick } : {}),
+    tracks: Math.min(96, Math.max(1, Math.floor(num(o.tracks, 64)))),
+  };
+}
+
+/** The records the import kept with no bmson home (`x_ez_records`), as EZFF records on their tracks. */
+function keptRecords(chart: ChartData, clock: ChartClock): { track: number; rec: EzffRecord }[] {
+  const list = chart.extra.x_ez_records;
+  if (!Array.isArray(list)) return [];
+  const out: { track: number; rec: EzffRecord }[] = [];
+  const int = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) ? v : undefined);
+  for (const k of list) {
+    if (!k || typeof k !== 'object') continue;
+    const o = k as Record<string, unknown>;
+    const track = int(o.track);
+    const type = int(o.type);
+    const y = typeof o.y === 'number' && Number.isFinite(o.y) ? o.y : undefined;
+    if (
+      track === undefined ||
+      track < 0 ||
+      track >= 96 ||
+      !type ||
+      type < 1 ||
+      type > 255 ||
+      y === undefined ||
+      y < 0
+    )
+      continue;
+    const rec: EzffRecord = { tick: clock.tick(y), type };
+    const value = int(o.value);
+    if (value !== undefined) rec.value = value & 0xff;
+    if (typeof o.bpm === 'number') rec.bpm = f32(o.bpm);
+    const raw = o.raw;
+    if (Array.isArray(raw) && raw.length === 2 && raw.every((w) => int(w) !== undefined))
+      rec.raw = [raw[0] >>> 0, raw[1] >>> 0];
+    else if (typeof o.scroll === 'number') {
+      // Only the decoded multiplier: its f32 bits are the first word.
+      const dv = new DataView(new ArrayBuffer(4));
+      dv.setFloat32(0, o.scroll, true);
+      rec.raw = [dv.getUint32(0, true), 0];
+    }
+    out.push({ track, rec });
+  }
+  return out;
+}
+
 export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
   const clock = new ChartClock(chart);
   const tc = clock.ticks;
@@ -247,7 +413,6 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
   // ---- notes -> keysounds and records
   const trackOf = new Map(o.columns.map((c) => [c.x, c.track]));
   const laneTracks = new Set(o.columns.map((c) => c.track));
-  const backing = new BackingAllocator(laneTracks);
   const slotOf = new Map<number, number>();
   const keysoundSlots: number[] = [];
   const slot = (ks: number) => {
@@ -259,50 +424,44 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
     return s;
   };
 
-  interface Pending {
-    n: NoteRec;
-    tick: number;
-    ms: number;
-    ks: number;
-    durMs: number;
-    originMs: number;
-    untilMs: number | null;
-  }
-  const pending: Pending[] = [];
-  const byChannel = new Map<number, NoteRec[]>();
-  for (const n of chart.notes) {
-    // An `up` note is still a note; only its re-trigger at the release is
-    // dropped (EZ2 has none). EZ2PORT's importer drops the whole note.
-    if (n.up) stats.droppedUp++;
-    const list = byChannel.get(n.ch);
-    if (list) list.push(n);
-    else byChannel.set(n.ch, [n]);
-  }
-  for (const ch of chart.channels) {
-    for (const e of channelEvents(clock, byChannel.get(ch.id) ?? [])) {
-      const ks = o.keysounds.get(ch.name, e.startF, e.endF);
-      if (!e.whole) stats.slices++;
-      const info = o.samples?.(ch.name);
-      const durFrames = e.whole
-        ? (info?.frames ?? Infinity)
-        : e.endF === null
-          ? Math.max(0, (info?.frames ?? Infinity) - e.startF)
-          : e.endF - e.startF;
-      pending.push({
-        n: e.n,
-        tick: e.tick,
-        ms: e.ms,
-        ks,
-        durMs: (durFrames * 1000) / OUT_RATE,
-        originMs: e.originMs,
-        untilMs: e.untilMs,
-      });
+  const walked = chartSounds(chart, clock, o.keysounds, o.samples);
+  const pending = walked.sounds;
+  stats.slices = walked.slices;
+  stats.droppedUp = walked.droppedUp;
+
+  // ---- the cabinet: what the game's chart keeps
+  const cabinet: CabinetPlanStats | undefined =
+    o.target === 'cabinet'
+      ? { pinned: 0, repinned: 0, pinnedCuts: 0, kept: 0, grown: 0, nameUnmappable: [] }
+      : undefined;
+  const game = cabinet ? gameHeader(chart) : undefined;
+  const kept = cabinet ? keptRecords(chart, clock) : [];
+  const pinOf = new Map<PlannedSound, number>();
+  if (cabinet) {
+    for (const p of pending) {
+      if (p.n.x !== 0 && trackOf.has(p.n.x)) continue;
+      const t = p.n.extra?.x_track;
+      if (typeof t !== 'number') continue;
+      if (Number.isInteger(t) && t >= 0 && t < 96 && !laneTracks.has(t)) pinOf.set(p, t);
+      else cabinet.repinned++;
     }
   }
-  pending.sort(planOrder);
+  let trackCount = 64;
+  if (game) {
+    trackCount = Math.max(
+      game.tracks,
+      ...[...laneTracks, ...pinOf.values(), ...kept.map((k) => k.track)].map((t) => t + 1),
+    );
+  }
+  const backing = new BackingAllocator(laneTracks, trackCount, {
+    maxTracks: cabinet ? Math.max(trackCount, 64) : trackCount,
+  });
+  if (cabinet) backing.avoid(kept.filter((k) => k.rec.type === EZ_VOLUME).map((k) => k.track));
 
-  const tracks: EzffRecord[][] = Array.from({ length: 64 }, () => []);
+  const tracks: EzffRecord[][] = Array.from({ length: Math.max(trackCount, 64) }, () => []);
   tracks[0]!.push(...tempoRecords);
+  for (const k of kept) tracks[k.track]!.push(k.rec);
+  if (cabinet) cabinet.kept = kept.length;
   const events: PlanEvent[] = [];
   let endMs = 0;
   // Lane records first, so backing never takes a tick a lane needs (they are on
@@ -312,6 +471,12 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
     if (laneTrack === undefined) continue;
     backing.occupy(laneTrack, p.tick, p.ms + p.durMs);
   }
+  // The game's own background placement, before anything is placed around it.
+  if (cabinet)
+    for (const [p, t] of pinOf) {
+      if (backing.pin(t, p.tick, p.ms, p.ms + p.durMs)) cabinet.pinnedCuts++;
+      cabinet.pinned++;
+    }
   for (const p of pending) {
     const n = p.n;
     let track = n.x !== 0 ? trackOf.get(n.x) : undefined;
@@ -324,7 +489,7 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
     } else {
       if (n.x !== 0) stats.offMode++;
       stats.backing++;
-      track = backing.place({ tick: p.tick, startMs: p.ms, durMs: p.durMs });
+      track = pinOf.get(p) ?? backing.place({ tick: p.tick, startMs: p.ms, durMs: p.durMs });
     }
     const vel = n.vel ?? 127;
     const pan = n.pan ?? 64;
@@ -336,7 +501,7 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
       vel,
       pan,
       kind,
-      length: holdTicks > 0 ? holdTicks + HOLD_BIAS : 0,
+      length: cabinet ? rawLength(n, lane, holdTicks) : holdTicks > 0 ? holdTicks + HOLD_BIAS : 0,
     });
     events.push({
       tick: p.tick,
@@ -361,30 +526,79 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
   }
   stats.chokes = backing.chokes;
   stats.worstRounding = clock.worstRounding;
+  if (cabinet) cabinet.grown = backing.grown;
+  tracks.length = cabinet ? backing.trackCount : 64;
 
-  // ---- close the stage after the last sound
+  // ---- close the stage after the last sound. A game chart keeps the length
+  // it had (the original's end of stage is its own; only EZ2PORT's is known).
   let lastTick = 0;
   for (const t of tracks) for (const r of t) lastTick = Math.max(lastTick, r.tick);
   const tailTick = Math.ceil(tempo.tickAtMs(endMs));
-  if (tailTick > lastTick) {
+  if (!game && tailTick > lastTick) {
     tracks[0]!.push({ tick: tailTick, type: EZ_BPM, bpm: tempo.bpmAt(tailTick) });
     lastTick = tailTick;
   }
 
   for (const t of tracks) t.sort((a, b) => a.tick - b.tick);
+  let name: Uint8Array = nameField(o.name);
+  let name2: Uint8Array = new Uint8Array();
+  let bpm = f32(headerBpm);
+  let bpm2 = bpm;
+  if (game && cabinet) {
+    const n1 = cp949Field(game.name);
+    const n2 = cp949Field(game.name2);
+    name = n1.bytes;
+    name2 = n2.bytes;
+    cabinet.nameUnmappable = [...new Set([...n1.unmappable, ...n2.unmappable])];
+    // The header keeps the game's BPMs. Where the start tempo is another (the
+    // game's own charts often start on a tempo record at tick 0, or it was
+    // edited), it is a record at tick 0: the engine takes the header first,
+    // then records at a tick in order, and the last governs (ez2_tempo_build),
+    // so the tempo map is the chart's either way.
+    if (Number.isFinite(game.bpm)) {
+      bpm = f32(game.bpm);
+      bpm2 = Number.isFinite(game.bpm2) ? f32(game.bpm2) : bpm;
+      if (bpm !== f32(headerBpm))
+        tracks[0]!.unshift({ tick: 0, type: EZ_BPM, bpm: f32(headerBpm) });
+    }
+  }
   const ezff: EzffChart = {
     version: o.version ?? 8,
-    name: nameField(o.name),
-    name2: new Uint8Array(),
+    name,
+    name2,
     ticksPerMeasure: TICKS_PER_MEASURE,
-    bpm: f32(headerBpm),
-    bpm2: f32(headerBpm),
-    totalTicks: lastTick + TICKS_PER_BEAT,
+    bpm,
+    bpm2,
+    totalTicks: game ? gameTotal(game, lastTick) : lastTick + TICKS_PER_BEAT,
     tracks: tracks.map((records, i) => ({
       name: nameField(`track${String(i).padStart(2, '0')}`),
       ticks: records.at(-1)?.tick ?? 0,
       records,
     })),
   };
-  return { ezff, tempo, keysoundSlots, events, endMs, stats };
+  return { ezff, tempo, keysoundSlots, events, endMs, stats, ...(cabinet ? { cabinet } : {}) };
+}
+
+/**
+ * A game chart's total_ticks: the game's own while the chart ends where the
+ * game's did (some end short of their last record), else long enough to hold
+ * it. (EZ2PORT ends a stage by its records; what the original does with the
+ * field is not known, so it is kept.)
+ */
+function gameTotal(game: GameHeader, lastTick: number): number {
+  if (lastTick <= (game.lastTick ?? game.totalTicks)) return game.totalTicks;
+  return Math.max(game.totalTicks, lastTick);
+}
+
+/**
+ * A note's raw length on the cabinet: a hold's own; a background note's as
+ * the game had it (`x_len` - background plays as a tap either way, the byte
+ * is kept); a lane tap's 1-6 as the game had it. A stale `x_len` on a note
+ * that is now a hold is ignored.
+ */
+function rawLength(n: NoteRec, lane: boolean, holdTicks: number): number {
+  if (holdTicks > 0) return holdTicks + HOLD_BIAS;
+  const x = n.extra?.x_len;
+  if (typeof x !== 'number' || !Number.isInteger(x) || x < 0 || x > 0xffff) return 0;
+  return lane ? (x <= HOLD_BIAS ? x : 0) : x;
 }

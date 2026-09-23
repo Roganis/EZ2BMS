@@ -483,6 +483,9 @@ function importChart(
     bpm: f32Decimal(ez.bpm),
     bpm2: f32Decimal(ez.bpm2),
     total_ticks: ez.totalTicks,
+    // The last record's tick: a cabinet export keeps total_ticks as the game
+    // had it (even short of its own last record) unless the chart grows past it.
+    last_tick: ez.tracks.reduce((m, t) => Math.max(m, t.records.at(-1)?.tick ?? 0), 0),
     ticks_per_measure: ez.ticksPerMeasure,
     tracks: ez.tracks.length,
     measure_scale: f32Decimal(ini.measureScale),
