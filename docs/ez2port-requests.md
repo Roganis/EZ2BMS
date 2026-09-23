@@ -131,6 +131,10 @@ should give the same song.
     x 9-13 and the 2P scratch on 16; EZ2's conversions use x 11-15. Notes on
     x 9 or 10 can only be the spec's: read those files the spec's way (EZ2BMS
     does, and warns when a file's 2P notes are all on x 11-13, which fits both).
+11. **(`ez2/ezi.c`) legacy note names.** Some old `.ezi` files name their
+    notes like MIDI keys - `C#0 1 mix-st.wav` - which `strtol` (like the
+    original's `atol`) reads as note 0, so all of them share one slot. Read
+    `[A-G]#?<octave>` as octave x 12 + semitone, as EZ2BMS's importer does.
 
 **Detection:** none needed. `docs/ez2port-compat.md` lists these as the
 differences between the importer and EZ2BMS, and they shrink as they are fixed.

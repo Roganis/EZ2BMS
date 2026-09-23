@@ -21,6 +21,7 @@ export * from './timing/measures';
 export * from './timing/snap';
 export * from './timing/rescale';
 export * from './io/ez/ezff';
+export * from './io/ez/ezi';
 export { lowerBound, upperBound } from './util/sorted';
 export * from './modes/lanes';
 export * from './modes/registry';
