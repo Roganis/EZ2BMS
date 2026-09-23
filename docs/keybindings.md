@@ -105,11 +105,13 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 
 ## Chart
 
-| Command                               | Keys              | Palette |
-| ------------------------------------- | ----------------- | ------- |
-| New chart…                            | `Ctrl+N`          |         |
-| Remove unused sounds from every chart |                   |         |
-| Switch to chart 1-9                   | `Ctrl+1 … Ctrl+9` |         |
+| Command                                                    | Keys              | Palette |
+| ---------------------------------------------------------- | ----------------- | ------- |
+| Import sounds…                                             |                   |         |
+| New chart…                                                 | `Ctrl+N`          |         |
+| Reload sound files (after editing them in another program) |                   |         |
+| Remove unused sounds from every chart                      |                   |         |
+| Switch to chart 1-9                                        | `Ctrl+1 … Ctrl+9` |         |
 
 ## EZ2PORT
 

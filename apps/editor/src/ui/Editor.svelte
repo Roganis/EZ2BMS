@@ -2,6 +2,7 @@
   import type { Project } from '../state/project.svelte';
   import { app } from '../state/app.svelte';
   import ChannelsDrawer from './drawers/ChannelsDrawer.svelte';
+  import DropZone from './DropZone.svelte';
   import RightDrawer from './drawers/RightDrawer.svelte';
   import Playfield from './Playfield.svelte';
   import StatusBar from './StatusBar.svelte';
@@ -62,6 +63,7 @@
     {/if}
   </div>
   <StatusBar {project} />
+  <DropZone {project} />
 </div>
 
 <style>

@@ -11,7 +11,9 @@
 
 import {
   AUDIO_EXT,
+  SoundIndex,
   addChannel,
+  addChannels,
   planSoundRename,
   removeUnusedChannels,
   replaceSound,
@@ -20,7 +22,7 @@ import {
   type SoundInfo,
 } from '@ez2bms/chart-core';
 import { ThumbCache } from '../audio/thumbs';
-import { baseName, joinPath } from '../bridge';
+import { baseName, joinPath, type Imported } from '../bridge';
 import type { App } from './app.svelte';
 import type { ChartSlot, Project } from './project.svelte';
 import { toast, toasts } from './toasts.svelte';
@@ -31,6 +33,9 @@ interface Done {
 }
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+
+/** What the file chooser offers (the engine decodes these; see chart-core AUDIO_EXT). */
+export const IMPORT_EXT = ['wav', 'ogg', 'flac', 'mp3', 'oga'];
 
 export class SoundsState {
   readonly thumbs: ThumbCache;
@@ -53,6 +58,64 @@ export class SoundsState {
       p,
       p.samples.filter((s) => AUDIO_EXT.test(s)),
     );
+  }
+
+  /**
+   * Copy sound files (or the audio in folders) into the song folder - never
+   * over another file; the same bytes under the same name are reused - and
+   * add them to the open chart in one undo step, skipping sounds it has.
+   */
+  async import(paths: string[]): Promise<void> {
+    const p = this.app.project;
+    if (!p || !paths.length) return;
+    let res: Imported[];
+    try {
+      res = await this.app.backend.importFiles(p.dir, paths);
+    } catch (e) {
+      toast(`Import failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
+      return;
+    }
+    // Local bookkeeping in this function; nothing renders from these sets.
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const names = [...new Set(res.flatMap((r) => (r.name ? [r.name] : [])))];
+    const copied = res.filter((r) => r.name && !r.reused).length;
+    const skipped = res.filter((r) => r.error);
+    await p.rescan();
+    await this.app.audio.load(p, names);
+    const slot = this.app.slot;
+    let added = 0;
+    if (slot && names.length) {
+      // "kick.wav" in the chart already means kick.ogg when that is the file.
+      const index = new SoundIndex(p.samples);
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity
+      const have = new Set(slot.doc.data.channels.map((c) => index.resolve(c.name) ?? c.name));
+      const fresh = names.filter((n) => !have.has(n));
+      if (fresh.length) {
+        const made = addChannels(slot.doc, fresh);
+        added = made.length;
+        if (this.app.view.brush === null) this.app.view.brush = made[0]!.id;
+      }
+    }
+    const parts = [
+      copied ? `Imported ${plural(copied, 'sound')}` : names.length ? 'Already in the folder' : '',
+      added && slot ? `${plural(added, 'sound')} added to ${slot.label}` : '',
+      skipped.length
+        ? `skipped ${skipped
+            .slice(0, 3)
+            .map((r) => baseName(r.from))
+            .join(', ')}${skipped.length > 3 ? '…' : ''} (${skipped[0]!.error})`
+        : '',
+    ].filter(Boolean);
+    toast(
+      parts.join(' - ') || 'Nothing to import',
+      skipped.length && !names.length ? 'warn' : 'ok',
+    );
+  }
+
+  /** Pick sound files to import. */
+  async importPicked(): Promise<void> {
+    const paths = await this.app.backend.pickFiles('Import sounds into the song', IMPORT_EXT);
+    await this.import(paths);
   }
 
   /** Draw with this sound in the open chart: its channel, or a new one. */

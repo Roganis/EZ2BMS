@@ -53,6 +53,12 @@
     />
     <button
       class="bench"
+      title="Import sound files into the song (or drop them on the window)"
+      data-testid="import-sounds"
+      onclick={() => app.commands.run('sounds.import')}>+</button
+    >
+    <button
+      class="bench"
       class:on={app.view.workbench}
       title="Every sound of the song, with waveforms (Ctrl+Shift+B)"
       data-testid="open-workbench"

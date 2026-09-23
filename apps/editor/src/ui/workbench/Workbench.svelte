@@ -136,6 +136,11 @@
     </select>
     <button
       class="ez-btn"
+      title="Copy sound files into the song (or drop them on the window)"
+      onclick={() => app.commands.run('sounds.import')}>Import…</button
+    >
+    <button
+      class="ez-btn"
       disabled={!song.unusedChannels.length}
       title="Remove every sound that plays no note, from each chart's list (files stay on disk)"
       onclick={() => app.sounds.removeUnused()}>Remove unused ({song.unusedChannels.length})</button

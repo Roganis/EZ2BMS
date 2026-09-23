@@ -236,6 +236,23 @@ export function registerBuiltins(app: App): void {
       run: () => (v.workbench = !v.workbench),
     },
     {
+      id: 'sounds.import',
+      title: 'Import sounds…',
+      group: 'Chart',
+      enabled: () => !!app.project,
+      run: () => app.sounds.importPicked(),
+    },
+    {
+      id: 'sounds.reload',
+      title: 'Reload sound files (after editing them in another program)',
+      group: 'Chart',
+      enabled: () => !!app.project,
+      run: async () => {
+        await app.audio.reload(app.project!);
+        toast('Sounds reloaded', 'ok');
+      },
+    },
+    {
       id: 'sounds.removeUnused',
       title: 'Remove unused sounds from every chart',
       group: 'Chart',

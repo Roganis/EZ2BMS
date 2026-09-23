@@ -329,7 +329,7 @@ export function addChannel(doc: ChartDoc, name: string): SoundChannel {
 
 /** Add many sounds in one undo step (a folder drop). */
 export function addChannels(doc: ChartDoc, names: string[]): SoundChannel[] {
-  return doc.transact(`Add ${names.length} sounds`, (tx) =>
+  return doc.transact(`Add ${names.length} sound${names.length === 1 ? '' : 's'}`, (tx) =>
     names.map((name) => tx.insertChannel({ name })),
   );
 }

@@ -98,6 +98,17 @@ export class AudioClient {
   }
 
   /**
+   * Read sounds from disk again - edited in another program, say. The
+   * engine re-decodes a file whose size or time changed and keeps its id;
+   * each gets a new Loaded, so its waveform thumbnail is fetched again.
+   */
+  async reload(p: Project, names: string[] = [...this.loaded.keys()]): Promise<void> {
+    for (const n of names) this.loaded.delete(n);
+    this.loadedRev++;
+    await this.load(p, names);
+  }
+
+  /**
    * A file was renamed: its sound moves to the new name without being
    * decoded again (and keeps its thumbnail - same Loaded). The old names go,
    * so a new file that takes one of them later is loaded, not mistaken for it.
