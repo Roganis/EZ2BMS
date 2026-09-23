@@ -130,7 +130,7 @@ pnpm tauri dev          # the desktop app
 - [x] M3.9 BGA: a movie EZ2PORT's build can decode (read from its headers), started on the chart's clock, previewed and published
 - [x] M3.10 Issues grouped and filtered, with quick fixes (one undo step per chart, "Fix all" undone in all); F5 refuses a chart with errors
 - [x] M3.11 Publish dialog: destination and whose folder it is, each chart's scores kept or reset, the art from the very bytes, then written at once
-- [ ] M3.12 Docs, performance, end-to-end
+- [x] M3.12 The [song file](docs/song-file.md), requests to the port, timings in the [perf log](docs/perf-log.md), end-to-end specs for every page
 
 ### Later
 

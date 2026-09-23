@@ -108,3 +108,31 @@ checks that the playfield keeps its size while the cursor moves.
 Each frame in this headless browser also costs ~50 ms of wall time outside
 the page (the software compositor reads the WebGL canvas back), which is
 why the perf spec samples 60 frames per zoom rather than 240.
+
+## M3.12 - song art, plates, the preview and the wheel
+
+The host's work is timed by `cargo test --release --test perf -- --nocapture`
+in `ez2bms-media` and `ez2bms-audio` (a release build in this container; the
+tests themselves only hold loose bounds, so a debug build on CI passes). The
+wheel is timed by `apps/editor/tests/e2e/perf.spec.ts` in headless Chromium.
+
+| Date       | What                                                                | Time         |
+| ---------- | ------------------------------------------------------------------- | ------------ |
+| 2026-09-23 | Read the plate fonts, cold (Roboto Bold and the 20 MB Noto CJK TTC) | 12-17 ms     |
+| 2026-09-23 | Render a two-line plate with a halo (Latin / Korean), first render  | 0.3 / 0.3 ms |
+| 2026-09-23 | ...and again (the most of 20)                                       | 0.2 / 0.2 ms |
+| 2026-09-23 | Decode a 4000x3000 PNG photo                                        | 184 ms       |
+| 2026-09-23 | Cut it to the disc / to the eyecatch                                | 14 / 28 ms   |
+| 2026-09-23 | Preview overview of a 3-minute song (2 880 hits of 40 sounds)       | 152 ms       |
+| 2026-09-23 | Wheel preview, one frame, at rest (median / p95)                    | 0.8 / 1.3 ms |
+| 2026-09-23 | Wheel preview, one frame, while the wheel chases (median / p95)     | 0.8 / 1.7 ms |
+
+Reading: the cropper asks the host for a new cut on every committed crop,
+and the host keeps the last two decoded images, so after the first decode a
+crop costs the cut alone - tens of milliseconds for a phone photo. The fonts
+are read whole (the CJK collection is 20 MB) the first time a plate is
+rendered and kept, so the first plate of a session pays those milliseconds
+once; after that a Korean plate costs what a Latin one does. The preview
+overview mixes the whole song through the real mixer once per chart or file
+chosen. The wheel's Canvas 2D frame is a small part of a 60 Hz frame even in
+software rendering.

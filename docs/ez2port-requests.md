@@ -160,6 +160,47 @@ thumb's size, as the result screen already does.
 **Detection:** none needed; EZ2BMS's wheel preview shows the bare mask until
 the build's `select.c` says otherwise.
 
+## 8. Packages in the ALL bank
+
+**What it's for.** A package joins only the bank of its `Category`
+(`ez2_usersongs_merge` calls `add_to_group(db, si.category - 1, ...)`),
+while every shipped table also fills ALL (`songdb.h`: "ALL is the one
+every table fills"). A player browsing ALL never meets a user song.
+
+**What to add.** `add_to_group(db, EZ2_SONGDB_CAT_ALL, si.key)` beside the
+category's, unless the category already is ALL.
+
+**Detection:** none from the binary; the Song manager's category picker says
+a song is found in its one bank, and will say otherwise once the build's
+`usersongs.c` changes.
+
+## 9. A title plate drawn from text
+
+**What it's for.** The plate is a 256x32 bitmap (`songname.abm`) that the
+wheel scales like any other picture, while the port draws its own titles
+natively from a spec (TEXT.md s7). EZ2BMS renders the plate with the
+port's own text renderer so the two match, but a bitmap cannot follow the
+port into higher resolutions.
+
+**What to add.** An optional `[Assets] PlateText = <title> | <subtitle> |
+<ink> | <halo>` line (the fields of a plate spec), drawn with the port's
+textspec renderer when present, the bitmap staying the fallback.
+
+**Detection:** a `PlateText` mention in the build's `docs/BMSON.md` or
+`usersongs.c`; EZ2BMS would then write the line beside the bitmap.
+
+## 10. A letterboxed BGA
+
+**What it's for.** `scene/bga.c` stretches every movie to 640x480, the
+right thing for the game's 4:3 `.spv` files. Most movies made today are
+16:9, and stretched they look squeezed; EZ2BMS can only lint it.
+
+**What to add.** `[Bga] Fit = stretch | letterbox` (stretch by default),
+letterbox keeping the movie's shape inside 640x480 on black.
+
+**Detection:** a `Fit` key in the build's `usersongs.c`; EZ2BMS would offer
+the choice on its BGA page.
+
 ## For information: scores that can't reach 100%
 
 This is not a bug in the port: it reproduces the original. EZ2BMS's lint warns

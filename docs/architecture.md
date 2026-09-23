@@ -178,3 +178,9 @@ removes the folder when the game exits.
   records the build; re-vendor from a newer zip or repository when the port changes.
 - **Nothing from the game ships** - key tables, lane layouts and art are read
   from the user's own install at run time, exactly as EZ2PORT does.
+
+## The song file
+
+`ez2bms.song.json` holds what bmson has no place for - the key, category,
+plate, disc, eyecatch, preview and BGA - read and written byte-stably by
+chart-core `song/songfile.ts`. Its members are in `song-file.md`.

@@ -224,6 +224,10 @@ Playwright on the synthetic game folder (`bridge/demo-skin.ts`).
 
 ## Port behaviour worth knowing
 
+- **A package is listed in one bank.** `ez2_usersongs_merge` adds it to
+  its `Category`'s bank only, where every shipped table also fills ALL: a
+  user song is never in ALL (a request in `ez2port-requests.md`).
+
 - **Some hold kinds make 100% unreachable, or pass it.** The maximum score
   is `notes * 300`, with `notes` from the engine's counter
   (`ez2_note_counted`). Kinds 4 and 5 are counted by the counter's own ladder

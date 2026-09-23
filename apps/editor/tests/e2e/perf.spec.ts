@@ -127,3 +127,44 @@ test('the workbench opens and scrolls through 1500 sounds quickly', async ({ pag
   expect(stats.openMs).toBeLessThan(2000);
   expect(stats.scrollMedianMs).toBeLessThan(30);
 });
+
+// The song select preview: every frame redraws the carousel and the rail of
+// plates in Canvas 2D (JS and the 2D context's own work, on the main thread),
+// at rest and while the wheel chases a cursor that keeps moving.
+test('the wheel preview draws a frame in a few milliseconds', async ({ page }, info) => {
+  test.setTimeout(60_000);
+  await page.goto('/?e2e&skin');
+  await page.getByTestId('open-folder').click();
+  await expect(page.locator('[data-testid=playfield] canvas')).toBeVisible();
+  await page.getByTestId('open-song').click();
+  await page.getByTestId('song-tab-wheel').click();
+  await expect(page.getByTestId('wheel-canvas')).toHaveAttribute('data-art', 'game');
+  const times = () =>
+    page.evaluate(() => {
+      const t = [
+        ...(window as unknown as { __ez2bmsWheel: { drawTimes: number[] } }).__ez2bmsWheel
+          .drawTimes,
+      ];
+      (window as unknown as { __ez2bmsWheel: { drawTimes: number[] } }).__ez2bmsWheel.drawTimes =
+        [];
+      t.sort((a, b) => a - b);
+      return { n: t.length, median: t[t.length >> 1]!, p95: t[Math.floor(t.length * 0.95)]! };
+    });
+  await page.waitForTimeout(1000);
+  await times();
+  await page.waitForTimeout(1500);
+  const rest = await times();
+  await page.locator('.screen').focus();
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press(i % 3 === 2 ? 'ArrowUp' : 'ArrowDown');
+    await page.waitForTimeout(80);
+  }
+  const moving = await times();
+  const stats = { rest, moving };
+  info.annotations.push({ type: 'perf', description: JSON.stringify(stats) });
+  console.log('wheel draw ms', stats);
+  expect(rest.n).toBeGreaterThan(20);
+  // Generous: headless software rendering. A 60 Hz frame is 16.7 ms.
+  expect(rest.median).toBeLessThan(16);
+  expect(moving.median).toBeLessThan(16);
+});

@@ -130,9 +130,9 @@ Found and fixed on the way: the rack's hit list was never cleared (M2.8),
 and at 1 280 px the top bar was wider than the window, which made the
 playfield re-bake its textures every frame (see `docs/perf-log.md`).
 
-### Song manager, safe publishing, song art, plates, preview, the wheel, the BGA and lint fixes (M3.1-M3.10), 2026-09-23
+### Milestone 3: the song manager and full publish (M3.1-M3.12), 2026-09-23
 
-The assistant is writing Milestone 3 step by step after the owner's
+The assistant wrote Milestone 3 step by step after the owner's
 decisions (a bundled CJK font for plates, rankings kept only for charts
 whose `.ez` and `.ini` are unchanged, the wheel preview drawn from the
 owner's own game art):
@@ -161,7 +161,8 @@ owner's own game art):
   importer's pick of the charts' movie, a copy by path in the package
   writer, and a `<video>` preview through the asset protocol;
 - lint quick fixes: each a pure edit of one chart in one undo step, checked
-  on random charts to clear its finding and undo exactly.
+  on random charts to clear its finding and undo exactly;
+- the Publish dialog, which works out the whole package before writing it.
 
 The disc and the stretched eyecatch are checked byte for byte against
 EZ2PORT's own importer through the oracle, on random images; plates

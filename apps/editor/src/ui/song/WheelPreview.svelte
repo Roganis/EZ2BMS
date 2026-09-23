@@ -216,6 +216,10 @@
     const g = c?.getContext('2d');
     if (!c || !g) return;
     const painter = new WheelPainter();
+    // End-to-end tests read each frame's drawing time (?e2e only).
+    const hook: { drawTimes: number[] } | undefined =
+      '__ez2bms' in window ? { drawTimes: [] } : undefined;
+    if (hook) (window as unknown as { __ez2bmsWheel: typeof hook }).__ez2bmsWheel = hook;
     let raf = 0;
     let last = performance.now();
     let acc = 0;
@@ -226,8 +230,13 @@
         acc -= TICK_MS;
         tick();
       }
+      const t0 = performance.now();
       if (view === 'eyecatch') painter.drawEyecatch(g, eyecatch, art, level);
       else painter.drawWheel(g, scene, entries, art);
+      if (hook) {
+        hook.drawTimes.push(performance.now() - t0);
+        if (hook.drawTimes.length > 600) hook.drawTimes.shift();
+      }
       c.dataset.angle = String(Math.round(scene.angle));
       c.dataset.cursor = String(scene.wheel.cursor);
       c.dataset.focus = String(
