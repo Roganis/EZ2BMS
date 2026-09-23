@@ -15,6 +15,7 @@ import { serializeBmson } from '../src/io/bmson/serialize';
 import { newChart } from '../src/model/defaults';
 import { chartBga } from '../src/publish/bga';
 import { readSongIni } from '../src/publish/songini-read';
+import { TickConverter } from '../src/timing/ticks';
 import { ORACLE, oracle } from './oracle';
 import { withTmpDir } from './tmp';
 
@@ -54,9 +55,15 @@ describe.skipIf(!ORACLE)("the BGA against EZ2PORT's importer", () => {
         fc.property(chart(exact), (c) =>
           withTmpDir((dir) => {
             const data = newChart({ mode: '5k', tier: 'NM', level: 3, title: 'Bga', bpm: c.init });
-            data.bpmEvents = c.bpms.map((b) => ({ y: b.y, bpm: b.bpm }));
             // A bmson STOP is in pulses; keep them apart so no two share a y.
             data.stopEvents = [...new Map(c.stops.map((s) => [s.y, s])).values()];
+            // One BPM per EZ2 tick: two on one tick are the compat doc's "Two
+            // BPMs at one tick" - the importer's pick is its qsort's, EZ2BMS
+            // refuses them (lint bpm-same-tick).
+            const tc = new TickConverter(240, data.stopEvents);
+            data.bpmEvents = [
+              ...new Map(c.bpms.map((b) => [tc.tick(b.y).tick, { y: b.y, bpm: b.bpm }])).values(),
+            ];
             data.bga = {
               header: c.header.map((id) => ({ id, name: `clip${id}.mp4` })),
               bga: c.events.map((e) => ({ y: e.y, id: c.header[e.pick % c.header.length]! })),

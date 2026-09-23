@@ -13,6 +13,15 @@ import { portCannotPlay, type MovieInfo } from '../media/movie';
 import { songMeta } from '../song/meta';
 import { modeDef } from '../modes/registry';
 import { TickConverter } from '../timing/ticks';
+import {
+  bgmCopies,
+  chartFix,
+  laneDuplicates,
+  oddLines,
+  swallowingHolds,
+  unusedSounds,
+  type Fix,
+} from './fixes';
 
 export type Severity = 'error' | 'warning' | 'info';
 
@@ -25,6 +34,8 @@ export interface Finding {
   /** Where to look, in pulses. */
   at?: number;
   notes?: NoteId[];
+  /** A change that clears it (lint/fixes.ts): one undo step per chart. */
+  fix?: Fix;
 }
 
 export interface LintChart {
@@ -49,6 +60,8 @@ export interface LintSong {
   preview?: PreviewCheck;
   /** The BGA movie and what its headers say; checked when given. */
   bga?: BgaCheck;
+  /** The song folder lies inside the songs folder it publishes to. */
+  insideSongsRoot?: boolean;
 }
 
 /** The song's BGA as a publish would use it, and its probe (the host reads the headers). */
@@ -107,7 +120,9 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
 
   const level = info.level ?? 0;
   if (!(Number.isInteger(level) && level >= 1 && level <= 20)) {
-    f('level', 'error', `Level ${level} is outside 1-20, which EZ2PORT's song list uses`);
+    f('level', 'error', `Level ${level} is outside 1-20, which EZ2PORT's song list uses`, {
+      fix: chartFix('clamp-level'),
+    });
   }
 
   // ---- tempo
@@ -123,7 +138,7 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
         'init-bpm',
         'error',
         `A BPM change at the start (${e.bpm}) disagrees with the start BPM (${init})`,
-        { at: 0 },
+        { at: 0, fix: chartFix('align-start-bpm') },
       );
     }
     const t = tc.tick(e.y).tick;
@@ -152,7 +167,7 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
       'off-mode',
       'warning',
       `${offMode.length} note${offMode.length === 1 ? ' is' : 's are'} on lanes ${modeNames(c.mode).label} does not have; EZ2PORT plays them as background`,
-      { at: offMode[0]!.y, notes: offMode.map((n) => n.id) },
+      { at: offMode[0]!.y, notes: offMode.map((n) => n.id), fix: chartFix('off-mode-to-bgm') },
     );
   }
   const playable = d.notes.filter((n) => lanes.has(n.x));
@@ -173,7 +188,7 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
       'off-grid',
       'warning',
       `${offGrid.length} note${offGrid.length === 1 ? '' : 's'} between EZ2 ticks (1/48 beat) will be rounded, by up to ${worst.toFixed(2)} tick`,
-      { notes: offGrid },
+      { notes: offGrid, fix: chartFix('snap-off-grid') },
     );
   }
   const oddKinds = playable.filter(
@@ -199,18 +214,58 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
     f(
       'same-pulse-sound',
       'warning',
-      `${dup.length} note${dup.length === 1 ? '' : 's'} share a position with another note of the same sound: the slice that plays is ambiguous`,
-      {
-        notes: dup,
-      },
+      `${dup.length} note${dup.length === 1 ? ' shares' : 's share'} a position with another note of the same sound: the slice that plays is ambiguous`,
+      { notes: dup, ...(bgmCopies(d).length ? { fix: chartFix('drop-bgm-copies') } : {}) },
     );
   }
+  // Two notes on one lane at one EZ2 tick: the second can never be hit.
+  const doubled = laneDuplicates(d, c.mode);
+  if (doubled.length)
+    f(
+      'lane-duplicates',
+      'error',
+      `${doubled.length} note${doubled.length === 1 ? ' shares' : 's share'} a lane and an EZ2 tick with another: one press cannot hit both`,
+      {
+        at: doubled[0]!.y,
+        notes: doubled.map((n) => n.id),
+        fix: chartFix('lane-duplicates-to-bgm'),
+      },
+    );
+  // The engine judges a hold to its end: a note it covers is never reached.
+  const swallowed = swallowingHolds(d, c.mode);
+  if (swallowed.length)
+    f(
+      'note-in-hold',
+      'error',
+      `${swallowed.length} hold${swallowed.length === 1 ? ' covers' : 's cover'} a later note on the same lane`,
+      {
+        at: swallowed[0]!.hold.y,
+        notes: swallowed.flatMap((s) => [s.hold.id, s.first.id]),
+        fix: chartFix('shorten-holds'),
+      },
+    );
   const ups = d.notes.filter((n) => n.up);
   if (ups.length)
     f(
       'up-notes',
       'info',
       `${ups.length} release (up) note${ups.length === 1 ? '' : 's'}: EZ2 has no release sound, they play as ordinary notes`,
+      { notes: ups.map((n) => n.id), fix: chartFix('clear-up') },
+    );
+  // EZ2 draws a bar every 192 ticks; bmson lines are the editor's alone.
+  if (oddLines(d))
+    f(
+      'lines',
+      'warning',
+      "The chart's bar lines are not every four beats: EZ2PORT draws a line every four beats whatever the chart says",
+      { fix: chartFix('lines-4-4') },
+    );
+  // BMS's own judge and gauge: an EZ2 chart times and fills from its deltas.
+  if ((info.judgeRank ?? 100) !== 100 || (info.total ?? 100) !== 100)
+    f(
+      'bms-judge',
+      'info',
+      `judge_rank ${info.judgeRank} and total ${info.total} are BMS settings EZ2PORT does not use: its judgement and gauge are set in Chart info`,
     );
 
   // ---- sounds
@@ -227,6 +282,14 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
       `${d.channels.length} sounds: the original game loads at most ${ORIGINAL_SLOTS} (EZ2PORT is fine)`,
     );
   }
+  const unused = unusedSounds(d);
+  if (unused.length)
+    f(
+      'unused-sounds',
+      'info',
+      `${unused.length} sound${unused.length === 1 ? ' plays' : 's play'} no note in this chart`,
+      { fix: chartFix('remove-unused-sounds') },
+    );
   if (missing?.size) {
     const used = new Set(d.notes.map((n) => n.ch));
     const bad = d.channels.filter((ch) => used.has(ch.id) && missing.has(ch.name));
@@ -261,25 +324,41 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
     );
   if (title.includes(';'))
     f(
-      'title',
+      'title-semicolon',
       'warning',
       "The title contains ';', which song.ini reads as a comment; Publish writes ',' instead",
+      { fix: chartFix('title-semicolon') },
     );
   return out;
 }
 
+const DERIVE_KEY: Fix = { id: 'derive-key', label: 'Make one from the title' };
+
 export function lintSong(s: LintSong): Finding[] {
   const out: Finding[] = [];
-  const f = (rule: string, severity: Severity, message: string) =>
-    out.push({ rule, severity, message });
+  const f = (rule: string, severity: Severity, message: string, fix?: Fix) =>
+    out.push({ rule, severity, message, ...(fix ? { fix } : {}) });
   if (!s.key)
     f(
       'song-key',
       'error',
       'The song needs a key: its folder name in EZ2PORT (1-15 lowercase letters or digits)',
+      DERIVE_KEY,
     );
   else if (!isValidSongKey(s.key))
-    f('song-key', 'error', `Song key "${s.key}" must be 1-15 lowercase letters or digits`);
+    f(
+      'song-key',
+      'error',
+      `Song key "${s.key}" must be 1-15 lowercase letters or digits`,
+      DERIVE_KEY,
+    );
+  // EZ2PORT imports a raw bmson found in its songs folder as its own package.
+  if (s.insideSongsRoot)
+    f(
+      'inside-songs-root',
+      'warning',
+      "The song folder is inside EZ2PORT's songs folder: the port would import its bmson files itself, beside what Publish writes",
+    );
   if (!s.charts.length) f('no-charts', 'error', 'The song has no charts');
   if (s.charts.length > MAX_CHARTS)
     f('chart-count', 'error', `${s.charts.length} charts: a song holds at most ${MAX_CHARTS}`);
@@ -304,6 +383,7 @@ export function lintSong(s: LintSong): Finding[] {
       'category',
       'warning',
       `Category ${JSON.stringify(s.category)} is not one EZ2PORT knows (1-48): the song goes under CUSTOM`,
+      { id: 'category-custom', label: 'Make it CUSTOM (48)' },
     );
   else {
     const cat = validCategory(s.category);

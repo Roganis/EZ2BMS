@@ -13,6 +13,15 @@ export function registerPortCommands(app: App): void {
   const test = async (auto: boolean) => {
     const slot = app.slot;
     if (!slot) return;
+    // What would stop Publish in the chart being tested stops the test too:
+    // EZ2PORT would reject it, or play something else than what is charted.
+    const errors = songFindings(app).filter((f) => f.severity === 'error' && f.chart === slot.file);
+    if (errors.length) {
+      app.view.right = 'issues';
+      throw new Error(
+        `${errors.length} problem${errors.length === 1 ? '' : 's'} in ${slot.label} to fix first (see Issues)`,
+      );
+    }
     if (!s.data.ez2play || !s.data.gameRoot) {
       app.view.right = 'port';
       throw new Error('Set your game folder (and ez2play) in the EZ2PORT tab first');

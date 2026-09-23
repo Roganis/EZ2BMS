@@ -76,7 +76,7 @@ const song = fc.record({
     minLength: 1,
     maxLength: 4,
   }),
-  // Distinct (slot, lane) cells over about a minute.
+  // Distinct (slot, lane) cells over about a minute (and, below, one strike of a sound at a time).
   notes: fc.uniqueArray(
     fc.record({
       slot: fc.integer({ min: 0, max: 240 }),
@@ -90,8 +90,18 @@ const song = fc.record({
 describe.skipIf(!ORACLE || !PREVIEW)("the song preview against EZ2PORT's importer", () => {
   it('picks the same window and writes the same PCM', () => {
     fc.assert(
-      fc.property(song, ({ sounds, notes }) =>
+      fc.property(song, ({ sounds, notes: drawn }) =>
         withTmpDir((dir) => {
+          // A sound struck twice at one instant plays once in the engine - one
+          // voice, the sample's slot - where the importer sums both: the
+          // "voices cutting" row of the compat doc. One of each is kept.
+          const struck = new Set<string>();
+          const notes = drawn.filter((n) => {
+            const k = `${n.slot}/${n.sound % sounds.length}`;
+            if (struck.has(k)) return false;
+            struck.add(k);
+            return true;
+          });
           const src = join(dir, 'src', 'pv');
           mkdirSync(src, { recursive: true });
           // 0.2 s samples: shorter than the eighth between two notes of a sound.

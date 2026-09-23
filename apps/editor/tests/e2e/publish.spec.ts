@@ -113,14 +113,14 @@ test('publishing again keeps the scores of unchanged charts and backs up the old
   expect(await list(page, `${ROOT}/neonparade`)).toContain('rank_StreetMix_neonparade.bin');
   expect(await list(page, ROOT)).toEqual(['.ez2bms-backup', 'neonparade']);
 
-  // A note more in the 5K chart: its scores no longer mean the same.
+  // A note more in the 5K chart (where its lane is free): its scores no longer mean the same.
   await page.evaluate(() => {
     const a = (window as unknown as { __ez2bms: any }).__ez2bms;
     const doc = a.project.charts[0].doc;
+    let y = 5 * 960;
+    while (doc.index.at(11, y).length || doc.index.holdCovering(11, y)) y += 60;
     doc.transact('x', (tx: any) =>
-      tx.insertNotes([
-        { id: 999_999, ch: doc.data.channels[0].id, x: 11, y: 5 * 960, l: 0, c: false },
-      ]),
+      tx.insertNotes([{ id: 999_999, ch: doc.data.channels[0].id, x: 11, y, l: 0, c: false }]),
     );
   });
   await publish(page);

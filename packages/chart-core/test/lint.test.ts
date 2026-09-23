@@ -54,6 +54,14 @@ describe('lint', () => {
     expect(f.find((x) => x.rule === 'off-mode')!.notes).toHaveLength(1);
   });
 
+  it("notes a converted chart's BMS judge, and a song folder inside the songs folder", () => {
+    const c = chart();
+    c.data.info.judgeRank = 75;
+    const f = lintSong({ key: 'abc', charts: [c], insideSongsRoot: true });
+    expect(rules(f)).toEqual(['bms-judge', 'inside-songs-root']);
+    expect(f.find((x) => x.rule === 'bms-judge')!.severity).toBe('info');
+  });
+
   it("warns when the port's importer would read the mode from a keyword", () => {
     const c = chart();
     c.data.info.chartName = 'Space Street'; // "space" wins in the port's keyword table

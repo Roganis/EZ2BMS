@@ -128,7 +128,7 @@ pnpm tauri dev          # the desktop app
 - [x] M3.7 Preview picker: the window on the song's loudness, auditioned as the wheel loops it, rendered as EZ2PORT's importer renders it
 - [x] M3.8 The song on the wheel: disc, swing, rail, preview dwell and eyecatch where EZ2PORT puts them, over your game's own select masks
 - [x] M3.9 BGA: a movie EZ2PORT's build can decode (read from its headers), started on the chart's clock, previewed and published
-- [ ] M3.10 Lint panel with quick fixes
+- [x] M3.10 Issues grouped and filtered, with quick fixes (one undo step per chart, "Fix all" undone in all); F5 refuses a chart with errors
 - [ ] M3.11 Publish dialog
 - [ ] M3.12 Docs, performance, end-to-end
 
