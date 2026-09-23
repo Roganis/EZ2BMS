@@ -111,16 +111,25 @@ function laneTour(mode: ModeId): Uint8Array {
 
 const BENCH_SOUNDS = 1500;
 
+/** The bench's long stem: five minutes, cut once a measure. */
+export const BENCH_STEM = 'bench_stem.wav';
+const BENCH_STEM_SECONDS = 300;
+
 /**
  * A 50k-note, 1500-sound chart for the benchmarks (?bench), its sounds named
- * in 60 kits so the rack and the workbench have groups to draw.
+ * in 60 kits so the rack and the workbench have groups to draw - and a
+ * five-minute stem cut once a measure beside them, for the stem strip.
  */
 function benchChart(): Uint8Array {
-  return encodeUtf8(
-    serializeBmson(
-      synthChart({ mode: '14k', notes: 50_000, channels: BENCH_SOUNDS, names: 'grouped' }),
-    ),
-  );
+  const data = synthChart({ mode: '14k', notes: 50_000, channels: BENCH_SOUNDS, names: 'grouped' });
+  const ch = data.channels.length + 1;
+  data.channels.push({ id: ch, name: BENCH_STEM });
+  const measure = 4 * (data.info.resolution ?? 240);
+  const measures = Math.ceil((BENCH_STEM_SECONDS * (data.info.initBpm ?? 170)) / 60 / 4);
+  let id = data.notes.reduce((m, n) => Math.max(m, n.id), 0);
+  for (let m = 0; m < measures; m++)
+    data.notes.push({ id: ++id, ch, x: 0, y: m * measure, l: 0, c: m > 0 });
+  return encodeUtf8(serializeBmson(data));
 }
 
 export const TOUR_MODES: readonly ModeId[] = [
@@ -140,6 +149,7 @@ export function demoFiles(modes = false, bench = false): Map<string, Uint8Array>
   files.set(`${DEMO_DIR}/7streetmix1p-neonparade-hd.bmson`, chart('7k', 'HD', 12, true));
   if (bench) {
     files.set(`${DEMO_DIR}/spacemix1p-neonparade-ex.bmson`, benchChart());
+    files.set(`${DEMO_DIR}/${BENCH_STEM}`, new Uint8Array(0));
     for (let i = 0; i < BENCH_SOUNDS; i++)
       files.set(`${DEMO_DIR}/${synthSoundName(i, 'grouped')}`, new Uint8Array(0));
   }
@@ -165,6 +175,7 @@ export function demoFiles(modes = false, bench = false): Map<string, Uint8Array>
 /** How long the silent web audio says a sample is. */
 export function demoSeconds(path: string): number {
   // The stem runs under the whole demo (24 measures at 150 BPM), sliced per measure.
+  if (path.endsWith(BENCH_STEM)) return BENCH_STEM_SECONDS;
   if (/stem/i.test(path)) return 40;
   if (/pad|bgm/i.test(path)) return 1.6;
   if (/bass|riser/i.test(path)) return 0.8;

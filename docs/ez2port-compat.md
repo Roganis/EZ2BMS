@@ -31,6 +31,7 @@ row is proven by a test against the vendored engine core
 | The song preview (`preview.ssf`): the importer's window, mix, fades, normalising                                      | `ez2bms-audio` `preview.rs` | `preview.oracle.test.ts` - PCM identical to `write_preview` for random songs, mixed at unity                                                          |
 | The BGA a bmson names (`[Bga] File`, `StartMs`): the earliest event's movie, its time through tempo changes and STOPs | `publish/bga.ts`            | `bga.oracle.test.ts` - equal to `ez2_bmson_import`'s for random charts (to 1 ms with BPMs f32 cannot hold, see below)                                 |
 | The song select's wheel: every disc and title plate placed, the scroll's chase, the disc's swing per tier             | `ez2data/selectwheel.ts`    | `selectwheel.oracle.test.ts` - placements within a thousandth of a pixel of `ez2_select_wheel_place` / `_rail_place`, chase and swing frame for frame |
+| A stem chopped by M4's slicing (continuation notes only): its background sounds, slice for slice                      | `slice/ops.ts`              | `publish.oracle.test.ts` - equal to `ez2_bmson_import`'s records for random grids, resolutions and tempi; the engine reads each keysound as planned   |
 
 ## Deliberate differences
 
@@ -163,6 +164,36 @@ What the check cannot see, and so is not promised:
   sounding, so Classic offers less (and refuses more) until it loads.
 - Not ported from BmsTWO: the automatic split at a long note's release, and
   "right-click clears x_stop" (`xStop` is not published).
+
+## Slicing stems (M4)
+
+Slicing writes nothing EZ2PORT does not already read: a cut is a background
+continuation note (`c: true`), a keyed slice a lane note, and the package is
+the one M1 publishes (`slicing.md`). So a chopped stem is in the oracle
+above - our package's background sounds are the importer's own, slice for
+slice - and cuts join sample-exactly into the uncut stem (the importer's
+1 ms rounding is the deliberate difference already listed).
+
+Like Classic mode, slicing promises that autoplay sounds the same after
+every cut, move, heal or key, and keeps it by checking: each edit is
+dry-run through `publish/audible.ts` and refused if anything audible would
+differ (`slice.test.ts`: a model-based run of random slicing never moves
+the fingerprint, and chopped stems render through the real mixer within
+1e-5 of the uncut stem at 44.1 and 48 kHz). The same
+caveats as Classic mode apply (frame timing in the port, two players, the
+original cabinet's one voice per track).
+
+What is EZ2BMS's own, with no counterpart in the port:
+
+- **Onsets and tempo** (`ez2bms-audio` analysis.rs) are suggestions shown
+  on the strip; nothing is cut until asked. They are tested on signals made
+  in the tests, not on the port.
+- **The disk cache** keeps long files decoded exactly as the decoder gives
+  them (a hit is compared bit for bit with a decode), so a package is the
+  same whether the cache had a stem or not. The crate's version is in every
+  entry's name: a new build never reads an older build's audio.
+- **Silence** when chopping is judged on the engine's peak mipmap at
+  -48 dBFS; a quieter stretch stays on the end of the slice before.
 
 ## The BGA movie (scene/bga.c, media/video.c, not in the oracle)
 

@@ -3,6 +3,8 @@ import { expect, test } from '@playwright/test';
 interface W {
   __ez2bms: {
     view: { cursor: number; zoom: number; rackScroll: number; workbench: boolean };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the live stem strips
+    strips: any;
     doc: { data: { notes: unknown[] } };
     sounds: { thumbs: { batches: number } };
   };
@@ -31,8 +33,9 @@ async function openBench(page: import('@playwright/test').Page) {
 test('a 50k-note chart scrolls with a small JS cost per frame', async ({ page }, info) => {
   test.setTimeout(90_000);
   await openBench(page);
+  // 50k notes, and the long stem's 213 cuts.
   expect(await page.evaluate(() => (window as unknown as W).__ez2bms.doc.data.notes.length)).toBe(
-    50_000,
+    50_213,
   );
   const stats = await page.evaluate(async () => {
     const w = window as unknown as W;
@@ -70,7 +73,8 @@ test('a 50k-note chart scrolls with a small JS cost per frame', async ({ page },
   console.log('renderer draw ms', stats);
   // Generous: software GL in CI. The design budget is 4 ms of JS per frame.
   expect(stats['median@56']).toBeLessThan(16);
-  expect(stats.rackGroups).toBe(60);
+  // The 60 kits, and the long stem's own column.
+  expect(stats.rackGroups).toBe(61);
   expect(stats['median@rackScroll']).toBeLessThan(16);
 });
 
@@ -167,4 +171,94 @@ test('the wheel preview draws a frame in a few milliseconds', async ({ page }, i
   // Generous: headless software rendering. A 60 Hz frame is 16.7 ms.
   expect(rest.median).toBeLessThan(16);
   expect(moving.median).toBeLessThan(16);
+});
+
+/** Median and 95th percentile of the draws since `from`. */
+const drawStats = (t: number[]) => {
+  const s = [...t].sort((a, b) => a - b);
+  return { median: s[Math.floor(s.length / 2)]!, p95: s[Math.floor(s.length * 0.95)]! };
+};
+
+// Stem strips: three on the demo while the cursor runs as it does playing
+// at 250 % (a strip's waveform is painted again every frame then), against
+// none; on the bench, the five-minute stem's strip beside 50k notes, and
+// chopping that stem at eighths (~1500 cuts, checked to keep the sound).
+test('stem strips draw while playing, and a long stem chops quickly', async ({ page }, info) => {
+  test.setTimeout(120_000);
+  await page.goto('/?e2e');
+  await page.getByTestId('open-folder').click();
+  await page.waitForFunction(() => '__ez2bmsField' in window);
+  const run = () =>
+    page.evaluate(async () => {
+      const w = window as unknown as W;
+      const f = w.__ez2bmsField;
+      // 250 % in Edit: 192 design pixels a beat; 150 BPM at 60 fps is 10 pulses a frame.
+      w.__ez2bms.view.zoom = 192;
+      f.drawTimes.length = 0;
+      for (let i = 0; i < 60; i++) {
+        w.__ez2bms.view.cursor = 960 + i * 10;
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+      }
+      await new Promise((r) => setTimeout(r, 50));
+      return [...f.drawTimes];
+    });
+  await page.evaluate(() => {
+    const a = (window as unknown as W).__ez2bms;
+    a.strips.pin(a.doc, 'bass_a.wav');
+    a.strips.pin(a.doc, 'lead_1.wav');
+  });
+  await page.waitForTimeout(300);
+  const three = drawStats(await run());
+  await page.evaluate(() => ((window as unknown as W).__ez2bms.strips.show = false));
+  await page.waitForTimeout(300);
+  const none = drawStats(await run());
+  // The bench is the same song folder: forget the strips pinned here.
+  await page.evaluate(() => {
+    const a = (window as unknown as W).__ez2bms as unknown as {
+      settings: { set(k: string, v: unknown): void };
+    };
+    a.settings.set('strips', {});
+  });
+  await page.waitForTimeout(600);
+
+  await openBench(page);
+  const bench = await page.evaluate(async () => {
+    const w = window as unknown as W;
+    const a = w.__ez2bms;
+    const f = w.__ez2bmsField;
+    const list = a.strips.list(a.doc) as string[];
+    f.drawTimes.length = 0;
+    for (let i = 0; i < 60; i++) {
+      a.view.cursor = i * 997;
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+    }
+    await new Promise((r) => setTimeout(r, 50));
+    const draws = [...f.drawTimes];
+    const before = a.doc.data.notes.length;
+    const t0 = performance.now();
+    a.strips.chop(a.doc, 'bench_stem.wav', 120);
+    return {
+      list,
+      draws,
+      chopMs: performance.now() - t0,
+      cuts: a.doc.data.notes.length - before,
+    };
+  });
+  const scroll = drawStats(bench.draws);
+  const stats = {
+    threeStrips: three,
+    noStrips: none,
+    benchStrips: bench.list.length,
+    benchScroll: scroll,
+    chopMs: Math.round(bench.chopMs),
+    cuts: bench.cuts,
+  };
+  info.annotations.push({ type: 'perf', description: JSON.stringify(stats) });
+  console.log('stem strips ms', stats);
+  expect(bench.list).toContain('bench_stem.wav');
+  expect(bench.cuts).toBeGreaterThan(1400);
+  // Generous: software GL in CI. The design budget is 4 ms of JS per frame.
+  expect(three.median).toBeLessThan(16);
+  expect(scroll.median).toBeLessThan(16);
+  expect(bench.chopMs).toBeLessThan(20_000);
 });

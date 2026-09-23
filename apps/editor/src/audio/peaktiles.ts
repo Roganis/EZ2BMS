@@ -40,6 +40,8 @@ export class PeakTiles {
   private readonly lru = new Map<string, { e: Entry; key: string }>();
   private seq = 0;
   private readonly ids = new WeakMap<Entry, number>();
+  /** The tile touched last: a strip's rows hit one tile many times in a row. */
+  private lastTouch: { e: Entry; key: string } | undefined;
 
   constructor(
     private readonly audio: Pick<AudioBackend, 'peakRange'>,
@@ -92,6 +94,8 @@ export class PeakTiles {
   }
 
   private touch(e: Entry, key: string): void {
+    if (this.lastTouch?.e === e && this.lastTouch.key === key) return;
+    this.lastTouch = { e, key };
     const id = `${this.ids.get(e)}|${key}`;
     this.lru.delete(id);
     this.lru.set(id, { e, key });

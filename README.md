@@ -132,9 +132,18 @@ pnpm tauri dev          # the desktop app
 - [x] M3.11 Publish dialog: destination and whose folder it is, each chart's scores kept or reset, the art from the very bytes, then written at once
 - [x] M3.12 The [song file](docs/song-file.md), requests to the port, timings in the [perf log](docs/perf-log.md), end-to-end specs for every page
 
+### M4 - Stem slicing
+
+- [x] M4.1 Long sounds kept decoded on disk: a 5-minute stem opens and publishes in a tenth of its decode time, bit for bit the same
+- [x] M4.2 Onsets and tempo found in the engine (spectral flux, attacks placed on the waveform, tempo fitted to the beats)
+- [x] M4.3 The slice model: a stem as the chart plays it, and cuts that never change the sound (oracle: the importer's own slices)
+- [x] M4.4 Stem strips beside the lanes, on the chart's own axis, each slice in its tint
+- [x] M4.5 Slicing by hand: cut, heal, move, key onto lanes, hear a slice, the knife tool (C)
+- [x] M4.6 The strip panel: chop to the grid (silence left whole), cut at onsets, the stem's tempo as the chart's
+- [x] M4.7 [How slicing works](docs/slicing.md), timings in the [perf log](docs/perf-log.md), end-to-end specs
+
 ### Later
 
-- M4 Stem slicing
 - M5 Importers (`.ez` originals, BMS/BME, BmsTWO, MIDI, circus2bmson)
 - M6 Exporters (cabinet `.ez` v8/v6, BMS/BME)
 - M7 Record mode + cabinet controller

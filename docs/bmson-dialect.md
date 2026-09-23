@@ -71,6 +71,10 @@ notes are ordinary notes, and whether the song is charted in Classic mode
 is kept beside the charts, as `classic` in `ez2bms.song.json`. Renaming a
 sound in the workbench renames the file and rewrites each channel's `name`.
 
+Stem slicing (M4) adds nothing either: a cut is a background note with
+`c: true` on the stem's channel, a keyed slice an ordinary lane note. Which
+stems have strips is a view, kept in the app's settings, not in the song.
+
 ## Lossless reading
 
 - Members EZ2BMS does not know are kept on the object they belong to and

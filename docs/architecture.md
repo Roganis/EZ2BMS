@@ -97,7 +97,12 @@ voice decisions of its own.
 
 - **Samples.** Decoded once (WAV/OGG/FLAC/MP3 through symphonia, `.ssf`/`.ezw`
   directly), resampled to the device rate with the filter delay removed, and
-  cached while the file is unchanged. Peak mipmaps feed waveform drawing.
+  cached while the file is unchanged. Files of 20 s and more are also kept
+  decoded on disk (`disk.rs`, `<app cache>/audio`, least recently used out
+  past a cap): a hit is the decode bit for bit, so the editor and every
+  publish can use it. Peak mipmaps feed waveform drawing (whole levels for
+  thumbnails, 4096-bucket tiles for the stem strips) and sit on disk beside
+  a long file, as does its onset and tempo analysis (`analysis.rs`).
 - **Schedule.** Events carry song milliseconds from chart-core. A slice gives
   its fresh hit's time and the next note's time, so its bounds and the event
   times come from the same frame positions: a chain of slices plays exactly
@@ -148,6 +153,31 @@ sound playing there, deleting un-keys it. Every such edit is dry-run
 through `publish/audible.ts` - only for the sound files it touches, against
 a cached analysis of the chart - and refused if the music would change.
 What that promise covers, and what it cannot, is in `ez2port-compat.md`.
+
+## Stems (M4)
+
+A stem is a sound file a chart slices: a fresh hit and continuation notes,
+which EZ2PORT plays as consecutive cuts of the file ([slicing](slicing.md)).
+
+- **The model.** chart-core `slice/view.ts` turns the notes of the channels
+  playing one file into slices (each note's part of the file, and when it
+  plays) and the stretches that sound (`audible()`, voice cuts applied),
+  cached per file in the document's analysis (`edit/analysis.ts`, shared with
+  Classic mode) until those notes change. `whenHeard` maps a second of the
+  file to every song time it plays at; `PlanTimeline` (now in chart-core)
+  maps song time to pulses and back, STOPs as gaps.
+- **The edits.** `slice/ops.ts` cuts, moves, heals and keys slices, chops to
+  a grid and places onsets - all as standard notes, all dry-run through
+  `classicCheck` so autoplay never changes.
+- **The strip.** `render/striprows.ts` works out, per pixel row, the stretch
+  of the file playing there and its slice; `render/strip.ts` paints the rows
+  on a canvas shown as one texture in the playfield, again only when
+  something it shows changed. Waveform tiles (`audio/peaktiles.ts`) come from
+  the host as needed, answered meanwhile from the file's coarse whole level;
+  onsets (`audio/analysis.ts`) once per file.
+- **The state.** `state/strips.svelte.ts`: which files have strips, the
+  slicing actions with their refusals, hover audition, the panel's plans;
+  the pointer tool's strip gestures and the knife call into it.
 
 ## The desktop host (`src-tauri`)
 

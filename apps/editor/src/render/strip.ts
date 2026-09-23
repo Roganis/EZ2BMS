@@ -34,6 +34,8 @@ export class StripPainter {
   readonly texture = new Texture({ source: this.source });
   /** What was last painted, so an unchanged strip is not painted again. */
   private key = '';
+  /** CSS colours made so far (painting makes the same few, row after row). */
+  private readonly styles = new Map<number, string>();
 
   /** Whether what `key` describes differs from what is painted. */
   stale(key: string): boolean {
@@ -58,19 +60,38 @@ export class StripPainter {
     ctx.clearRect(0, 0, w, h);
     const cx = w / 2;
     const half = w / 2 - 3;
+    const style = (rgb: number, a: number) => {
+      const k = rgb * 128 + Math.round(a * 100);
+      let v = this.styles.get(k);
+      if (v === undefined) this.styles.set(k, (v = css(rgb, a)));
+      return v;
+    };
+    // Each slice's band, one rectangle per run of rows, so its extent shows
+    // even where it is quiet.
+    let from = 0;
+    for (let i = 1; i <= rows.length; i++) {
+      const a = rows[from];
+      const b = rows[i];
+      if (i < rows.length && (a?.slice ?? -2) === (b?.slice ?? -2)) continue;
+      if (a) {
+        const lit = a.slice >= 0 && colors.lit(a.slice);
+        const rgb = a.slice >= 0 ? colors.of(a.slice) : 0x7f8aa8;
+        ctx.fillStyle = style(rgb, lit ? 0.16 : a.slice >= 0 && a.slice % 2 ? 0.07 : 0.04);
+        ctx.fillRect(0, from * row, w, (i - from) * row);
+      }
+      from = i;
+    }
+    // The waveform over it.
+    let last = '';
     rows.forEach((r, i) => {
-      if (!r) return;
-      const y = i * row;
-      const rgb = r.slice >= 0 ? colors.of(r.slice) : 0x7f8aa8;
+      if (!r || r.loading) return;
       const lit = r.slice >= 0 && colors.lit(r.slice);
-      // The slice's band, so its extent shows even where it is quiet.
-      ctx.fillStyle = css(rgb, lit ? 0.16 : r.slice >= 0 && r.slice % 2 ? 0.07 : 0.04);
-      ctx.fillRect(0, y, w, row);
-      if (r.loading) return;
-      ctx.fillStyle = css(lit ? 0xffffff : rgb, lit ? 0.95 : 0.8);
+      const rgb = r.slice >= 0 ? colors.of(r.slice) : 0x7f8aa8;
+      const fill = style(lit ? 0xffffff : rgb, lit ? 0.95 : 0.8);
+      if (fill !== last) ctx.fillStyle = last = fill;
       const x0 = cx + r.lo * half;
       const x1 = cx + r.hi * half;
-      ctx.fillRect(x0, y, Math.max(1, x1 - x0), row);
+      ctx.fillRect(x0, i * row, Math.max(1, x1 - x0), row);
     });
     src.update();
   }

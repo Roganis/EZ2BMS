@@ -136,3 +136,31 @@ once; after that a Korean plate costs what a Latin one does. The preview
 overview mixes the whole song through the real mixer once per chart or file
 chosen. The wheel's Canvas 2D frame is a small part of a 60 Hz frame even in
 software rendering.
+
+## M4.7 - stems: the disk cache, onsets and tempo, the strips
+
+The host's work is timed by `cargo test -p ez2bms-audio --release --test
+perf -- --nocapture` (a release build in this container; the tests hold
+loose bounds and shorter signals in a debug build, for CI). The strips are
+timed by `apps/editor/tests/e2e/perf.spec.ts` in headless Chromium: the
+demo with three strips while the cursor moves as it does playing at 250 %
+(each strip's waveform is painted again every frame then), and the bench
+chart, whose five-minute stem is cut once a measure.
+
+| Date       | What                                                                   | Time          |
+| ---------- | ---------------------------------------------------------------------- | ------------- |
+| 2026-09-23 | A 5-minute stereo WAV at 44.1 kHz opened at 48 kHz: decode + resample  | 0.6-1.3 s     |
+| 2026-09-23 | ...the same from the disk cache (109 MB, bit for bit)                  | 0.10-0.12 s   |
+| 2026-09-23 | Onsets and tempo of a 3-minute stereo stem (1 799 onsets, 150.00 BPM)  | 1.3 s         |
+| 2026-09-23 | Playfield draw, demo, cursor moving (median / p95): no strips          | 1.0 / 2.9 ms  |
+| 2026-09-23 | ...with three strips                                                   | 2.9 / 7.1 ms  |
+| 2026-09-23 | Bench: 50k notes and three strips (the 5-minute stem's among them)     | 4.3 / 10.4 ms |
+| 2026-09-23 | Chop the 5-minute stem at eighths (1 542 cuts, checked, one undo step) | 69 ms         |
+
+Reading: decoding and resampling dominate opening a song with stems, and
+the disk cache takes that to a read. The analysis runs once per file in the
+background and is kept on disk beside it. A strip painted every frame costs
+about 0.6 ms of JS (0.3 ms working out its rows, 0.4 ms painting them, from
+0.8 ms before painting in runs of one colour with cached styles); at rest a
+strip is not painted again. Chopping checks every cut against how the stem
+sounds in one pass, so 1 500 cuts cost about what one does.
