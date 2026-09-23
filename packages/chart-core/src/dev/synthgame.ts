@@ -46,3 +46,36 @@ export function synthGds(mode: ModeId): string {
   });
   return lines.join('\r\n') + '\r\n';
 }
+
+/**
+ * A minimal PE32 image holding `data` at the given virtual addresses (image
+ * base 0x400000): enough for peVaToOffset / exeRead / keyTableFromExe to find
+ * them the way they find the real executable's. The bytes are the caller's -
+ * made-up tables, never the game's.
+ */
+export function synthPe(data: { va: number; bytes: Uint8Array }[]): Uint8Array {
+  const base = 0x400000;
+  const lo = Math.min(...data.map((d) => d.va - base)) & ~0xfff;
+  const hi = (Math.max(...data.map((d) => d.va - base + d.bytes.length)) + 0xfff) & ~0xfff;
+  const raw = 0x400;
+  const out = new Uint8Array(raw + (hi - lo));
+  const dv = new DataView(out.buffer);
+  out.set([0x4d, 0x5a], 0); // MZ
+  const pe = 0x80;
+  dv.setUint32(0x3c, pe, true);
+  out.set([0x50, 0x45, 0, 0], pe); // PE\0\0
+  dv.setUint16(pe + 4, 0x14c, true); // i386
+  dv.setUint16(pe + 6, 1, true); // one section
+  const optSize = 0xe0;
+  dv.setUint16(pe + 20, optSize, true);
+  dv.setUint16(pe + 24, 0x10b, true); // PE32
+  dv.setUint32(pe + 24 + 28, base, true);
+  const s = pe + 24 + optSize;
+  out.set([0x2e, 0x64, 0x61, 0x74, 0x61], s); // .data
+  dv.setUint32(s + 8, hi - lo, true);
+  dv.setUint32(s + 12, lo, true);
+  dv.setUint32(s + 16, hi - lo, true);
+  dv.setUint32(s + 20, raw, true);
+  for (const d of data) out.set(d.bytes, raw + (d.va - base - lo));
+  return out;
+}

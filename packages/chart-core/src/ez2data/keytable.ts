@@ -85,3 +85,15 @@ export function verifyKeyTable(t: Uint8Array, kind: KeyKind): boolean {
 }
 
 export const KEY_TABLE_VA = TABLE_VA;
+
+/**
+ * `n` bytes of the executable at a virtual address, as ez2_exe_read gives
+ * them: for data the port reads straight out of the image (song.bin's
+ * cipher tables), which has no digest to check - the caller checks what it
+ * decrypts instead.
+ */
+export function exeRead(exe: Uint8Array, va: number, n: number): Uint8Array {
+  const off = peVaToOffset(exe, va, n);
+  if (off + n > exe.length) throw new KeyTableError('executable is truncated', 'address');
+  return exe.slice(off, off + n);
+}

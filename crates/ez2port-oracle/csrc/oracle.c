@@ -1091,6 +1091,135 @@ static int cmd_usersongs(const char *root, const char *mode, const char *shipped
     return 0;
 }
 
+/* ---- song.bin ------------------------------------------------------------ */
+
+static void print_songdb(const ez2_songdb *db)
+{
+    int i, s, g, k;
+
+    printf("{\"entries\":[");
+    for (i = 0; i < db->count; i++) {
+        const ez2_song_entry *e = &db->entries[i];
+        printf("%s{\"key\":", i ? "," : "");
+        jstr(e->key);
+        printf(",\"name\":");
+        jstr(e->name);
+        printf(",\"kind\":%d,\"steps\":[", e->kind);
+        for (s = 0; s < EZ2_SONGDB_STEPS; s++) {
+            printf("%s{\"level\":%d,\"a\":", s ? "," : "", e->steps[s].level);
+            jfloat(e->steps[s].a);
+            printf(",\"b\":");
+            jfloat(e->steps[s].b);
+            putchar('}');
+        }
+        printf("]}");
+    }
+    printf("],\"groups\":[");
+    for (g = 0; g < EZ2_SONGDB_CATEGORIES; g++) {
+        printf("%s[", g ? "," : "");
+        for (k = 0; k < db->groups[g].count; k++) {
+            if (k)
+                putchar(',');
+            jstr(db->groups[g].keys[k]);
+        }
+        putchar(']');
+    }
+    printf("],\"views\":[");
+    for (g = 0; g < EZ2_SONGDB_CATEGORIES; g++) {
+        int view[4096], n = ez2_songdb_category_view(db, g, view, 4096);
+        printf("%s[", g ? "," : "");
+        for (k = 0; k < n; k++)
+            printf("%s%d", k ? "," : "", view[k]);
+        putchar(']');
+    }
+    printf("]}");
+}
+
+/* songdb FILE: a decrypted song.bin, parsed. */
+static int cmd_songdb(const char *path)
+{
+    size_t n;
+    unsigned char *bytes = slurp(path, &n);
+    ez2_songdb db;
+    int rc;
+
+    if (!bytes)
+        return fail("cannot read", path);
+    rc = ez2_songdb_parse(bytes, n, &db);
+    free(bytes);
+    if (rc != EZ2_SONGDB_OK)
+        return fail("songdb", ez2_songdb_strerror(rc));
+    print_songdb(&db);
+    putchar('\n');
+    ez2_songdb_free(&db);
+    return 0;
+}
+
+/* songdb-crypt FILE TABLES: FILE through ez2_songdb_decrypt with the 64
+ * bytes of TABLES (made up by the test: never the game's), as hex. */
+static int cmd_songdb_crypt(const char *path, const char *tables_path)
+{
+    size_t n, tn;
+    unsigned char *bytes = slurp(path, &n);
+    unsigned char *tables = slurp(tables_path, &tn);
+    size_t i;
+
+    if (!bytes || !tables || tn != EZ2_SONGDB_TABLE_SIZE) {
+        free(bytes);
+        free(tables);
+        return fail("cannot read", "file or 64-byte tables");
+    }
+    ez2_songdb_decrypt(bytes, n, tables);
+    printf("{\"hex\":\"");
+    for (i = 0; i < n; i++)
+        printf("%02x", bytes[i]);
+    printf("\"}\n");
+    free(bytes);
+    free(tables);
+    return 0;
+}
+
+/* songdb-charts FILE ROOT MODE: for every entry of a decrypted song.bin, the
+ * charts ez2_songdb_charts finds for MODE under ROOT (paths relative to ROOT). */
+static int cmd_songdb_charts(const char *path, const char *root, const char *mode)
+{
+    size_t n;
+    unsigned char *bytes = slurp(path, &n);
+    ez2_songdb db;
+    int rc, i, k;
+
+    if (!bytes)
+        return fail("cannot read", path);
+    rc = ez2_songdb_parse(bytes, n, &db);
+    free(bytes);
+    if (rc != EZ2_SONGDB_OK)
+        return fail("songdb", ez2_songdb_strerror(rc));
+    printf("{\"entries\":[");
+    for (i = 0; i < db.count; i++) {
+        ez2_song_chart out[8];
+        char dir[2048];
+        int m = ez2_songdb_charts(root, &db.entries[i], mode, 1, out, 8);
+        printf("%s{\"key\":", i ? "," : "");
+        jstr(db.entries[i].key);
+        printf(",\"dir\":");
+        if (ez2_songdb_song_dir(root, &db.entries[i], dir, sizeof dir))
+            jrel(root, dir);
+        else
+            printf("null");
+        printf(",\"charts\":[");
+        for (k = 0; k < m; k++) {
+            printf("%s{\"tier\":%d,\"level\":%d,\"path\":", k ? "," : "", out[k].tier,
+                   out[k].level);
+            jrel(root, out[k].path);
+            putchar('}');
+        }
+        printf("]}");
+    }
+    printf("]}\n");
+    ez2_songdb_free(&db);
+    return 0;
+}
+
 /* ---- main ---------------------------------------------------------------- */
 
 int ez2bms_oracle_main(int argc, char **argv)
@@ -1127,6 +1256,10 @@ int ez2bms_oracle_main(int argc, char **argv)
         return cmd_select_chase(atoi(argv[2]), atoi(argv[3]), atoi(argv[4]), atoi(argv[5]));
     if (!strcmp(c, "select-swing") && argc == 3)
         return cmd_select_swing(argv[2]);
+    if (!strcmp(c, "songdb") && argc == 3) return cmd_songdb(argv[2]);
+    if (!strcmp(c, "songdb-crypt") && argc == 4) return cmd_songdb_crypt(argv[2], argv[3]);
+    if (!strcmp(c, "songdb-charts") && argc == 5)
+        return cmd_songdb_charts(argv[2], argv[3], argv[4]);
     if (!strcmp(c, "usersongs") && (argc == 4 || argc == 5))
         return cmd_usersongs(argv[2], argv[3], argc == 5 ? argv[4] : 0);
     if (!strcmp(c, "bmson-import") && argc >= 5 && argc <= 7) {
@@ -1146,6 +1279,8 @@ int ez2bms_oracle_main(int argc, char **argv)
             "       ez2port-oracle judge-sim EZ INI MODE OFFSET JITTER SEED\n"
             "       ez2port-oracle bmson-import FOLDER GAME_ROOT OUT_ROOT [KEY] [--rgba]\n"
             "       ez2port-oracle usersongs ROOT MODE [SHIPPED,KEYS]\n"
+            "       ez2port-oracle songdb FILE | songdb-crypt FILE TABLES64\n"
+            "       ez2port-oracle songdb-charts FILE ROOT MODE\n"
             "       ez2port-oracle ttf FONT TEXTFILE W H X BASELINE CAP ALIGN MAXW OUT\n"
             "       ez2port-oracle textspec DIR REL SCALE OUT\n"
             "       ez2port-oracle select-wheel COUNT SCROLL\n"
