@@ -13,7 +13,8 @@ function chart(
   const doc = new ChartDoc(data);
   const [a] = addChannels(doc, ['a.wav']);
   placeNote(doc, { x: 11, y: 0, ch: a!.id }, false);
-  return { file: `streetmix1p-t${tier === 'HD' ? '-hd' : ''}.bmson`, data, mode, tier };
+  const prefix = mode === '7k' ? '7streetmix' : 'streetmix';
+  return { file: `${prefix}1p-abc${tier === 'HD' ? '-hd' : ''}.bmson`, data, mode, tier };
 }
 
 const rules = (fs: { rule: string }[]) => fs.map((f) => f.rule).sort();
@@ -57,5 +58,37 @@ describe('lint', () => {
     const c = chart();
     c.data.info.chartName = 'Space Street'; // "space" wins in the port's keyword table
     expect(rules(lintSong({ key: 'abc', charts: [c] }))).toContain('mode-keyword');
+  });
+
+  it('warns about a mode no NM chart lists, and about charts that disagree on song info', () => {
+    const nm = chart();
+    const hd7 = chart({ mode: '7k', tier: 'HD' });
+    hd7.data.info.artist = 'Someone else';
+    const f = lintSong({ key: 'abc', charts: [nm, hd7] });
+    expect(rules(f)).toEqual(['mode-invisible', 'song-meta']);
+    expect(f.find((x) => x.rule === 'song-meta')!.message).toMatch(/artists/);
+  });
+
+  it('checks the category the port will file the song under', () => {
+    const song = (category: unknown, mode: '5k' | '7k' = '5k') =>
+      rules(lintSong({ key: 'abc', charts: [chart({ mode })], category }));
+    expect(song(48)).toEqual([]);
+    expect(song(undefined)).toEqual([]);
+    expect(song(0)).toEqual(['category']);
+    expect(song('7')).toEqual(['category']);
+    expect(song(49)).toEqual(['category']);
+  });
+
+  it('names chart files by mode, key and tier', () => {
+    const c = chart({ tier: 'HD' });
+    c.data.info.level = 3;
+    const nm = chart();
+    c.file = 'streetmix1p-abc-ex.bmson';
+    const f = lintSong({ key: 'abc', charts: [nm, c] });
+    expect(rules(f)).toEqual(['chart-file-name']);
+    expect(f[0]!.message).toContain('streetmix1p-abc-hd.bmson');
+    // A file not named the port's way is left alone.
+    c.file = 'my chart (hard).bmson';
+    expect(lintSong({ key: 'abc', charts: [nm, c] })).toEqual([]);
   });
 });

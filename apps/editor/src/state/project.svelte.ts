@@ -4,29 +4,28 @@
 
 import {
   ChartDoc,
+  chartBaseName,
   chartMode,
   chartTier,
   decodeUtf8,
   encodeUtf8,
   isLegacyHint,
+  isValidSongKey,
   modeNames,
+  newSongFile,
   parseBmson,
+  parseChartName,
+  parseSongFile,
   remapLegacyChart,
   serializeBmson,
+  serializeSongFile,
   type ChartData,
   type ModeId,
   type ParseWarning,
+  type SongFile,
   type Tier,
 } from '@ez2bms/chart-core';
 import { baseName, joinPath, type Backend } from '../bridge';
-
-export interface Sidecar {
-  key: string;
-  category?: number;
-  /** Classic-mode charting for this song (absent: on when a chart already has continuations). */
-  classic?: boolean;
-  [k: string]: unknown;
-}
 
 export const SIDECAR = 'ez2bms.song.json';
 
@@ -34,17 +33,24 @@ export const SIDECAR = 'ez2bms.song.json';
 export class ChartSlot {
   rev = $state(0);
   dirty = $state(false);
+  /** The bmson's name in the song folder (it follows mode, key and tier when saved). */
+  file = $state('');
+  /** From the chart's info (an edit, so undo moves it back), else its file name. */
+  tier = $state<Tier>('NM');
   warnings: ParseWarning[] = [];
 
   constructor(
-    public file: string,
+    file: string,
     public readonly doc: ChartDoc,
     public mode: ModeId,
-    public tier: Tier,
+    tier: Tier,
   ) {
+    this.file = file;
+    this.tier = tier;
     doc.onChange(() => {
       this.rev++;
       this.dirty = doc.dirty;
+      this.tier = chartTier(doc.data.info, this.file);
     });
   }
 
@@ -67,7 +73,8 @@ export class Project {
   charts = $state<ChartSlot[]>([]);
   activeIndex = $state(0);
   samples = $state<string[]>([]);
-  sidecar = $state<Sidecar>({ key: '' });
+  /** ez2bms.song.json (chart-core song/songfile.ts). */
+  sidecar = $state<SongFile>(newSongFile());
   /**
    * Classic mode when the song file does not say: on for a song whose charts
    * already continue sounds (it was built from stems or a converted BMS).
@@ -88,7 +95,29 @@ export class Project {
   }
 
   get dirty(): boolean {
-    return this.charts.some((c) => c.dirty);
+    return this.charts.some((c) => this.unsaved(c));
+  }
+
+  /**
+   * The name a chart is saved under: charts named the port's way
+   * (streetmix1p-<key>-hd.bmson) follow their mode, the song key and their
+   * tier, so a tier change or a new key renames the file on the next save.
+   * Other names are the user's and stay.
+   */
+  targetFile(slot: ChartSlot): string {
+    const key = this.sidecar.key;
+    if (!isValidSongKey(key) || !parseChartName(slot.file)?.mode) return slot.file;
+    const want = `${chartBaseName(slot.mode, key, slot.tier)}.bmson`;
+    // Never onto another chart of the song.
+    const taken = this.charts.some(
+      (c) => c !== slot && c.file.toLowerCase() === want.toLowerCase(),
+    );
+    return taken ? slot.file : want;
+  }
+
+  /** Unsaved edits, or a name the next save will change. */
+  unsaved(slot: ChartSlot): boolean {
+    return slot.dirty || this.targetFile(slot) !== slot.file;
   }
 
   static async open(backend: Backend, dir: string): Promise<Project> {
@@ -96,12 +125,9 @@ export class Project {
     const scan = await backend.scanProject(dir);
     p.samples = scan.samples;
     if (scan.sidecar) {
-      try {
-        const raw = JSON.parse(await backend.readText(joinPath(dir, SIDECAR))) as Partial<Sidecar>;
-        p.sidecar = { ...raw, key: typeof raw.key === 'string' ? raw.key : '' };
-      } catch {
-        // A broken sidecar is rewritten on the next save.
-      }
+      // A broken song file reads as empty (and is rewritten on the next save).
+      const text = await backend.readText(joinPath(dir, SIDECAR)).catch(() => '{}');
+      p.sidecar = parseSongFile(text).song;
     }
     const slots: ChartSlot[] = [];
     for (const e of scan.charts) {
@@ -147,28 +173,54 @@ export class Project {
     return slot;
   }
 
-  async save(slot: ChartSlot): Promise<void> {
+  /**
+   * Write a chart, renaming its file first when its name should follow a new
+   * tier or key. Returns the old name when it was renamed. A rename the disk
+   * refuses (another file has the name) leaves the chart under its old name.
+   */
+  async save(slot: ChartSlot): Promise<string | undefined> {
+    const to = this.targetFile(slot);
+    let renamed: string | undefined;
+    if (to !== slot.file) {
+      const onDisk = (await this.backend.list(this.dir)).some((e) => e.name === slot.file);
+      try {
+        if (onDisk)
+          await this.backend.renameFile(joinPath(this.dir, slot.file), joinPath(this.dir, to));
+        renamed = slot.file;
+        slot.file = to;
+      } catch (e) {
+        this.renameFailures.push(`${slot.file}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
     await this.backend.writeText(joinPath(this.dir, slot.file), slot.bmson(), true);
     slot.doc.markSaved();
     slot.dirty = false;
+    return renamed;
   }
 
-  /** Called with the charts just written (autosave clears its copies). */
-  onSaved: ((slots: ChartSlot[]) => void) | undefined;
+  /** Renames the last saves could not do (the command reports them). */
+  renameFailures: string[] = [];
+
+  /** Called with the charts just written and the names they left (autosave clears both). */
+  onSaved: ((slots: ChartSlot[], oldNames: string[]) => void) | undefined;
 
   async saveAll(): Promise<number> {
-    const dirty = this.charts.filter((c) => c.dirty);
-    for (const c of dirty) await this.save(c);
-    if (dirty.length) this.onSaved?.(dirty);
+    const due = this.charts.filter((c) => this.unsaved(c));
+    const oldNames: string[] = [];
+    for (const c of due) {
+      const from = await this.save(c);
+      if (from) oldNames.push(from);
+    }
+    if (due.length) this.onSaved?.(due, oldNames);
     await this.saveSidecar();
-    return dirty.length;
+    return due.length;
   }
 
   /** Write the song file (ez2bms.song.json) now. */
   async saveSidecar(): Promise<void> {
     await this.backend.writeText(
       joinPath(this.dir, SIDECAR),
-      JSON.stringify($state.snapshot(this.sidecar), null, 2) + '\n',
+      serializeSongFile($state.snapshot(this.sidecar) as SongFile),
       false,
     );
   }

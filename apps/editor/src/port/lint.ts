@@ -17,10 +17,11 @@ export function songFindings(app: App): Finding[] {
     for (const ch of c.doc.data.channels)
       if (app.audio.loadedInfo(ch.name)?.error) missing.add(ch.name);
   }
-  const key = `${p.sidecar.key}|${revs.join(',')}|${p.charts.map((c) => c.file + c.tier).join(',')}|${[...missing].join(',')}`;
+  const key = `${p.sidecar.key}|${JSON.stringify(p.sidecar.category)}|${revs.join(',')}|${p.charts.map((c) => c.file + c.tier).join(',')}|${[...missing].join(',')}`;
   if (memo && memo.project === p && memo.key === key) return memo.findings;
   const findings = lintSong({
     key: p.sidecar.key,
+    category: p.sidecar.category,
     charts: p.charts.map((c) => ({ file: c.file, data: c.doc.data, mode: c.mode, tier: c.tier })),
     missingSounds: missing,
   });

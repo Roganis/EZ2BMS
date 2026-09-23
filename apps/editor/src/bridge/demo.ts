@@ -146,7 +146,7 @@ export function demoFiles(modes = false, bench = false): Map<string, Uint8Array>
   files.set(
     `${DEMO_DIR}/ez2bms.song.json`,
     // Classic mode off to start with, though the song slices a stem (tests switch it on).
-    encodeUtf8(JSON.stringify({ key: 'neonparade', category: 0, classic: false }, null, 2) + '\n'),
+    encodeUtf8(JSON.stringify({ key: 'neonparade', category: 48, classic: false }, null, 2) + '\n'),
   );
   return files;
 }

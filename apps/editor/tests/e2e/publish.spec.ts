@@ -19,7 +19,8 @@ async function open(page: Page) {
 
 test('the demo song is ready, and Publish writes a whole EZ2PORT package', async ({ page }) => {
   await open(page);
-  await expect(page.getByTestId('lint')).toHaveText(/ready for EZ2PORT/);
+  // No errors. (One warning: the demo's 7K chart is HD with no 7K NM, so EZ2PORT won't list it.)
+  await expect(page.getByTestId('lint')).toHaveText(/^\s*1 warning\s*$/);
   await page.evaluate(() =>
     (window as unknown as W).__ez2bms.settings.set('songsRoot', '/ez2port/songs'),
   );
@@ -43,6 +44,7 @@ test('the demo song is ready, and Publish writes a whole EZ2PORT package', async
     (window as unknown as W).__ez2bms.backend.readText('/ez2port/songs/neonparade/song.ini'),
   );
   expect(ini).toContain('Key = neonparade');
+  expect(ini).toContain('Category = 48');
   expect(ini).toMatch(/StreetMix\.NM = 6/);
 });
 

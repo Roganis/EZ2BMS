@@ -38,7 +38,10 @@
       >
         <span class="mode">{c.label}</span>
         <span class="lv">{c.level}</span>
-        {#if c.dirty}<span class="dot" title="unsaved"></span>{/if}
+        {#if project.unsaved(c)}<span
+            class="dot"
+            title={c.dirty ? 'unsaved' : `will be saved as ${project.targetFile(c)}`}
+          ></span>{/if}
       </button>
     {/each}
   </nav>

@@ -1,7 +1,14 @@
 // The open song as an EZ2PORT package: chart-core compiles every file, the
 // back end cuts the keysounds and writes it all at once.
 
-import { compileSong, PublishError, type PackagePlan, type SongChart } from '@ez2bms/chart-core';
+import {
+  compileSong,
+  effectiveCategory,
+  PublishError,
+  songMeta,
+  type PackagePlan,
+  type SongChart,
+} from '@ez2bms/chart-core';
 import { soundPath } from '../audio/paths';
 import type { PackageSpec } from '../bridge';
 import type { App } from '../state/app.svelte';
@@ -21,18 +28,19 @@ export function buildPackage(app: App, opts: { only?: ChartSlot; key?: string } 
   if (!p) throw new PublishError('no song is open');
   const slots = opts.only ? [opts.only] : p.charts;
   const key = opts.key ?? p.sidecar.key;
-  const first = slots.find((c) => c.tier === 'NM') ?? slots[0];
-  const info = first?.doc.data.info ?? { extra: {} };
-  const title = info.title ?? p.name;
+  // The song's info, from all its charts even when testing one.
+  const meta = songMeta(p.charts.map((c) => ({ data: c.doc.data, tier: c.tier }))).values;
+  const title = meta.title || p.name;
   const charts: SongChart[] = slots.map((c) => ({ data: c.doc.data, mode: c.mode, tier: c.tier }));
   const plate = typeof document !== 'undefined' ? renderPlate(title) : undefined;
   const plan = compileSong(
     {
       key,
       title,
-      artist: info.artist ?? '',
-      genre: info.genre ?? '',
-      ...(typeof p.sidecar.category === 'number' ? { category: p.sidecar.category } : {}),
+      artist: meta.artist,
+      genre: meta.genre,
+      // Always written: a song without one is CUSTOM (48), which song.ini now says.
+      category: effectiveCategory(p.sidecar.category),
       ...(plate ? { songnameAbm: plate } : {}),
     },
     charts,

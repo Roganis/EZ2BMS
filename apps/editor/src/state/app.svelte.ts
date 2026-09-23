@@ -14,6 +14,7 @@ import { Settings } from './settings.svelte';
 import { SkinState } from './skin.svelte';
 import { ClassicState } from './classic.svelte';
 import { SoundsState } from './sounds.svelte';
+import { SongState } from './song.svelte';
 import { ask, toast } from './toasts.svelte';
 import { View } from './view.svelte';
 
@@ -28,6 +29,7 @@ export class App {
   readonly skin: SkinState;
   readonly classic: ClassicState;
   readonly sounds: SoundsState;
+  readonly song: SongState;
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
@@ -43,6 +45,7 @@ export class App {
     this.skin = new SkinState(backend);
     this.classic = new ClassicState(this);
     this.sounds = new SoundsState(this);
+    this.song = new SongState(this);
     this.commands.onError = (e, c) =>
       toast(`${c.title}: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }
@@ -86,7 +89,7 @@ export class App {
       void this.audio.loadProject(p);
       this.settings.addRecent(dir);
       this.selectChart(0);
-      p.onSaved = (slots) => void this.autosave.clear(p, slots);
+      p.onSaved = (slots, oldNames) => void this.autosave.clear(p, slots, oldNames);
       if (!p.charts.length) this.view.newChartOpen = true;
       void this.offerRecovery(p);
       return true;

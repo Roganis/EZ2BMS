@@ -6,7 +6,9 @@ import { encodeUtf8 } from '../io/text';
 import { chartMode, portImporterMode } from '../io/bmson/mode-resolve';
 import type { ChartData, NoteId, Tier } from '../model/types';
 import { modeNames, type ModeId } from '../modes/ids';
-import { isValidSongKey } from '../modes/filenames';
+import { chartBaseName, isValidSongKey, parseChartName } from '../modes/filenames';
+import { categoryLabel, unreachableIn, validCategory } from '../song/categories';
+import { songMeta } from '../song/meta';
 import { modeDef } from '../modes/registry';
 import { TickConverter } from '../timing/ticks';
 
@@ -33,6 +35,8 @@ export interface LintChart {
 export interface LintSong {
   key: string;
   charts: LintChart[];
+  /** The song file's category as stored (absent: CUSTOM). */
+  category?: unknown;
   /** Sound names that could not be read (known to the editor, not the chart). */
   missingSounds?: ReadonlySet<string>;
 }
@@ -232,10 +236,61 @@ export function lintSong(s: LintSong): Finding[] {
   if (!s.charts.length) f('no-charts', 'error', 'The song has no charts');
   if (s.charts.length > MAX_CHARTS)
     f('chart-count', 'error', `${s.charts.length} charts: a song holds at most ${MAX_CHARTS}`);
-  const nm = s.charts.some((c) => c.tier === 'NM' && (c.data.info.level ?? 0) >= 1);
-  if (s.charts.length && !nm) {
+  // Each mode's song list keeps a song only when that mode's NM level is
+  // above 0 (ez2/songdb.c ez2_songdb_category_view): the other tiers of a
+  // mode without one cannot be reached.
+  const listed = (m: ModeId) =>
+    s.charts.some((c) => c.mode === m && c.tier === 'NM' && (c.data.info.level ?? 0) >= 1);
+  const modes = [...new Set(s.charts.map((c) => c.mode))];
+  if (s.charts.length && !modes.some(listed)) {
     f('song-invisible', 'error', 'EZ2PORT only lists a song with an NM chart of level 1 or more');
+  } else {
+    for (const m of modes.filter((m) => !listed(m) && modeNames(m).portPlayable))
+      f(
+        'mode-invisible',
+        'warning',
+        `${modeNames(m).label} charts will not show: EZ2PORT lists a song in a mode only when that mode has an NM chart of level 1 or more`,
+      );
   }
+  if (s.category !== undefined && validCategory(s.category) === undefined)
+    f(
+      'category',
+      'warning',
+      `Category ${JSON.stringify(s.category)} is not one EZ2PORT knows (1-48): the song goes under CUSTOM`,
+    );
+  else {
+    const cat = validCategory(s.category);
+    if (cat !== undefined)
+      for (const m of unreachableIn(cat))
+        if (s.charts.some((c) => c.mode === m))
+          f(
+            'category-unreachable',
+            'warning',
+            `${modeNames(m).label} pages past ${categoryLabel(cat)}: its charts cannot be reached there`,
+          );
+  }
+  const meta = songMeta(s.charts);
+  for (const field of meta.differs)
+    f(
+      'song-meta',
+      'warning',
+      `The charts have different ${field}s; Publish uses "${meta.values[field]}" (the NM chart's)`,
+    );
+  // Charts named the port's way (streetmix1p-key-hd) should say what they
+  // are: EZ2PORT's own bmson importer reads mode and tier from the name.
+  if (isValidSongKey(s.key))
+    for (const c of s.charts) {
+      const named = parseChartName(c.file);
+      if (!named?.mode) continue;
+      const want = `${chartBaseName(c.mode, s.key, c.tier)}.bmson`;
+      if (c.file.toLowerCase() !== want.toLowerCase())
+        out.push({
+          rule: 'chart-file-name',
+          severity: 'warning',
+          message: `${c.file} will be saved as ${want} (its mode, key and tier)`,
+          chart: c.file,
+        });
+    }
   const seen = new Set<string>();
   for (const c of s.charts) {
     const k = `${c.mode}.${c.tier}`;

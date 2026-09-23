@@ -25,14 +25,8 @@ import { ThumbCache } from '../audio/thumbs';
 import { baseName, joinPath, type Imported } from '../bridge';
 import type { App } from './app.svelte';
 import type { ChartSlot, Project } from './project.svelte';
+import { plural, songwideToast, stepOf, type SongwideStep } from './songwide';
 import { toast, toasts } from './toasts.svelte';
-
-interface Done {
-  slot: ChartSlot;
-  mark: unknown;
-}
-
-const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
 /** What the file chooser offers (the engine decodes these; see chart-core AUDIO_EXT). */
 export const IMPORT_EXT = ['wav', 'ogg', 'flac', 'mp3', 'oga'];
@@ -130,19 +124,17 @@ export class SoundsState {
   replace(info: SoundInfo, to: string): void {
     const p = this.app.project;
     if (!p || to === info.name) return;
-    const done: Done[] = [];
+    const done: SongwideStep[] = [];
     for (const u of info.charts) {
       const slot = p.charts.find((c) => c.file === u.chart);
-      if (slot && replaceSound(slot.doc, u.channels, to))
-        done.push({ slot, mark: slot.doc.historyMark() });
+      if (slot && replaceSound(slot.doc, u.channels, to)) done.push(stepOf(slot));
     }
     if (!done.length) return;
     void this.app.audio.load(p, [to]);
-    toasts.push(
+    songwideToast(
       `Replaced ${info.name} with ${to} in ${plural(done.length, 'chart')}`,
-      'ok',
-      15000,
-      { label: 'Undo in all charts', run: () => this.undoAll(done, 'Replace') },
+      done,
+      'Replace',
     );
   }
 
@@ -150,13 +142,13 @@ export class SoundsState {
   removeUnused(): void {
     const p = this.app.project;
     if (!p) return;
-    const done: Done[] = [];
+    const done: SongwideStep[] = [];
     let n = 0;
     for (const slot of p.charts) {
       const gone = removeUnusedChannels(slot.doc);
       if (!gone.length) continue;
       n += gone.length;
-      done.push({ slot, mark: slot.doc.historyMark() });
+      done.push(stepOf(slot));
       if (slot === this.app.slot && gone.includes(this.app.view.brush ?? -1))
         this.app.view.brush = slot.doc.data.channels[0]?.id ?? null;
     }
@@ -164,26 +156,11 @@ export class SoundsState {
       toast('Every sound is used in its charts', 'info');
       return;
     }
-    toasts.push(
+    songwideToast(
       `Removed ${plural(n, 'unused sound')} from ${plural(done.length, 'chart')}`,
-      'ok',
-      15000,
-      { label: 'Undo in all charts', run: () => this.undoAll(done, 'Remove') },
+      done,
+      'Remove',
     );
-  }
-
-  /** Undo a song-wide change in each chart where it is still the last step. */
-  private undoAll(done: Done[], what: string): void {
-    let skipped = 0;
-    for (const d of done) {
-      if (d.slot.doc.historyMark() === d.mark) d.slot.doc.undo();
-      else skipped++;
-    }
-    if (skipped)
-      toast(
-        `${what} undone, except in ${plural(skipped, 'chart')} edited since (undo there with Ctrl+Z)`,
-        'warn',
-      );
   }
 
   /**
@@ -217,6 +194,7 @@ export class SoundsState {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
     const all = new Map<string, string>([[from, plan.to]]);
     const saved: ChartSlot[] = [];
+    const oldNames: string[] = [];
     for (const slot of p.charts) {
       const m = plan.renames.get(slot.file);
       if (!m) continue;
@@ -224,11 +202,12 @@ export class SoundsState {
       const clean = !slot.dirty;
       slot.doc.renameSoundRefs(m);
       if (clean) {
-        await p.save(slot);
+        const was = await p.save(slot);
+        if (was) oldNames.push(was);
         saved.push(slot);
       }
     }
-    if (saved.length) p.onSaved?.(saved);
+    if (saved.length) p.onSaved?.(saved, oldNames);
     for (const n of this.app.clip?.notes ?? []) n.chName = all.get(n.chName) ?? n.chName;
     this.app.audio.rename(all);
     await p.rescan();

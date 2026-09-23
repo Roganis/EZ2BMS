@@ -43,10 +43,15 @@ export class Autosave {
     return n;
   }
 
-  /** After a save: nothing left to recover for these charts. */
-  async clear(p: Project, slots: readonly ChartSlot[]): Promise<void> {
+  /**
+   * After a save: nothing left to recover for these charts - nor under the
+   * names a save just renamed them from, which would otherwise be offered
+   * back as a stray chart.
+   */
+  async clear(p: Project, slots: readonly ChartSlot[], oldNames: string[] = []): Promise<void> {
     const dir = await this.folder(p);
-    for (const c of slots) await this.backend.writeText(joinPath(dir, c.file), '', false);
+    for (const f of [...slots.map((c) => c.file), ...oldNames])
+      await this.backend.writeText(joinPath(dir, f), '', false);
   }
 
   /** Autosaved charts newer than their file: [file, text, when]. */
