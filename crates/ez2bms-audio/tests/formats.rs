@@ -131,3 +131,34 @@ fn peaks_bracket_the_signal_at_every_level() {
     assert_eq!(p.level_for(64.0), 1);
     assert_eq!(p.bucket_frames(3), 256);
 }
+
+#[test]
+fn an_overview_brackets_each_column_and_no_more_than_its_buckets() {
+    let q = |x: f32| (x * 32767.0).round() as i16;
+    for (frames, width, base) in [(10_000, 200, 32), (1_234, 300, 16), (50, 400, 64), (7, 3, 1)] {
+        let s = noise(44_100, 2, frames, frames as u64);
+        let p = Peaks::build(&s, base);
+        let o = p.overview(width);
+        assert_eq!(o.len(), width);
+        let bucket = p.bucket_frames(p.level_for(frames as f64 / width as f64)) as usize;
+        let range = |a: usize, b: usize| {
+            let v = &s.data[a * 2..b * 2];
+            (
+                q(v.iter().copied().fold(f32::INFINITY, f32::min)),
+                q(v.iter().copied().fold(f32::NEG_INFINITY, f32::max)),
+            )
+        };
+        for (i, [lo, hi]) in o.iter().enumerate() {
+            let from = frames * i / width;
+            let to = (frames * (i + 1) / width).max(from + 1).min(frames);
+            let (a, b) = range(from.min(frames - 1), to.max(from.min(frames - 1) + 1));
+            assert!(*lo <= a && *hi >= b, "column {i} misses its own frames");
+            // Never wider than the buckets the column touches.
+            let (wa, wb) =
+                range(from / bucket * bucket, (to.div_ceil(bucket) * bucket).min(frames));
+            assert!(*lo >= wa && *hi <= wb, "column {i} reaches past its buckets");
+        }
+    }
+    assert_eq!(Peaks::build(&noise(44_100, 1, 0, 1), 64).overview(4), vec![[0, 0]; 4]);
+    assert!(Peaks::build(&noise(44_100, 1, 10, 1), 64).overview(0).is_empty());
+}

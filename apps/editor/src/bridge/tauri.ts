@@ -1,6 +1,7 @@
 // The desktop Backend: Tauri commands (src-tauri/src/lib.rs).
 
 import { Channel, invoke } from '@tauri-apps/api/core';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
 import type {
   AppInfo,
@@ -9,6 +10,7 @@ import type {
   Backend,
   ClockSnapshot,
   Entry,
+  Imported,
   Loaded,
   Located,
   PackageSpec,
@@ -50,11 +52,38 @@ export function tauriBackend(): Backend {
       const r = await open({ multiple: true, title, filters: [{ name: 'Files', extensions }] });
       return Array.isArray(r) ? r : r ? [r] : [];
     },
+    importFiles: (dir, paths) => invoke<Imported[]>('fs_copy_into', { dir, paths }),
+    renameFile: (from, to) => invoke('fs_rename', { from, to }),
+    onFileDrop: (cb) => {
+      // Tauri takes OS file drops itself (dragDropEnabled), so the page never
+      // sees them as DOM events; its positions are physical pixels.
+      let stop: (() => void) | undefined;
+      let gone = false;
+      void getCurrentWebview()
+        .onDragDropEvent((e) => {
+          const p = e.payload;
+          const dpr = window.devicePixelRatio || 1;
+          const pos =
+            'position' in p ? { x: p.position.x / dpr, y: p.position.y / dpr } : { x: 0, y: 0 };
+          if (p.type === 'leave') cb({ kind: 'leave', paths: [], ...pos });
+          else if (p.type === 'drop') cb({ kind: 'drop', paths: p.paths, ...pos });
+          else cb({ kind: 'over', paths: [], ...pos });
+        })
+        .then((un) => (gone ? un() : (stop = un)));
+      return () => {
+        gone = true;
+        stop?.();
+      };
+    },
     audio: {
       info: () => invoke<AudioInfo>('audio_info'),
       load: (paths) => invoke<Loaded[]>('audio_load', { paths }),
       peaks: async (id, framesPerPx) => {
         const b = bytesOf(await invoke('audio_peaks', { id, framesPerPx }));
+        return new Int16Array(b.buffer, b.byteOffset, b.byteLength >> 1);
+      },
+      thumbs: async (ids, width) => {
+        const b = bytesOf(await invoke('audio_thumbs', { ids, width }));
         return new Int16Array(b.buffer, b.byteOffset, b.byteLength >> 1);
       },
       setEvents: (events: AudioEvent[]) => invoke('audio_set_events', { events }),

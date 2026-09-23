@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 
 use ez2bms_audio::cache::SampleCache;
 use ez2bms_audio::level::ds_gains;
@@ -20,7 +20,16 @@ pub struct Audio {
     pub device_error: Option<String>,
     cache: SampleCache,
     bank: Mutex<Bank>,
+    /// Waveform mipmaps per sample id, kept while the id still holds the same
+    /// decoded sample (a reload replaces it, and the entry no longer matches).
+    peaks: Mutex<PeakCache>,
 }
+
+/// Per sample id: the decoded sample a mipmap was built from, and the mipmap.
+type PeakCache = HashMap<u32, (Weak<Sample>, Arc<Peaks>)>;
+
+/// Frames per bucket at a waveform mipmap's finest level.
+const PEAK_BASE: u32 = 64;
 
 /// Sample ids are stable per path for the app's lifetime: schedules and
 /// sounding voices refer to them, and a reloaded file keeps its id.
@@ -93,8 +102,19 @@ impl Audio {
             Ok(e) => (e, "cpal", None),
             Err(e) => (Engine::start_null(48_000), "null", Some(e.to_string())),
         };
+        Self::from_engine(engine, backend, device_error)
+    }
+
+    fn from_engine(engine: Engine, backend: &'static str, device_error: Option<String>) -> Audio {
         let cache = SampleCache::new(engine.rate());
-        Audio { engine, backend, device_error, cache, bank: Mutex::default() }
+        Audio {
+            engine,
+            backend,
+            device_error,
+            cache,
+            bank: Mutex::default(),
+            peaks: Mutex::default(),
+        }
     }
 
     pub fn info(&self) -> AudioInfo {
@@ -157,10 +177,23 @@ impl Audio {
             .ok_or_else(|| CmdError::Invalid(format!("no sample {id}")))
     }
 
+    /// The sample's waveform mipmap, built once per decoded sample.
+    fn peaks_of(&self, id: u32) -> CmdResult<Arc<Peaks>> {
+        let s = self.sample(id)?;
+        if let Some((w, p)) = self.peaks.lock().unwrap().get(&id) {
+            if w.upgrade().is_some_and(|cur| Arc::ptr_eq(&cur, &s)) {
+                return Ok(p.clone());
+            }
+        }
+        let p = Arc::new(Peaks::build(&s, PEAK_BASE));
+        self.peaks.lock().unwrap().insert(id, (Arc::downgrade(&s), p.clone()));
+        Ok(p)
+    }
+
     /// Waveform overview: `[min, max]` pairs as i16, the mip level nearest
     /// `frames_per_px`, flattened little-endian for a zero-copy JS Int16Array.
     pub fn peaks(&self, id: u32, frames_per_px: f64) -> CmdResult<Vec<u8>> {
-        let p = Peaks::build(self.sample(id)?.as_ref(), 64);
+        let p = self.peaks_of(id)?;
         let level = &p.levels[p.level_for(frames_per_px)];
         let mut out = Vec::with_capacity(level.len() * 4);
         for [lo, hi] in level {
@@ -168,6 +201,41 @@ impl Audio {
             out.extend_from_slice(&hi.to_le_bytes());
         }
         Ok(out)
+    }
+
+    /// Thumbnails for many samples at once: `width` `[min, max]` pairs per
+    /// id, in order, as little-endian i16 (all zero for an unknown id).
+    /// Missing mipmaps are built on every core - the keysound workbench asks
+    /// for a screenful of sounds at a time.
+    pub fn thumbs(&self, ids: &[u32], width: usize) -> Vec<u8> {
+        let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+        let chunk = ids.len().div_ceil(threads).max(1);
+        let built: Vec<Option<Arc<Peaks>>> = std::thread::scope(|scope| {
+            let jobs: Vec<_> = ids
+                .chunks(chunk)
+                .map(|part| {
+                    let job = scope.spawn(move || {
+                        part.iter().map(|&id| self.peaks_of(id).ok()).collect::<Vec<_>>()
+                    });
+                    (part.len(), job)
+                })
+                .collect();
+            // A failed part still takes its places, so every id keeps its slot.
+            jobs.into_iter().flat_map(|(n, j)| j.join().unwrap_or_else(|_| vec![None; n])).collect()
+        });
+        let mut out = Vec::with_capacity(ids.len() * width * 4);
+        for p in built {
+            match p {
+                Some(p) => {
+                    for [lo, hi] in p.overview(width) {
+                        out.extend_from_slice(&lo.to_le_bytes());
+                        out.extend_from_slice(&hi.to_le_bytes());
+                    }
+                }
+                None => out.resize(out.len() + width * 4, 0),
+            }
+        }
+        out
     }
 
     pub fn set_events(&self, events: &[EventDto]) -> CmdResult<()> {
@@ -267,5 +335,36 @@ mod tests {
         for k in ["frame", "host_ns", "latency_frames", "rate", "playing", "generation", "now_ns"] {
             assert!(c.get(k).is_some(), "{k}");
         }
+    }
+
+    #[test]
+    fn thumbnails_come_back_in_order_and_follow_a_reloaded_file() {
+        let dir = std::env::temp_dir().join(format!("ez2bms-thumbs-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let wav = |path: &Path, loud: i16| {
+            let pcm: Vec<i16> = (0..4800).map(|i| if i % 2 == 0 { loud } else { -loud }).collect();
+            std::fs::write(path, ez2bms_audio::wav::encode_pcm16(1, 48_000, &pcm)).unwrap();
+        };
+        let (a, b) = (dir.join("a.wav"), dir.join("b.wav"));
+        wav(&a, 16_000);
+        wav(&b, 4_000);
+        let audio = Audio::from_engine(Engine::start_null(48_000), "null", None);
+        let ids: Vec<u32> = audio.load(&[a.clone(), b]).iter().map(|l| l.id.unwrap()).collect();
+        let pairs = |bytes: &[u8]| -> Vec<i16> {
+            bytes.chunks(2).map(|c| i16::from_le_bytes([c[0], c[1]])).collect()
+        };
+        let t = pairs(&audio.thumbs(&[ids[0], 999, ids[1]], 8));
+        assert_eq!(t.len(), 3 * 8 * 2);
+        assert!(t[1] > 15_000, "the loud file first");
+        assert!(t[16..32].iter().all(|&v| v == 0), "an unknown id is blank");
+        assert!(t[33] < 5_000 && t[33] > 3_000, "the quiet file third");
+        // Same file again: the cached mipmap. Changed file: a new one.
+        assert_eq!(pairs(&audio.thumbs(&[ids[0]], 8)), t[..16].to_vec());
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        wav(&a, 1_000);
+        audio.load(std::slice::from_ref(&a));
+        let after = pairs(&audio.thumbs(&[ids[0]], 8));
+        assert!(after[1] < 2_000, "reloaded: {:?}", &after[..2]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

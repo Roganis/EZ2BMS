@@ -19,7 +19,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::audio::{Audio, AudioInfo, ClockDto, EventDto, Loaded, TriggerDto};
 use crate::error::{CmdError, CmdResult};
-use crate::files::{Entry, ProjectScan};
+use crate::files::{Entry, Imported, ProjectScan};
 use crate::port::{Located, PackageDto, ProbeDto, Published, RunEvent, Runs, TestDto};
 
 /// Which clock stream is current; older ones stop (a reloaded page opens a new one).
@@ -76,6 +76,19 @@ fn project_scan(dir: PathBuf) -> CmdResult<ProjectScan> {
     files::scan_project(&dir)
 }
 
+/// Copy sound files (and the audio in folders) into the song folder.
+#[tauri::command]
+async fn fs_copy_into(dir: PathBuf, paths: Vec<PathBuf>) -> CmdResult<Vec<Imported>> {
+    tauri::async_runtime::spawn_blocking(move || files::copy_into(&dir, &paths))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))
+}
+
+#[tauri::command]
+fn fs_rename(from: PathBuf, to: PathBuf) -> CmdResult<()> {
+    files::rename(&from, &to)
+}
+
 // ---- settings (the front end owns the schema)
 
 fn settings_path(app: &AppHandle) -> CmdResult<PathBuf> {
@@ -117,6 +130,21 @@ async fn audio_load(audio: State<'_, Arc<Audio>>, paths: Vec<PathBuf>) -> CmdRes
 #[tauri::command]
 fn audio_peaks(audio: State<'_, Arc<Audio>>, id: u32, frames_per_px: f64) -> CmdResult<Response> {
     Ok(Response::new(audio.peaks(id, frames_per_px)?))
+}
+
+/// Waveform thumbnails for many samples, off the main thread.
+#[tauri::command]
+async fn audio_thumbs(
+    audio: State<'_, Arc<Audio>>,
+    ids: Vec<u32>,
+    width: u32,
+) -> CmdResult<Response> {
+    let audio = audio.inner().clone();
+    let bytes =
+        tauri::async_runtime::spawn_blocking(move || audio.thumbs(&ids, width.min(4096) as usize))
+            .await
+            .map_err(|e| CmdError::Io(e.to_string()))?;
+    Ok(Response::new(bytes))
 }
 
 #[tauri::command]
@@ -232,11 +260,14 @@ pub fn run() {
             fs_write_bytes,
             fs_list,
             project_scan,
+            fs_copy_into,
+            fs_rename,
             settings_load,
             settings_save,
             audio_info,
             audio_load,
             audio_peaks,
+            audio_thumbs,
             audio_set_events,
             audio_play,
             audio_seek,

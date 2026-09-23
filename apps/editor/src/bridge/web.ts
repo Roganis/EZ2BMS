@@ -9,6 +9,8 @@ import type {
   Backend,
   ClockSnapshot,
   Entry,
+  FileDrop,
+  Imported,
   Loaded,
   ProjectScan,
   RunEvent,
@@ -19,6 +21,23 @@ const AUDIO = /\.(wav|ogg|flac|mp3|ssf|ezw|oga)$/i;
 const IMAGE = /\.(png|jpe?g|bmp)$/i;
 const SETTINGS_KEY = 'ez2bms.settings';
 
+/** A WAV's length from its header, or undefined for anything else. */
+export function wavSeconds(b: Uint8Array): number | undefined {
+  if (b.length < 12) return undefined;
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const tag = (o: number) => String.fromCharCode(b[o]!, b[o + 1]!, b[o + 2]!, b[o + 3]!);
+  if (tag(0) !== 'RIFF' || tag(8) !== 'WAVE') return undefined;
+  let bytesPerSecond = 0;
+  for (let o = 12; o + 8 <= b.length;) {
+    const size = dv.getUint32(o + 4, true);
+    if (tag(o) === 'fmt ' && o + 20 <= b.length) bytesPerSecond = dv.getUint32(o + 16, true);
+    if (tag(o) === 'data')
+      return bytesPerSecond ? Math.min(size, b.length - o - 8) / bytesPerSecond : undefined;
+    o += 8 + size + (size & 1);
+  }
+  return undefined;
+}
+
 /** `defaults` are settings used where the stored ones say nothing (the demo's game folder). */
 export function webBackend(
   seed: Map<string, Uint8Array> = demoFiles(),
@@ -28,6 +47,19 @@ export function webBackend(
   const mtimes = new Map<string, number>();
   const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '');
   const missing = (p: string) => new Error(`${p}: no such file`);
+  let staged = 0;
+  /** Browser files into the memory file system, each batch in its own folder. */
+  const stage = async (list: File[]): Promise<string[]> => {
+    const dir = `/_staged/${++staged}`;
+    const out: string[] = [];
+    for (const f of list) {
+      const p = `${dir}/${f.name}`;
+      files.set(p, new Uint8Array(await f.arrayBuffer()));
+      mtimes.set(p, Date.now());
+      out.push(p);
+    }
+    return out;
+  };
 
   const list = async (dir: string): Promise<Entry[]> => {
     const d = norm(dir) + '/';
@@ -130,14 +162,117 @@ export function webBackend(
       }
     },
     pickFolder: async () => DEMO_DIR,
-    pickFiles: async () => [],
+    // A real file chooser; what is picked is staged in the memory file system
+    // (browsers give bytes, not paths) and its staged paths returned.
+    pickFiles: (_title, extensions) =>
+      new Promise<string[]>((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        input.accept = extensions
+          .filter((e) => e !== '*')
+          .map((e) => `.${e}`)
+          .join(',');
+        input.onchange = () => void stage([...(input.files ?? [])]).then(resolve);
+        input.oncancel = () => resolve([]);
+        input.click();
+      }),
+    importFiles: async (dir, paths) => {
+      const d = norm(dir);
+      const out: Imported[] = [];
+      const wanted: string[] = [];
+      for (const p of paths.map(norm)) {
+        if (files.has(p)) wanted.push(p);
+        else wanted.push(...[...files.keys()].filter((k) => k.startsWith(p + '/')).sort());
+      }
+      for (const from of wanted) {
+        const base = from.slice(from.lastIndexOf('/') + 1);
+        if (!AUDIO.test(base) || base.startsWith('.')) {
+          if (
+            !from
+              .slice(0, from.lastIndexOf('/'))
+              .split('/')
+              .some((s) => s.startsWith('.'))
+          )
+            out.push({
+              from,
+              name: null,
+              reused: false,
+              error: 'not an audio file EZ2BMS can play',
+            });
+          continue;
+        }
+        if (from.startsWith(d + '/')) {
+          out.push({ from, name: from.slice(d.length + 1), reused: true, error: null });
+          continue;
+        }
+        const bytes = files.get(from)!;
+        const dot = base.lastIndexOf('.');
+        const [stem, ext] = dot > 0 ? [base.slice(0, dot), base.slice(dot)] : [base, ''];
+        for (let n = 1; ; n++) {
+          const name = n === 1 ? base : `${stem} (${n})${ext}`;
+          const target = `${d}/${name}`;
+          const have = [...files.keys()].find((k) => k.toLowerCase() === target.toLowerCase());
+          if (have) {
+            const old = files.get(have)!;
+            if (old.length === bytes.length && old.every((v, i) => v === bytes[i])) {
+              out.push({ from, name: have.slice(d.length + 1), reused: true, error: null });
+              break;
+            }
+            continue;
+          }
+          files.set(target, bytes.slice());
+          mtimes.set(target, Date.now());
+          out.push({ from, name, reused: false, error: null });
+          break;
+        }
+      }
+      return out;
+    },
+    renameFile: async (from, to) => {
+      const [f, t] = [norm(from), norm(to)];
+      const b = files.get(f);
+      if (!b) throw missing(from);
+      const clash = [...files.keys()].find((k) => k.toLowerCase() === t.toLowerCase());
+      if (clash && clash.toLowerCase() !== f.toLowerCase()) throw new Error(`${to} already exists`);
+      files.delete(f);
+      files.set(t, b);
+      mtimes.set(t, Date.now());
+    },
+    onFileDrop: (cb: (d: FileDrop) => void) => {
+      const over = (e: DragEvent) => {
+        if (!e.dataTransfer?.types.includes('Files')) return;
+        e.preventDefault();
+        cb({ kind: 'over', paths: [], x: e.clientX, y: e.clientY });
+      };
+      const leave = (e: DragEvent) => {
+        // Only when the drag leaves the window, not each element.
+        if (e.relatedTarget === null) cb({ kind: 'leave', paths: [], x: e.clientX, y: e.clientY });
+      };
+      const drop = (e: DragEvent) => {
+        const list = [...(e.dataTransfer?.files ?? [])];
+        if (!list.length) return;
+        e.preventDefault();
+        const at = { x: e.clientX, y: e.clientY };
+        void stage(list).then((paths) => cb({ kind: 'drop', paths, ...at }));
+      };
+      window.addEventListener('dragover', over);
+      window.addEventListener('dragleave', leave);
+      window.addEventListener('drop', drop);
+      return () => {
+        window.removeEventListener('dragover', over);
+        window.removeEventListener('dragleave', leave);
+        window.removeEventListener('drop', drop);
+      };
+    },
     audio: {
       info: async () => ({ rate: RATE, backend: 'web', device_error: null }),
       load: async (paths): Promise<Loaded[]> =>
         paths.map((path) => {
           let id = ids.get(path);
           if (id === undefined) ids.set(path, (id = ids.size));
-          const seconds = demoSeconds(path);
+          const bytes = files.get(norm(path));
+          const seconds = (bytes && wavSeconds(bytes)) ?? demoSeconds(path);
           return {
             path,
             id,
@@ -155,6 +290,22 @@ export function webBackend(
           out[2 * i] = -env;
           out[2 * i + 1] = env;
         }
+        return out;
+      },
+      // Made-up shapes, different per sample and stable, so thumbnails draw.
+      thumbs: async (ids, width) => {
+        const out = new Int16Array(ids.length * width * 2);
+        ids.forEach((id, k) => {
+          for (let i = 0; i < width; i++) {
+            const t = i / Math.max(1, width - 1);
+            const env =
+              30000 *
+              Math.exp(-t * (2 + (id % 5))) *
+              (0.55 + 0.45 * Math.abs(Math.sin((i + id * 7) * 0.7)));
+            out[(k * width + i) * 2] = -env;
+            out[(k * width + i) * 2 + 1] = env;
+          }
+        });
         return out;
       },
       setEvents: async (e) => {

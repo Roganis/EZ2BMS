@@ -76,6 +76,8 @@ export interface AudioBackend {
   load(paths: string[]): Promise<Loaded[]>;
   /** [min, max] i16 pairs at the mip level nearest `framesPerPx`. */
   peaks(id: number, framesPerPx: number): Promise<Int16Array>;
+  /** Thumbnails: `width` [min, max] pairs per id, in order (zeros for an unknown id). */
+  thumbs(ids: number[], width: number): Promise<Int16Array>;
   setEvents(events: AudioEvent[]): Promise<void>;
   play(fromMs: number): Promise<void>;
   seek(ms: number): Promise<void>;
@@ -159,6 +161,24 @@ export interface PortBackend {
   stop(id: number): Promise<void>;
 }
 
+/** One file offered for import, and what became of it (src-tauri files::Imported). */
+export interface Imported {
+  from: string;
+  /** Its name in the song folder, relative with forward slashes, when imported. */
+  name: string | null;
+  /** The folder already had it. */
+  reused: boolean;
+  error: string | null;
+}
+
+/** Files dragged over the window (paths only on drop; CSS pixels). */
+export interface FileDrop {
+  kind: 'over' | 'drop' | 'leave';
+  paths: string[];
+  x: number;
+  y: number;
+}
+
 export interface Backend {
   readonly kind: 'tauri' | 'web';
   appInfo(): Promise<AppInfo>;
@@ -172,6 +192,12 @@ export interface Backend {
   saveSettings(v: Record<string, unknown>): Promise<void>;
   pickFolder(title: string): Promise<string | null>;
   pickFiles(title: string, extensions: string[]): Promise<string[]>;
+  /** Copy sound files (and the audio in folders) into a song folder, flat, never overwriting. */
+  importFiles(dir: string, paths: string[]): Promise<Imported[]>;
+  /** Rename a file; refuses to replace another one. */
+  renameFile(from: string, to: string): Promise<void>;
+  /** Files dragged onto the window. Returns the unsubscribe. */
+  onFileDrop(cb: (d: FileDrop) => void): () => void;
   readonly audio: AudioBackend;
   readonly port: PortBackend;
 }

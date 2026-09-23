@@ -147,6 +147,136 @@ pub fn scan_project(dir: &Path) -> CmdResult<ProjectScan> {
     Ok(scan)
 }
 
+/// One file offered for import, and what became of it.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct Imported {
+    pub from: String,
+    /// Its name in the song folder (relative, forward slashes), when imported.
+    pub name: Option<String>,
+    /// The folder already had it (the same file, or the same bytes under that name).
+    pub reused: bool,
+    pub error: Option<String>,
+}
+
+fn is_audio(p: &Path) -> bool {
+    p.extension()
+        .map(|x| x.to_string_lossy().to_ascii_lowercase())
+        .is_some_and(|x| AUDIO_EXTS.contains(&x.as_str()))
+}
+
+/// Audio files among `paths`, folders walked (hidden ones skipped), in order.
+fn audio_files(paths: &[PathBuf]) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for p in paths {
+        if p.is_dir() {
+            let mut inner: Vec<PathBuf> = std::fs::read_dir(p)
+                .map(|rd| {
+                    rd.flatten()
+                        .map(|e| e.path())
+                        .filter(|q| {
+                            !q.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.'))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            inner.sort();
+            out.extend(audio_files(&inner));
+        } else {
+            out.push(p.clone());
+        }
+    }
+    out
+}
+
+/// Copy sound files (and the audio inside folders) into the song folder,
+/// flat. A file already inside the folder keeps its place; a name the folder
+/// already has is reused when the bytes are the same and otherwise becomes
+/// `name (2).ext`; each copy is written beside its target and renamed into
+/// place, so a failure never leaves half a file.
+pub fn copy_into(dir: &Path, paths: &[PathBuf]) -> Vec<Imported> {
+    let root = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+    audio_files(paths)
+        .into_iter()
+        .map(|src| {
+            let from = src.to_string_lossy().into_owned();
+            let fail = |e: String| Imported {
+                from: from.clone(),
+                name: None,
+                reused: false,
+                error: Some(e),
+            };
+            if !is_audio(&src) {
+                return fail("not an audio file EZ2BMS can play".into());
+            }
+            let real = src.canonicalize().unwrap_or_else(|_| src.clone());
+            if let Ok(rel) = real.strip_prefix(&root) {
+                let name = rel.to_string_lossy().replace('\\', "/");
+                return Imported { from, name: Some(name), reused: true, error: None };
+            }
+            let bytes = match std::fs::read(&src) {
+                Ok(b) => b,
+                Err(e) => return fail(e.to_string()),
+            };
+            let file =
+                src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let (stem, ext) = match file.rsplit_once('.') {
+                Some((s, x)) => (s.to_string(), format!(".{x}")),
+                None => (file.clone(), String::new()),
+            };
+            for n in 1.. {
+                let name = if n == 1 { file.clone() } else { format!("{stem} ({n}){ext}") };
+                let target = dir.join(&name);
+                match std::fs::read(&target) {
+                    Ok(existing) if existing == bytes => {
+                        return Imported { from, name: Some(name), reused: true, error: None };
+                    }
+                    Ok(_) => continue,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return fail(e.to_string()),
+                }
+                // A case-insensitive disk would call a differently-cased name the same file.
+                if list(dir).is_ok_and(|l| l.iter().any(|x| x.name.eq_ignore_ascii_case(&name))) {
+                    continue;
+                }
+                return match write_atomic(&target, &bytes, false) {
+                    Ok(()) => Imported { from, name: Some(name), reused: false, error: None },
+                    Err(e) => fail(e.to_string()),
+                };
+            }
+            unreachable!()
+        })
+        .collect()
+}
+
+/// Rename a file, never over another one. A change of case only goes through
+/// a temporary name (a case-insensitive disk would otherwise refuse or do
+/// nothing).
+pub fn rename(from: &Path, to: &Path) -> CmdResult<()> {
+    if !from.is_file() {
+        return Err(CmdError::Invalid(format!("{} is not a file", from.display())));
+    }
+    let same_but_case =
+        from.to_string_lossy().to_lowercase() == to.to_string_lossy().to_lowercase();
+    if !same_but_case && to.exists() {
+        return Err(CmdError::Invalid(format!("{} already exists", to.display())));
+    }
+    if let Some(parent) = to.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent).map_err(|e| CmdError::io(parent, e))?;
+    }
+    if same_but_case {
+        let tmp = from.with_file_name(format!(
+            ".{}.ez2bms-rename",
+            from.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+        ));
+        std::fs::rename(from, &tmp).map_err(|e| CmdError::io(from, e))?;
+        return std::fs::rename(&tmp, to).map_err(|e| {
+            let _ = std::fs::rename(&tmp, from);
+            CmdError::io(to, e)
+        });
+    }
+    std::fs::rename(from, to).map_err(|e| CmdError::io(from, e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,5 +328,61 @@ mod tests {
         assert!(s.sidecar.is_some());
         assert_eq!(s.samples, ["kick.WAV", "stems/drums/snare.ogg"]);
         assert_eq!(s.images, ["jacket.png"]);
+    }
+
+    #[test]
+    fn imports_copy_flat_reuse_what_is_there_and_never_overwrite() {
+        let song = scratch("import-song");
+        let outside = scratch("import-src");
+        std::fs::create_dir_all(outside.join("kit/.hidden")).unwrap();
+        std::fs::write(outside.join("kick.wav"), b"kick").unwrap();
+        std::fs::write(outside.join("kit/snare.ogg"), b"snare").unwrap();
+        std::fs::write(outside.join("kit/.hidden/x.wav"), b"x").unwrap();
+        std::fs::write(outside.join("notes.txt"), b"no").unwrap();
+        std::fs::write(song.join("snare.ogg"), b"snare").unwrap();
+        std::fs::write(song.join("kick.wav"), b"another kick").unwrap();
+        std::fs::create_dir_all(song.join("stems")).unwrap();
+        std::fs::write(song.join("stems/pad.wav"), b"pad").unwrap();
+        let got = copy_into(
+            &song,
+            &[
+                outside.join("kick.wav"),
+                outside.join("kit"),
+                outside.join("notes.txt"),
+                song.join("stems/pad.wav"),
+            ],
+        );
+        let names: Vec<_> = got.iter().map(|i| (i.name.clone(), i.reused)).collect();
+        assert_eq!(
+            names,
+            vec![
+                (Some("kick (2).wav".into()), false),
+                (Some("snare.ogg".into()), true),
+                (None, false),
+                (Some("stems/pad.wav".into()), true),
+            ]
+        );
+        assert_eq!(std::fs::read(song.join("kick (2).wav")).unwrap(), b"kick");
+        assert_eq!(std::fs::read(song.join("kick.wav")).unwrap(), b"another kick");
+        assert!(got[2].error.is_some());
+        // Importing the same file again reuses the copy.
+        let again = copy_into(&song, &[outside.join("kick.wav")]);
+        assert_eq!(again[0].name.as_deref(), Some("kick (2).wav"));
+        assert!(again[0].reused);
+    }
+
+    #[test]
+    fn renames_never_overwrite_and_handle_a_change_of_case() {
+        let d = scratch("rename");
+        std::fs::write(d.join("a.wav"), b"a").unwrap();
+        std::fs::write(d.join("b.wav"), b"b").unwrap();
+        assert!(rename(&d.join("a.wav"), &d.join("b.wav")).is_err());
+        assert_eq!(std::fs::read(d.join("b.wav")).unwrap(), b"b");
+        rename(&d.join("a.wav"), &d.join("drums/A.wav")).unwrap();
+        assert_eq!(std::fs::read(d.join("drums/A.wav")).unwrap(), b"a");
+        rename(&d.join("drums/A.wav"), &d.join("drums/a.wav")).unwrap();
+        let names: Vec<_> = list(&d.join("drums")).unwrap().into_iter().map(|e| e.name).collect();
+        assert_eq!(names, vec!["a.wav"]);
+        assert!(rename(&d.join("missing.wav"), &d.join("x.wav")).is_err());
     }
 }
