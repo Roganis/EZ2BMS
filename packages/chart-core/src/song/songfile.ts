@@ -34,8 +34,66 @@ export interface SongFile {
   bga?: BgaSettings | null;
   /** Where the song was last published (a key change offers to retire that package). */
   published?: { root: string; key: string };
+  /** What the song was imported from, and what the import could not bring across. */
+  source?: ImportSource;
   /** Members EZ2BMS does not know, in file order. */
   extra: Record<string, unknown>;
+}
+
+/** Something an import said about a chart (`chart`: its file; '' for the song). */
+export interface SourceNote {
+  chart: string;
+  rule: string;
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+  /** Where to look, in pulses. */
+  at?: number;
+}
+
+export interface ImportSource {
+  /** `ez2ac` (the game's own charts), `bms`, `bmson`. */
+  from: string;
+  /** The original song's key (a game song's folder under sound/). */
+  key?: string;
+  /** The file or folder it was imported from. */
+  path?: string;
+  /** Each chart's file -> the file it came from. */
+  charts?: Record<string, string>;
+  /** Shown in Issues with the song until you clear them. */
+  notes?: SourceNote[];
+}
+
+const SEVERITIES = new Set(['error', 'warning', 'info']);
+
+/** An import source as the song file holds it, or undefined when it is not one. */
+function readImportSource(v: unknown): ImportSource | undefined {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const o = v as Record<string, unknown>;
+  if (typeof o.from !== 'string') return undefined;
+  if (o.key !== undefined && typeof o.key !== 'string') return undefined;
+  if (o.path !== undefined && typeof o.path !== 'string') return undefined;
+  if (
+    o.charts !== undefined &&
+    (!o.charts ||
+      typeof o.charts !== 'object' ||
+      Array.isArray(o.charts) ||
+      !Object.values(o.charts).every((x) => typeof x === 'string'))
+  )
+    return undefined;
+  const note = (n: unknown): n is SourceNote => {
+    const r = n as Record<string, unknown> | null;
+    return (
+      !!r &&
+      typeof r === 'object' &&
+      typeof r.chart === 'string' &&
+      typeof r.rule === 'string' &&
+      typeof r.message === 'string' &&
+      SEVERITIES.has(r.severity as string) &&
+      (r.at === undefined || typeof r.at === 'number')
+    );
+  };
+  if (o.notes !== undefined && !(Array.isArray(o.notes) && o.notes.every(note))) return undefined;
+  return o as unknown as ImportSource;
 }
 
 const KNOWN = [
@@ -49,6 +107,7 @@ const KNOWN = [
   'preview',
   'bga',
   'published',
+  'source',
 ] as const;
 
 export function newSongFile(key = ''): SongFile {
@@ -116,6 +175,14 @@ export function parseSongFile(text: string): { song: SongFile; warnings: string[
     } else if (k === 'disc') song.disc = art as DiscArt | null;
     else song.eyecatch = art as EyecatchArt | null;
   }
+  if (o.source !== undefined) {
+    const source = readImportSource(o.source);
+    if (source) song.source = source;
+    else {
+      warnings.push('source is not an import record EZ2BMS reads; it was kept as it is');
+      song.extra.source = o.source;
+    }
+  }
   const pub = o.published as { root?: unknown; key?: unknown } | undefined;
   if (pub && typeof pub.root === 'string' && typeof pub.key === 'string')
     song.published = { root: pub.root, key: pub.key };
@@ -137,6 +204,7 @@ export function serializeSongFile(s: SongFile): string {
   if (s.preview !== undefined) out.preview = s.preview;
   if (s.bga !== undefined) out.bga = s.bga;
   if (s.published !== undefined) out.published = s.published;
+  if (s.source !== undefined) out.source = s.source;
   for (const [k, v] of Object.entries(s.extra)) if (!(k in out)) out[k] = v;
   return JSON.stringify(out, null, 2) + '\n';
 }

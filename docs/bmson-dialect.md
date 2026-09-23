@@ -71,6 +71,16 @@ notes are ordinary notes, and whether the song is charted in Classic mode
 is kept beside the charts, as `classic` in `ez2bms.song.json`. Renaming a
 sound in the workbench renames the file and rewrites each channel's `name`.
 
+A chart imported from the game's own `.ez` (M5) keeps what bmson has no
+place for, so a cabinet export (M6) can write it back:
+
+| Member         | Where        | Meaning                                                                                                                                                                                                          |
+| -------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `x_track`      | note         | the `.ez` track a background note was on (lane notes' tracks follow from the mode)                                                                                                                               |
+| `x_len`        | note         | the record's raw length when a publish would write another: a background note's (published as a tap), a lane tap's 1-6                                                                                           |
+| `x_ez`         | chart (root) | the `.ez` header and `.ini` it came from: `file`, `version`, `name`, `name2`, `bpm`, `bpm2`, `total_ticks`, `ticks_per_measure`, `tracks`, `measure_scale`                                                       |
+| `x_ez_records` | chart (root) | records with no bmson home, `{track, y, type, value?, bpm?, raw?, scroll?}`: volume (2), beats (4), marks (5), scroll speed (6), stops (7), unknown kinds, out-of-range tempi. Not moved by edits; not published |
+
 Stem slicing (M4) adds nothing either: a cut is a background note with
 `c: true` on the stem's channel, a keyed slice an ordinary lane note. Which
 stems have strips is a view, kept in the app's settings, not in the song.
