@@ -3,9 +3,10 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use ez2bms_audio::cache::SampleCache;
+use ez2bms_audio::disk::{CacheInfo, DiskCache};
 use ez2bms_audio::level::ds_gains;
 use ez2bms_audio::peaks::Peaks;
 use ez2bms_audio::schedule::{frame_at_ms, EventSpec, VoiceKey, LANE_VOICE_BASE};
@@ -31,12 +32,22 @@ type PeakCache = HashMap<u32, (Weak<Sample>, Arc<Peaks>)>;
 /// Frames per bucket at a waveform mipmap's finest level.
 const PEAK_BASE: u32 = 64;
 
+/// Long files decoded on disk (`<app cache>/audio`), shared by the editor's
+/// cache and every publish. Set once at start; absent in tests and when the
+/// OS gives no cache folder, which only means decoding every time.
+static DISK: OnceLock<DiskCache> = OnceLock::new();
+
+/// The disk cache's limit until the front end sends the user's setting.
+pub const DEFAULT_CACHE_BYTES: u64 = 2 << 30;
+
 /// Sample ids are stable per path for the app's lifetime: schedules and
 /// sounding voices refer to them, and a reloaded file keeps its id.
 #[derive(Default)]
 struct Bank {
     ids: HashMap<PathBuf, u32>,
     samples: Vec<Arc<Sample>>,
+    /// By id: the file each came from (for its disk sidecars).
+    paths: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -179,7 +190,10 @@ pub struct ClockDto {
 impl Audio {
     /// The default output device, else a silent real-time clock so the editor
     /// still plays (visually) on a machine with no sound.
-    pub fn open() -> Audio {
+    pub fn open(cache_dir: Option<PathBuf>) -> Audio {
+        if let Some(d) = cache_dir {
+            let _ = DISK.set(DiskCache::new(d.join("audio"), DEFAULT_CACHE_BYTES));
+        }
         let (engine, backend, device_error) = match Engine::start_cpal() {
             Ok(e) => (e, "cpal", None),
             Err(e) => (Engine::start_null(48_000), "null", Some(e.to_string())),
@@ -188,7 +202,10 @@ impl Audio {
     }
 
     fn from_engine(engine: Engine, backend: &'static str, device_error: Option<String>) -> Audio {
-        let cache = SampleCache::new(engine.rate());
+        let cache = match DISK.get() {
+            Some(d) => SampleCache::with_disk(engine.rate(), d.clone()),
+            None => SampleCache::new(engine.rate()),
+        };
         Audio {
             engine,
             backend,
@@ -224,6 +241,7 @@ impl Audio {
                         None => {
                             let id = bank.samples.len() as u32;
                             bank.samples.push(s.clone());
+                            bank.paths.push(p.clone());
                             bank.ids.insert(p.clone(), id);
                             id
                         }
@@ -259,7 +277,8 @@ impl Audio {
             .ok_or_else(|| CmdError::Invalid(format!("no sample {id}")))
     }
 
-    /// The sample's waveform mipmap, built once per decoded sample.
+    /// The sample's waveform mipmap, built once per decoded sample - or, for
+    /// a long file, read from its disk sidecar (made from that same decode).
     fn peaks_of(&self, id: u32) -> CmdResult<Arc<Peaks>> {
         let s = self.sample(id)?;
         if let Some((w, p)) = self.peaks.lock().unwrap().get(&id) {
@@ -267,7 +286,24 @@ impl Audio {
                 return Ok(p.clone());
             }
         }
-        let p = Arc::new(Peaks::build(&s, PEAK_BASE));
+        let path = self.bank.lock().unwrap().paths.get(id as usize).cloned();
+        let key = path.and_then(|p| self.cache.disk_key(&p));
+        let disk = self.cache.disk().zip(key);
+        let stored = disk
+            .as_ref()
+            .and_then(|(d, k)| d.load(k, "peaks"))
+            .and_then(|b| Peaks::from_bytes(&b))
+            .filter(|p| p.base == PEAK_BASE && p.frames == s.frames() as u64);
+        let p = Arc::new(match stored {
+            Some(p) => p,
+            None => {
+                let p = Peaks::build(&s, PEAK_BASE);
+                if let Some((d, k)) = &disk {
+                    d.store(k, "peaks", &p.to_bytes());
+                }
+                p
+            }
+        });
         self.peaks.lock().unwrap().insert(id, (Arc::downgrade(&s), p.clone()));
         Ok(p)
     }
@@ -411,9 +447,46 @@ impl Audio {
     }
 }
 
-/// Decoded at 44.1 kHz for cutting published keysounds (not the device rate).
+/// Decoded at 44.1 kHz for cutting published keysounds (not the device
+/// rate). Long files come from the disk cache when it has them: a hit is the
+/// decode bit for bit, so the package is the same either way.
 pub fn publish_cache() -> SampleCache {
-    SampleCache::new(ez2bms_audio::cut::PUBLISH_RATE)
+    match DISK.get() {
+        Some(d) => SampleCache::with_disk(ez2bms_audio::cut::PUBLISH_RATE, d.clone()),
+        None => SampleCache::new(ez2bms_audio::cut::PUBLISH_RATE),
+    }
+}
+
+/// What the disk cache holds, for the settings panel.
+#[derive(Debug, Clone, Serialize)]
+pub struct CacheDto {
+    pub dir: Option<PathBuf>,
+    pub entries: u64,
+    pub bytes: u64,
+    pub cap: u64,
+}
+
+pub fn cache_info() -> CacheDto {
+    match DISK.get() {
+        Some(d) => {
+            let CacheInfo { entries, bytes, cap, .. } = d.info();
+            CacheDto { dir: Some(d.dir().to_path_buf()), entries, bytes, cap }
+        }
+        None => CacheDto { dir: None, entries: 0, bytes: 0, cap: 0 },
+    }
+}
+
+/// The user's limit (0 turns the cache off and empties it).
+pub fn cache_set_cap(bytes: u64) {
+    if let Some(d) = DISK.get() {
+        d.set_cap(bytes);
+    }
+}
+
+pub fn cache_clear() {
+    if let Some(d) = DISK.get() {
+        d.clear();
+    }
 }
 
 pub fn resolve(base: &Path, rel: &str) -> PathBuf {

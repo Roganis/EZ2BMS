@@ -117,6 +117,20 @@ export interface AudioBackend {
   previewOverview(events: AudioEvent[], endMs: number, width: number): Promise<Int16Array>;
   /** Render the preview (events over loaded samples, or a file) for auditioning. */
   preview(job: PreviewJob): Promise<Audition>;
+  /** The disk cache that keeps long files (20 s and more) decoded across runs. */
+  cacheInfo(): Promise<AudioCacheInfo>;
+  /** Its limit, MB; 0 turns it off and empties it. */
+  cacheSetCap(mb: number): Promise<void>;
+  cacheClear(): Promise<void>;
+}
+
+export interface AudioCacheInfo {
+  /** Null when there is no disk cache (the browser build). */
+  dir: string | null;
+  entries: number;
+  bytes: number;
+  /** Bytes; 0 = off. */
+  cap: number;
 }
 
 export interface PackageFile {

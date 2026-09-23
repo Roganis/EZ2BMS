@@ -23,6 +23,8 @@ export interface SettingsData {
   keys: Record<string, string[]>;
   /** Draw the playfield with the game folder's own panel when it has one. */
   gameSkin: boolean;
+  /** Disk kept for long files (stems) decoded across runs, MB; 0 = off. */
+  audioCacheMB: number;
 }
 
 export const DEFAULT_SETTINGS: SettingsData = {
@@ -38,6 +40,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   inputOffsetMs: 0,
   keys: {},
   gameSkin: true,
+  audioCacheMB: 2048,
 };
 
 export class Settings {

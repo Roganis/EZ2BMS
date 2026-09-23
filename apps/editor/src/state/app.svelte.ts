@@ -68,6 +68,7 @@ export class App {
     this.view.speed = this.settings.data.speed;
     this.commands.setOverrides(this.settings.data.keys);
     this.audioInfo = await this.backend.audio.info().catch(() => null);
+    void this.backend.audio.cacheSetCap(this.settings.data.audioCacheMB).catch(() => {});
     await this.port.detect();
     if (this.audioInfo?.device_error)
       toast(`No audio device - playing silently (${this.audioInfo.device_error})`, 'warn');

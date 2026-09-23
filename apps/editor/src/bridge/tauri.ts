@@ -5,6 +5,7 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
 import type {
   AppInfo,
+  AudioCacheInfo,
   Audition,
   AudioEvent,
   AudioInfo,
@@ -98,6 +99,9 @@ export function tauriBackend(): Backend {
         const b = bytesOf(await invoke('audio_thumbs', { ids, width }));
         return new Int16Array(b.buffer, b.byteOffset, b.byteLength >> 1);
       },
+      cacheInfo: () => invoke<AudioCacheInfo>('audio_cache_info'),
+      cacheSetCap: (mb) => invoke('audio_cache_set_cap', { mb }),
+      cacheClear: () => invoke('audio_cache_clear'),
       setEvents: (events: AudioEvent[]) => invoke('audio_set_events', { events }),
       play: (fromMs) => invoke('audio_play', { fromMs }),
       seek: (ms) => invoke('audio_seek', { ms }),

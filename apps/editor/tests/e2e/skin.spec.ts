@@ -56,6 +56,20 @@ test("lays the lanes out from the game's panel", async ({ page }, info) => {
 
   await page.getByRole('button', { name: 'EZ2PORT', exact: true }).click();
   await expect(page.getByTestId('skin-status')).toContainText('STYLE_StreetMix1_0.pvi');
+  // The same panel sets the disk kept for long sounds (the browser decodes
+  // nothing, so it keeps nothing; the setting is still saved).
+  await expect(page.getByTestId('audio-cache-info')).toHaveText(/browser preview/);
+  await page.getByTestId('audio-cache-cap').fill('512');
+  await page.getByTestId('audio-cache-cap').press('Enter');
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { __ez2bms: { settings: { data: { audioCacheMB: number } } } })
+            .__ez2bms.settings.data.audioCacheMB,
+      ),
+    )
+    .toBe(512);
 
   // The key panel under the judge line is the panel's bitmap (18, 20, 30), not the neon band.
   const kp = await brightness(

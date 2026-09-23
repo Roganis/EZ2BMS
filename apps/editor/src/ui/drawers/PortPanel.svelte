@@ -1,6 +1,7 @@
 <script lang="ts">
   // Where EZ2PORT is, what this build of ez2play can do, and the buttons that
   // use it.
+  import type { AudioCacheInfo } from '../../bridge/types';
   import { app } from '../../state/app.svelte';
 
   const s = app.settings;
@@ -24,6 +25,24 @@
     if (!f) return;
     s.set(key, f);
     await port.detect();
+  }
+
+  // The disk cache for long files: how full it is, its limit, and Clear.
+  let cache = $state<AudioCacheInfo | null>(null);
+  const refreshCache = async () => {
+    cache = await app.backend.audio.cacheInfo().catch(() => null);
+  };
+  $effect(() => void refreshCache());
+  const mb = (bytes: number) => `${Math.round(bytes / 2 ** 20)} MB`;
+  async function setCap(v: number) {
+    const cap = Math.max(0, Math.min(1 << 20, Math.round(v)));
+    s.set('audioCacheMB', cap);
+    await app.backend.audio.cacheSetCap(cap);
+    await refreshCache();
+  }
+  async function clearCache() {
+    await app.backend.audio.cacheClear();
+    await refreshCache();
   }
 
   const caps = $derived(
@@ -122,6 +141,40 @@
     <button class="ez-btn" onclick={() => skin.reload()}>Reload the panel</button>
   {/if}
 
+  <h3>Long sounds</h3>
+  <p class="hint">
+    Sounds of 20 s and more (stems) are kept decoded on disk, so a song opens and publishes without
+    decoding them again.
+  </p>
+  <div class="row">
+    <span class="lbl">Disk to use (MB, 0 = off)</span>
+    <div class="path">
+      <input
+        class="num"
+        type="number"
+        min="0"
+        step="256"
+        value={s.data.audioCacheMB}
+        data-testid="audio-cache-cap"
+        onchange={(e) => setCap(Number(e.currentTarget.value))}
+      />
+      <button
+        class="ez-btn"
+        onclick={clearCache}
+        disabled={!cache?.dir || !cache.entries}
+        data-testid="audio-cache-clear">Clear</button
+      >
+    </div>
+    <span class="hint" data-testid="audio-cache-info">
+      {#if !cache?.dir}
+        Not in the browser preview.
+      {:else}
+        {cache.entries}
+        {cache.entries === 1 ? 'sound' : 'sounds'}, {mb(cache.bytes)} of {mb(cache.cap)}
+      {/if}
+    </span>
+  </div>
+
   {#if port.probe}
     <h3>This ez2play</h3>
     <p class="hint">
@@ -204,5 +257,8 @@
   }
   .missing-list code {
     direction: ltr;
+  }
+  .num {
+    width: 90px;
   }
 </style>

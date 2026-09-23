@@ -205,6 +205,7 @@ export function webBackend(
     };
   };
   let events: AudioEvent[] = [];
+  let cacheCap = 2048 * 2 ** 20;
 
   /** `dir/name` in any case, as EZ2PORT resolves it; the name found. */
   const childCi = (dir: string, name: string): string | null => {
@@ -501,6 +502,12 @@ export function webBackend(
         seconds: job.length_ms / 1000,
         voice: (1 << 16) + 255,
       }),
+      // The browser decodes nothing, so there is nothing to keep on disk.
+      cacheInfo: async () => ({ dir: null, entries: 0, bytes: 0, cap: cacheCap }),
+      cacheSetCap: async (mb) => {
+        cacheCap = mb * 2 ** 20;
+      },
+      cacheClear: async () => {},
     },
     media: {
       art: async (path, job) => {

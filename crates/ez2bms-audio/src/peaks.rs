@@ -91,4 +91,46 @@ impl Peaks {
             })
             .collect()
     }
+
+    /// The mipmap as bytes, for the disk cache: base, frames, then each
+    /// level's length and `[min, max]` pairs, little-endian.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let n: usize = self.levels.iter().map(|l| 4 + l.len() * 4).sum();
+        let mut out = Vec::with_capacity(16 + n);
+        out.extend_from_slice(&self.base.to_le_bytes());
+        out.extend_from_slice(&self.frames.to_le_bytes());
+        out.extend_from_slice(&(self.levels.len() as u32).to_le_bytes());
+        for level in &self.levels {
+            out.extend_from_slice(&(level.len() as u32).to_le_bytes());
+            for [lo, hi] in level {
+                out.extend_from_slice(&lo.to_le_bytes());
+                out.extend_from_slice(&hi.to_le_bytes());
+            }
+        }
+        out
+    }
+
+    /// `to_bytes` read back; None for anything that is not a whole mipmap.
+    pub fn from_bytes(b: &[u8]) -> Option<Peaks> {
+        let mut at = 0usize;
+        let mut take = |n: usize| -> Option<&[u8]> {
+            let s = b.get(at..at + n)?;
+            at += n;
+            Some(s)
+        };
+        let base = u32::from_le_bytes(take(4)?.try_into().ok()?);
+        let frames = u64::from_le_bytes(take(8)?.try_into().ok()?);
+        let count = u32::from_le_bytes(take(4)?.try_into().ok()?) as usize;
+        let mut levels = Vec::with_capacity(count.min(64));
+        for _ in 0..count {
+            let len = u32::from_le_bytes(take(4)?.try_into().ok()?) as usize;
+            let raw = take(len.checked_mul(4)?)?;
+            levels.push(
+                raw.chunks_exact(4)
+                    .map(|c| [i16::from_le_bytes([c[0], c[1]]), i16::from_le_bytes([c[2], c[3]])])
+                    .collect(),
+            );
+        }
+        (at == b.len() && base > 0 && !levels.is_empty()).then_some(Peaks { base, frames, levels })
+    }
 }

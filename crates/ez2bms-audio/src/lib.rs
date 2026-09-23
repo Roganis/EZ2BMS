@@ -1,7 +1,8 @@
 //! EZ2BMS audio: everything that touches samples.
 //!
 //! - [`decode`] any keysound (WAV, OGG, FLAC, MP3, `.ssf`/`.ezw`) and
-//!   [`resample`] it; a [`cache::SampleCache`] keeps them decoded.
+//!   [`resample`] it; a [`cache::SampleCache`] keeps them decoded, and a
+//!   [`disk::DiskCache`] keeps long ones decoded across runs.
 //! - [`schedule::Schedule`]: the timed sounds of a chart, on voices that follow
 //!   EZ2PORT's rule (a retrigger cuts: one voice per keysound, one per lane).
 //! - [`engine::Engine`] plays a schedule live, from any point, picking up
@@ -19,6 +20,7 @@ pub mod cache;
 pub mod clock;
 pub mod cut;
 pub mod decode;
+pub mod disk;
 pub mod engine;
 pub mod error;
 pub mod level;

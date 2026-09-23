@@ -202,6 +202,28 @@ async fn audio_thumbs(
     Ok(Response::new(bytes))
 }
 
+/// What the disk cache for long files holds.
+#[tauri::command]
+async fn audio_cache_info() -> CmdResult<audio::CacheDto> {
+    tauri::async_runtime::spawn_blocking(audio::cache_info)
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))
+}
+
+#[tauri::command]
+async fn audio_cache_set_cap(mb: u64) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || audio::cache_set_cap(mb << 20))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))
+}
+
+#[tauri::command]
+async fn audio_cache_clear() -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(audio::cache_clear)
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))
+}
+
 #[tauri::command]
 fn audio_set_events(audio: State<'_, Arc<Audio>>, events: Vec<EventDto>) -> CmdResult<()> {
     audio.set_events(&events)
@@ -364,7 +386,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            app.manage(Arc::new(Audio::open()));
+            app.manage(Arc::new(Audio::open(app.path().app_cache_dir().ok())));
             app.manage(Arc::new(Runs::default()));
             app.manage(Arc::new(Media::new(fonts_dir(app.handle()))));
             Ok(())
@@ -389,6 +411,9 @@ pub fn run() {
             audio_load,
             audio_peaks,
             audio_thumbs,
+            audio_cache_info,
+            audio_cache_set_cap,
+            audio_cache_clear,
             audio_set_events,
             audio_preview_overview,
             audio_preview,
