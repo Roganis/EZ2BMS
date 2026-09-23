@@ -4,3 +4,5 @@ export * from './decode';
 export * from './parse';
 export * from './convert';
 export * from './song';
+export * from './write';
+export * from './export';
