@@ -5,6 +5,7 @@
 
 mod audio;
 mod error;
+mod export;
 mod files;
 mod media;
 mod port;
@@ -132,6 +133,67 @@ async fn import_run(
             let _ = on_progress.send([done, total]);
         })?;
         Ok(files::ImportReportDto::from(r))
+    })
+    .await
+    .map_err(|e| CmdError::Invalid(e.to_string()))?
+}
+
+// ---- exports (M6)
+
+/// For each cabinet keysound: how it would be made, and which file already in
+/// the game's folder holds exactly its audio (export.rs).
+#[tauri::command]
+async fn export_probe(sounds: Vec<export::ProbeSound>) -> CmdResult<Vec<export::ProbeResult>> {
+    tauri::async_runtime::spawn_blocking(move || export::probe(sounds))
+        .await
+        .map_err(|e| CmdError::Invalid(e.to_string()))
+}
+
+/// A cabinet export written into a game folder, all or nothing, with a backup.
+#[tauri::command]
+async fn export_game(
+    root: PathBuf,
+    job: export::ExportJobDto,
+    on_progress: Channel<[usize; 2]>,
+) -> CmdResult<ez2bms_launch::gamepatch::PatchReport> {
+    tauri::async_runtime::spawn_blocking(move || {
+        export::to_game(root, job, move |d, t| {
+            let _ = on_progress.send([d, t]);
+        })
+    })
+    .await
+    .map_err(|e| CmdError::Invalid(e.to_string()))?
+}
+
+/// An export into a new folder (shaped like the game, or a BMS song).
+#[tauri::command]
+async fn export_folder(
+    dest: PathBuf,
+    job: export::ExportJobDto,
+    on_progress: Channel<[usize; 2]>,
+) -> CmdResult<export::FolderReport> {
+    tauri::async_runtime::spawn_blocking(move || {
+        export::to_folder(dest, job, move |d, t| {
+            let _ = on_progress.send([d, t]);
+        })
+    })
+    .await
+    .map_err(|e| CmdError::Invalid(e.to_string()))?
+}
+
+#[tauri::command]
+fn export_backups(root: PathBuf) -> CmdResult<Vec<ez2bms_launch::gamepatch::BackupInfo>> {
+    export::backups(root)
+}
+
+#[tauri::command]
+async fn export_restore(
+    root: PathBuf,
+    stamp: String,
+    force: Option<bool>,
+) -> CmdResult<ez2bms_launch::gamepatch::RestoreReport> {
+    tauri::async_runtime::spawn_blocking(move || {
+        export::restore(root, stamp, force.unwrap_or(false))
     })
     .await
     .map_err(|e| CmdError::Invalid(e.to_string()))?
@@ -445,6 +507,11 @@ pub fn run() {
             fs_copy_into,
             fs_rename,
             import_run,
+            export_probe,
+            export_game,
+            export_folder,
+            export_backups,
+            export_restore,
             media_art,
             media_plate,
             settings_load,

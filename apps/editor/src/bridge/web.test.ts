@@ -150,3 +150,138 @@ describe('the browser backend', () => {
     expect(Math.max(...t)).toBeGreaterThan(1000);
   });
 });
+
+describe("the browser backend's exports (the host's rules, in memory)", () => {
+  /** A 16-bit .ssf: a game keysound. */
+  const ssf = (channels: number, rate: number, samples: number[]) => {
+    const b = new Uint8Array(18 + samples.length * 2);
+    const dv = new DataView(b.buffer);
+    dv.setUint16(0, channels, true);
+    dv.setUint32(2, rate, true);
+    dv.setUint32(6, rate * channels * 2, true);
+    dv.setUint16(10, channels * 2, true);
+    dv.setUint16(12, 16, true);
+    dv.setUint32(14, samples.length * 2, true);
+    samples.forEach((s, i) => dv.setInt16(18 + i * 2, s, true));
+    return b;
+  };
+  const game = () =>
+    new Map<string, Uint8Array>([
+      ['/game/sound/Alpha/StreetMix1p-alpha.ez', enc('old chart')],
+      ['/game/sound/Alpha/kick.ssf', ssf(1, 22050, [1, 2, 3, 4])],
+      ['/game/system/StreetMix/song.bin', enc('old table')],
+    ]);
+
+  it('finds a game keysound brought in and sent back, and says how each is made', async () => {
+    const files = game();
+    // The .ssf, imported: the same samples as a WAV.
+    const b = webBackend(files);
+    await b.importRun('/proj', {
+      files: [],
+      copies: [{ from: '/game/sound/Alpha/kick.ssf', to: 'kick.wav', convert: 'pcm' }],
+    });
+    await b.writeBytes('/proj/stem.wav', wav(1000), false);
+    const r = await b.export.probe([
+      {
+        src: '/proj/kick.wav',
+        start_frame: 0,
+        end_frame: null,
+        candidates: ['/game/sound/Alpha/kick.ssf'],
+      },
+      { src: '/proj/stem.wav', start_frame: 10, end_frame: 20, candidates: [] },
+      { src: '/proj/gone.wav', start_frame: 0, end_frame: null, candidates: [] },
+    ]);
+    expect(r[0]).toMatchObject({ how: 'rewrap', equal: 0 });
+    expect(r[0]!.fnv).toMatch(/^[0-9a-f]{16}$/);
+    expect(r[1]).toMatchObject({ how: 'cut', equal: null });
+    expect(r[2]!.error).toMatch(/no such file/);
+  });
+
+  it('writes into the game with a backup, under the names on disk, and restores it', async () => {
+    const b = webBackend(game());
+    const text = async (p: string) => new TextDecoder().decode(await b.readFile(p));
+    const gone = async (p: string) =>
+      b.readFile(p).then(
+        () => false,
+        () => true,
+      );
+    await b.writeBytes('/proj/stem.wav', wav(1000), false);
+    const r = await b.export.toGame('/game', {
+      stamp: '20260923-alpha',
+      label: 'Alpha',
+      files: [
+        { path: 'sound/alpha/streetmix1p-alpha.ez', bytes: enc('new chart'), expect: 'any' },
+        { path: 'sound/alpha/streetmix1p-alpha-shd.ez', bytes: enc('new tier'), expect: 'absent' },
+      ],
+      sounds: [
+        {
+          src: '/proj/stem.wav',
+          start_frame: 0,
+          end_frame: 100,
+          path: 'sound/alpha/stem_0_2.ssf',
+          format: 'ssf',
+          expect: 'absent',
+        },
+      ],
+    });
+    expect(r.replaced).toEqual(['sound/Alpha/StreetMix1p-alpha.ez']);
+    expect(r.created).toEqual(['sound/Alpha/streetmix1p-alpha-shd.ez', 'sound/Alpha/stem_0_2.ssf']);
+    expect(await text('/game/sound/Alpha/StreetMix1p-alpha.ez')).toBe('new chart');
+    expect(await gone('/game/sound/alpha/streetmix1p-alpha.ez')).toBe(true);
+    expect((await b.readFile('/game/sound/Alpha/stem_0_2.ssf')).length).toBe(18 + 100 * 4);
+    expect((await b.export.backups('/game')).map((x) => [x.stamp, x.state, x.files])).toEqual([
+      ['20260923-alpha', 'applied', 3],
+    ]);
+    const back = await b.export.restore('/game', '20260923-alpha');
+    expect(back).toMatchObject({ restored: ['sound/Alpha/StreetMix1p-alpha.ez'], conflicts: [] });
+    expect(await text('/game/sound/Alpha/StreetMix1p-alpha.ez')).toBe('old chart');
+    expect(await gone('/game/sound/Alpha/streetmix1p-alpha-shd.ez')).toBe(true);
+    expect(await gone('/game/sound/Alpha/stem_0_2.ssf')).toBe(true);
+    expect((await b.list('/game/sound/Alpha')).map((e) => e.name)).toEqual([
+      'kick.ssf',
+      'StreetMix1p-alpha.ez',
+    ]);
+    // Twice: nothing left to do.
+    expect((await b.export.restore('/game', '20260923-alpha')).skipped).toHaveLength(3);
+  });
+
+  it('refuses a stale plan, a reused file that changed, and paths outside', async () => {
+    const b = webBackend(game());
+    const one = (path: string, expect?: string) => ({
+      stamp: 's',
+      files: [{ path, bytes: enc('x'), ...(expect ? { expect } : {}) }],
+    });
+    await expect(b.export.toGame('/game', one('sound/Alpha/kick.ssf', 'absent'))).rejects.toThrow(
+      /plan it again/,
+    );
+    await expect(
+      b.export.toGame('/game', one('sound/Alpha/kick.ssf', '0000000000000000')),
+    ).rejects.toThrow(/plan it again/);
+    await expect(
+      b.export.toGame('/game', {
+        ...one('sound/Alpha/n.ssf'),
+        keep: [{ path: 'sound/Alpha/kick.ssf', fnv: '0000000000000000' }],
+      }),
+    ).rejects.toThrow(/changed or gone/);
+    await expect(b.export.toGame('/game', one('../x'))).rejects.toThrow(/inside/);
+    await expect(b.export.toGame('/game', one('.ez2bms-backup/x'))).rejects.toThrow(/inside/);
+    expect(await b.export.backups('/game')).toEqual([]);
+    // A changed file is left alone by restore, unless forced.
+    await b.export.toGame('/game', one('sound/Alpha/StreetMix1p-alpha.ez'));
+    await b.writeBytes('/game/sound/Alpha/StreetMix1p-alpha.ez', enc('by hand'), false);
+    expect((await b.export.restore('/game', 's')).conflicts).toEqual([
+      'sound/Alpha/StreetMix1p-alpha.ez',
+    ]);
+    expect((await b.export.restore('/game', 's', true)).restored).toHaveLength(1);
+  });
+
+  it('writes a new folder, and never over one that has files', async () => {
+    const b = webBackend(game());
+    const r = await b.export.toFolder('/out', {
+      files: [{ path: 'sound/alpha/a.ez', bytes: enc('a') }],
+    });
+    expect(r).toEqual({ dir: '/out', files: 1 });
+    expect(new TextDecoder().decode(await b.readFile('/out/sound/alpha/a.ez'))).toBe('a');
+    await expect(b.export.toFolder('/out', { files: [] })).rejects.toThrow(/not empty/);
+  });
+});

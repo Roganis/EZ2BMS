@@ -13,8 +13,10 @@ import {
   centreSquare,
   eyecatchExtent,
   type ArtJob,
+  type EzTables,
   type PlateSpec,
 } from '@ez2bms/chart-core';
+import { memoryExport } from './web-export';
 import { demoFiles, demoSeconds, demoStem, demoStemLevel, DEMO_DIR } from './demo';
 
 /** An .ssf/.ezw as a WAV, its PCM untouched (the host's ez2bms-audio import.rs / wav::wrap_pcm). */
@@ -203,6 +205,7 @@ export function canvasPlate(spec: PlateSpec): PlatePixels {
 export function webBackend(
   seed: Map<string, Uint8Array> = demoFiles(),
   defaults: Record<string, unknown> = {},
+  opts: { gameTables?: EzTables } = {},
 ): Backend {
   const files = new Map(seed);
   const mtimes = new Map<string, number>();
@@ -728,6 +731,8 @@ export function webBackend(
       },
       stop: async () => {},
     },
+    export: memoryExport({ files, mtimes, norm }),
+    ...(opts.gameTables ? { devGameTables: opts.gameTables } : {}),
   };
   return backend;
 }

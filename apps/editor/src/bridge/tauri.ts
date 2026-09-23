@@ -12,6 +12,10 @@ import type {
   Backend,
   ClockSnapshot,
   Entry,
+  ExportBackup,
+  ExportJob,
+  ExportProbeResult,
+  ExportReport,
   Imported,
   ImportReport,
   Inspection,
@@ -21,6 +25,7 @@ import type {
   Probe,
   ProjectScan,
   Published,
+  RestoreReport,
   RunEvent,
   SoundAnalysis,
   TestSpec,
@@ -31,6 +36,20 @@ const bytesOf = (r: unknown): Uint8Array =>
   r instanceof ArrayBuffer ? new Uint8Array(r) : new Uint8Array(r as number[]);
 
 /** Rust's Vec<u8> arrives from JSON as an array of numbers. */
+/** An export job over IPC: bytes as arrays, as a package's are. */
+const wireJob = (j: ExportJob) => ({
+  stamp: j.stamp ?? null,
+  label: j.label ?? null,
+  files: j.files.map((f) => ({
+    path: f.path,
+    bytes: Array.from(f.bytes),
+    expect: f.expect ?? null,
+  })),
+  copies: (j.copies ?? []).map((c) => ({ ...c, expect: c.expect ?? null })),
+  sounds: (j.sounds ?? []).map((s) => ({ ...s, expect: s.expect ?? null })),
+  keep: j.keep ?? [],
+});
+
 const wirePackage = (p: PackageSpec) => ({
   ...p,
   files: p.files.map((f) => ({ path: f.path, bytes: Array.from(f.bytes) })),
@@ -190,6 +209,22 @@ export function tauriBackend(): Backend {
         });
       },
       stop: (id) => invoke('port_stop', { id }),
+    },
+    export: {
+      probe: (sounds) => invoke<ExportProbeResult[]>('export_probe', { sounds }),
+      toGame: (root, job, onProgress) => {
+        const ch = new Channel<[number, number]>();
+        ch.onmessage = ([d, t]) => onProgress?.(d, t);
+        return invoke<ExportReport>('export_game', { root, job: wireJob(job), onProgress: ch });
+      },
+      toFolder: (dest, job, onProgress) => {
+        const ch = new Channel<[number, number]>();
+        ch.onmessage = ([d, t]) => onProgress?.(d, t);
+        return invoke('export_folder', { dest, job: wireJob(job), onProgress: ch });
+      },
+      backups: (root) => invoke<ExportBackup[]>('export_backups', { root }),
+      restore: (root, stamp, force) =>
+        invoke<RestoreReport>('export_restore', { root, stamp, force: force ?? false }),
     },
   };
 }

@@ -3,7 +3,7 @@
 // (in-memory files, a silent clock) in a browser and in Playwright. The
 // shapes mirror src-tauri's commands one for one.
 
-import type { ArtJob, PlateSpec } from '@ez2bms/chart-core';
+import type { ArtJob, EzTables, PlateSpec } from '@ez2bms/chart-core';
 
 export interface Entry {
   name: string;
@@ -281,6 +281,87 @@ export interface ImportReport {
   failed: [string, string][];
 }
 
+/** A cabinet keysound to look for in the game's folder (src-tauri export.rs ProbeSound). */
+export interface ExportProbe {
+  src: string;
+  start_frame: number;
+  end_frame: number | null;
+  /** Files already there that may hold it. */
+  candidates: string[];
+}
+
+export interface ExportProbeResult {
+  /** How it would be made ('rewrap': its PCM untouched; 'cut': at 44.1 kHz). */
+  how: 'rewrap' | 'copy' | 'cut' | 'decode' | null;
+  /** The candidate that already holds exactly its audio. */
+  equal: number | null;
+  /** That file's FNV-1a (hex). */
+  fnv: string | null;
+  /** Why the source cannot be read. */
+  error: string | null;
+}
+
+/** "any", "absent", or the FNV-1a (hex) of the bytes there now. */
+export type ExportExpect = 'any' | 'absent' | string;
+
+/** An export (src-tauri export.rs ExportJobDto): paths are relative to the game folder or the new one. */
+export interface ExportJob {
+  /** A backup's name (game folder only). */
+  stamp?: string;
+  label?: string;
+  files: { path: string; bytes: Uint8Array; expect?: ExportExpect }[];
+  copies?: { from: string; path: string; expect?: ExportExpect }[];
+  sounds?: {
+    src: string;
+    start_frame: number;
+    end_frame: number | null;
+    path: string;
+    format: 'ssf' | 'wav';
+    expect?: ExportExpect;
+  }[];
+  /** Files relied on as they are. */
+  keep?: { path: string; fnv: string }[];
+}
+
+export interface ExportReport {
+  stamp: string;
+  created: string[];
+  replaced: string[];
+}
+
+export interface ExportBackup {
+  stamp: string;
+  label: string;
+  created_ms: number;
+  state: 'applying' | 'applied' | 'restored' | string;
+  files: number;
+}
+
+export interface RestoreReport {
+  restored: string[];
+  removed: string[];
+  conflicts: string[];
+  skipped: string[];
+}
+
+export interface ExportBackend {
+  probe(sounds: ExportProbe[]): Promise<ExportProbeResult[]>;
+  /** Into a game folder, all or nothing, with a backup (ez2bms-launch gamepatch.rs). */
+  toGame(
+    root: string,
+    job: ExportJob,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<ExportReport>;
+  /** Into a new folder, which must not exist or be empty. */
+  toFolder(
+    dest: string,
+    job: ExportJob,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<{ dir: string; files: number }>;
+  backups(root: string): Promise<ExportBackup[]>;
+  restore(root: string, stamp: string, force?: boolean): Promise<RestoreReport>;
+}
+
 /** What an import takes; other files offered with it are refused (src-tauri files::ImportKind). */
 export type ImportKind = 'audio' | 'image' | 'movie';
 
@@ -352,6 +433,12 @@ export interface Backend {
   readonly audio: AudioBackend;
   readonly port: PortBackend;
   readonly media: MediaBackend;
+  readonly export: ExportBackend;
+  /**
+   * Chart tables for the browser build's made-up game (its made-up executable
+   * cannot carry real ones); never set in the desktop app.
+   */
+  readonly devGameTables?: EzTables;
 }
 
 /** Path helpers that work on both separators. */
