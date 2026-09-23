@@ -7,14 +7,16 @@ import {
   convertBms,
   EZ2_BME_MAP,
   guessMode,
+  inverseMap,
   keysInOrderMap,
   measureRational,
 } from '../src/io/bms/convert';
 import { decodeAs, decodeBms } from '../src/io/bms/decode';
-import { bmsIdNumber, parseBms } from '../src/io/bms/parse';
+import { bmsId, bmsIdNumber, parseBms } from '../src/io/bms/parse';
 import { importBmsSong } from '../src/io/bms/song';
 import { serializeBmson } from '../src/io/bmson/serialize';
 import { parseBmson } from '../src/io/bmson/parse';
+import { MODES } from '../src/modes/ids';
 import type { ChartData } from '../src/model/types';
 
 const bytes = (...parts: (string | number[])[]) =>
@@ -220,6 +222,90 @@ describe('the chart', () => {
     const keys = convertBms(parseBms(text), { mode: '14k', map: keysInOrderMap('14k') }).data;
     // 1P keys 1, 6, 7 then 2P keys 1 and 6: SpaceMix keys 1, 6, 7, 8 and 13.
     expect(keys.notes.map((n) => n.x).sort((a, b) => a - b)).toEqual([11, 24, 31, 32, 33]);
+  });
+
+  it('maps each side in key order: 5+5 files onto 10K and Catch, 7 keys onto 7K', () => {
+    const lanesOf = (mode: Parameters<typeof keysInOrderMap>[0]) =>
+      Object.fromEntries(
+        Object.entries(keysInOrderMap(mode).lanes).filter(([ch]) => ch !== '16' && ch !== '26'),
+      );
+    const five = { '11': 11, '12': 12, '13': 13, '14': 14, '15': 15 };
+    const five2 = { '21': 21, '22': 22, '23': 23, '24': 24, '25': 25 };
+    for (const m of ['5k-only', 'scratch', 'ruby', '5k'] as const) expect(lanesOf(m)).toEqual(five);
+    expect(lanesOf('7k')).toEqual({ ...five, '18': 31, '19': 32 });
+    expect(lanesOf('10k')).toEqual({ ...five, ...five2 });
+    expect(lanesOf('catch')).toEqual({ ...five, ...five2 });
+    // SpaceMix and Andromeda: fourteen keys in play order, as before the per-side split.
+    const space = {
+      ...five,
+      '18': 31,
+      '19': 32,
+      '21': 33,
+      '22': 34,
+      '23': 21,
+      '24': 22,
+      '25': 23,
+      '28': 24,
+      '29': 25,
+    };
+    expect(lanesOf('14k')).toEqual(space);
+    expect(lanesOf('andromeda')).toEqual(space);
+    for (const { id: m } of MODES)
+      expect(keysInOrderMap(m).lanes).toMatchObject({ '16': 1, '26': 2 });
+    // A 10-key file in key order lands on its own lanes.
+    const text = base + '#00011:01\n#00015:01\n#00021:01\n#00025:01\n';
+    const tenKey = convertBms(parseBms(text), { mode: '10k', map: keysInOrderMap('10k') }).data;
+    expect(tenKey.notes.map((n) => n.x).sort((a, b) => a - b)).toEqual([11, 15, 21, 25]);
+  });
+
+  it("EZ2 BME is the lanes' own BME channels, and turns around for writing", () => {
+    expect(EZ2_BME_MAP.lanes).toEqual({
+      '11': 11,
+      '12': 12,
+      '13': 13,
+      '14': 14,
+      '15': 15,
+      '16': 1,
+      '17': 10,
+      '18': 31,
+      '19': 32,
+      '21': 21,
+      '22': 22,
+      '23': 23,
+      '24': 24,
+      '25': 25,
+      '26': 2,
+      '27': 20,
+      '28': 33,
+      '29': 34,
+    });
+    const inv = inverseMap(EZ2_BME_MAP, '7k');
+    expect([...inv].sort((a, b) => a[0] - b[0])).toEqual([
+      [1, '16'],
+      [10, '17'],
+      [11, '11'],
+      [12, '12'],
+      [13, '13'],
+      [14, '14'],
+      [15, '15'],
+      [31, '18'],
+      [32, '19'],
+    ]);
+    // Every mode's every lane has a channel in EZ2 BME; in key order, 17/27 have none.
+    for (const { id: m } of MODES) expect(inverseMap(EZ2_BME_MAP, m).size).toBeGreaterThan(4);
+    expect(inverseMap(keysInOrderMap('5k'), '5k').has(10)).toBe(false);
+    expect(inverseMap(keysInOrderMap('14k'), '14k').get(33)).toBe('21');
+  });
+
+  it('writes ids the reader reads back, in base 36 and 62', () => {
+    for (const base of [36, 62] as const)
+      for (let n = 0; n < base * base; n++) expect(bmsIdNumber(bmsId(n, base), base)).toBe(n);
+    expect(bmsId(1)).toBe('01');
+    expect(bmsId(1295)).toBe('ZZ');
+    expect(bmsId(36 * 62 + 36, 62)).toBe('aa');
+    expect(bmsId(3843, 62)).toBe('zz');
+    expect(() => bmsId(1296)).toThrow(RangeError);
+    expect(() => bmsId(-1)).toThrow(RangeError);
   });
 
   it('chooses the smallest mode that has every lane', () => {

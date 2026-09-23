@@ -288,6 +288,18 @@ function mergeSlots(a: string[], b: string[]): string[] {
   return out;
 }
 
+const DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+
+/**
+ * A number's two-digit id, the inverse of bmsIdNumber: base 36 in upper case
+ * (01 ... ZZ = 1295), base 62 with lower case after upper (... zz = 3843).
+ */
+export function bmsId(n: number, base: 36 | 62 = 36): string {
+  if (!Number.isInteger(n) || n < 0 || n >= base * base)
+    throw new RangeError(`${n} is not a two-digit base-${base} id`);
+  return DIGITS[Math.floor(n / base)]! + DIGITS[n % base]!;
+}
+
 /** A base-36 (or 62) id's number: 00 -> 0, 0Z -> 35, 10 -> 36. */
 export function bmsIdNumber(id: string, base: 36 | 62 = 36): number {
   const digit = (c: string) => {

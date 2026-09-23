@@ -71,8 +71,11 @@ chart of the song. For each file the wizard shows:
 - **Lanes**: how BMS channels map to lanes:
   - **EZ2 BME**: EZ2's own channels (keys 11-15, turntable 16, pedal 17,
     effectors 18/19; the 2P side 21-29);
-  - **Keys in order**: the IIDX/beat layout onto the mode's keys left to
-    right. They differ only for SpaceMix's 2P side.
+  - **Keys in order**: the IIDX/beat layout, each side's keys (1-5, 6, 7)
+    onto that side's keys left to right; a double mode's keys are split into
+    a left and a right half. It differs from EZ2 BME on SpaceMix's and
+    Andromeda's 2P side (EZ2 puts the effectors between the sides), and
+    leaves 17/27 (EZ2's pedals) to the background.
 - **Mode and tier**: guessed from the lanes used (the smallest mode that has
   them all) and from `#DIFFICULTY` or the file name. Two files cannot be the
   same chart; the second is marked until you give it another tier.

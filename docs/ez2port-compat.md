@@ -295,6 +295,16 @@ before anything else, EUC-KR and Shift-JIS are both in the wild. What an
 EZ2 chart cannot hold - hidden notes, mines, scroll and speed changes,
 image BGAs - is left out or kept unplayed, and Issues says which.
 
+Korean text is CP949 (windows-949) as the game's Windows and every browser
+read it. Node's `TextDecoder('euc-kr')` (ICU) is plain EUC-KR - KS X 1001
+only, without CP949's 8822 extra Hangul syllables or the euro and registered
+signs of KS X 1001:1998 - so the unit tests, which run in Node, decode such
+a file without those characters, while the editor, which decodes in its
+webview, reads them. Writing is the same everywhere: `io/legacy-text.ts`
+takes only the KS X 1001 region from the decoder (Node and Chromium agree
+on all 8224 pairs) and computes the rest, which is Unified Hangul Code's
+own definition (checked against Chromium's decoder: all 8822).
+
 ## Cutting a stem at a MIDI file's notes (M5, not in the oracle)
 
 EZ2PORT reads no MIDI. The file says only where to cut: the cuts are M4's

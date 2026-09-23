@@ -6,6 +6,7 @@ export * from './model/types';
 export * from './model/defaults';
 export * from './modes/ids';
 export * from './io/text';
+export * from './io/legacy-text';
 export * from './io/bmson/parse';
 export * from './io/bmson/serialize';
 export * from './io/bmson/mode-resolve';

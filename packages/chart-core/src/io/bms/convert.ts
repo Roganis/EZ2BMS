@@ -27,6 +27,7 @@
 import type { OpenNote, Severity } from '../../lint/lint';
 import { newChart } from '../../model/defaults';
 import type { BgaData, ChartData, NoteRec, SoundChannel, Tier } from '../../model/types';
+import { LANES } from '../../modes/lanes';
 import { modeDef } from '../../modes/registry';
 import type { ModeId } from '../../modes/ids';
 import { bmsIdNumber, type BmsDoc } from './parse';
@@ -42,66 +43,63 @@ export interface BmsChannelMap {
   lanes: Record<string, number>;
 }
 
-/** EZ2's own BME channels (modes/lanes.ts `bme`): what EZ2 conversions and BmsTWO's EZ2 docs use. */
+/**
+ * EZ2's own BME channels - each lane's `bme` in modes/lanes.ts, the one table
+ * both the reader and the BMS export use: keys 11-15 and 21-25, turntables
+ * 16/26, pedals 17/27, effectors 18/19/28/29 (what EZ2 conversions and
+ * BmsTWO's EZ2 docs use).
+ */
 export const EZ2_BME_MAP: BmsChannelMap = {
   id: 'ez2',
   label: 'EZ2 BME',
-  lanes: {
-    '11': 11,
-    '12': 12,
-    '13': 13,
-    '14': 14,
-    '15': 15,
-    '16': 1,
-    '17': 10,
-    '18': 31,
-    '19': 32,
-    '21': 21,
-    '22': 22,
-    '23': 23,
-    '24': 24,
-    '25': 25,
-    '26': 2,
-    '27': 20,
-    '28': 33,
-    '29': 34,
-  },
+  lanes: Object.fromEntries(LANES.map((l) => [l.bme, l.x])),
 };
 
-/** The BMS key order (1P 11-15, 18, 19; 2P 21-25, 28, 29) onto a mode's keys in play order. */
-const KEY_ORDER = [
-  '11',
-  '12',
-  '13',
-  '14',
-  '15',
-  '18',
-  '19',
-  '21',
-  '22',
-  '23',
-  '24',
-  '25',
-  '28',
-  '29',
-];
+/** The BMS keys of each side, in play order: 1-5, then 6 and 7 (IIDX/beat). */
+const SIDE_KEYS = [
+  ['11', '12', '13', '14', '15', '18', '19'],
+  ['21', '22', '23', '24', '25', '28', '29'],
+] as const;
 
 /**
- * IIDX/beat style: the keys in their BMS order onto the mode's key lanes left
- * to right, the turntables onto the turntables. Differs from EZ2 BME only
- * where EZ2 orders keys differently - SpaceMix's 2P side.
+ * IIDX/beat style: each side's keys in their BMS order onto the mode's key
+ * lanes left to right, the turntables onto the turntables. A single mode takes
+ * the 1P keys; a double mode (10K, 14K, Andromeda, Catch) splits its key
+ * lanes into a left and a right half, one per side - so a 5+5 file lands on
+ * 10K's 1P and 2P keys, and a 7+7 file on SpaceMix's fourteen keys in order.
+ * Differs from EZ2 BME where EZ2 orders keys differently (SpaceMix's and
+ * Andromeda's effectors sit between the two sides), and in leaving 17/27 -
+ * EZ2's pedals, IIDX's free zone - to the background.
  */
 export function keysInOrderMap(mode: ModeId): BmsChannelMap {
   const cols = modeDef(mode).columns.filter(
     (c) => c.kind === 'white' || c.kind === 'blue' || c.kind === 'effector',
   );
   const lanes: Record<string, number> = { '16': 1, '26': 2 };
-  // One player's 5- or 7-key file onto 1P, two players' onto both.
-  cols.forEach((c, i) => {
-    const ch = KEY_ORDER[i];
-    if (ch) lanes[ch] = c.x;
-  });
+  const double = cols.some((c) => c.side === 2);
+  const halves = double
+    ? [cols.slice(0, Math.ceil(cols.length / 2)), cols.slice(Math.ceil(cols.length / 2))]
+    : [cols];
+  halves.forEach((half, side) =>
+    half.forEach((c, i) => {
+      const ch = SIDE_KEYS[side]![i];
+      if (ch) lanes[ch] = c.x;
+    }),
+  );
   return { id: 'keys', label: 'Keys in order', lanes };
+}
+
+/**
+ * A map the other way, for writing BMS: each of the mode's lanes -> its
+ * channel (the first channel that names it). A lane the map does not place is
+ * missing, and its notes are written as background.
+ */
+export function inverseMap(map: BmsChannelMap, mode: ModeId): Map<number, string> {
+  const out = new Map<number, string>();
+  const lanes = new Set(modeDef(mode).columns.map((c) => c.x));
+  for (const [ch, x] of Object.entries(map.lanes).sort(([a], [b]) => a.localeCompare(b)))
+    if (lanes.has(x) && !out.has(x)) out.set(x, ch);
+  return out;
 }
 
 // ---- rationals ------------------------------------------------------------------
