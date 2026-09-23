@@ -8,6 +8,7 @@
   import StatusBar from './StatusBar.svelte';
   import TopBar from './TopBar.svelte';
   import Workbench from './workbench/Workbench.svelte';
+  import SongManager from './song/SongManager.svelte';
 
   let { project }: { project: Project } = $props();
   const slot = $derived(project.active);
@@ -56,6 +57,9 @@
       {/if}
       {#if app.view.workbench}
         <Workbench {project} />
+      {/if}
+      {#if app.view.songManager}
+        <SongManager {project} />
       {/if}
     </div>
     {#if app.view.right && slot}

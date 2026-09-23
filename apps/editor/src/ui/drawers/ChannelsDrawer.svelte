@@ -62,7 +62,7 @@
       class:on={app.view.workbench}
       title="Every sound of the song, with waveforms (Ctrl+Shift+B)"
       data-testid="open-workbench"
-      onclick={() => (app.view.workbench = !app.view.workbench)}>▦</button
+      onclick={() => app.commands.run('view.workbench')}>▦</button
     >
   </div>
   <ul data-testid="channels">

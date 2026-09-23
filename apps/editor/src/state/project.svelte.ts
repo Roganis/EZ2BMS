@@ -173,6 +173,22 @@ export class Project {
     return slot;
   }
 
+  /** Take a chart out of the song (its file is the caller's business). Returns where it was. */
+  detachChart(slot: ChartSlot): number {
+    const i = this.charts.indexOf(slot);
+    if (i < 0) return -1;
+    const active = this.active;
+    this.charts.splice(i, 1);
+    const keep = active && active !== slot ? this.charts.indexOf(active) : Math.max(0, i - 1);
+    this.activeIndex = Math.max(0, keep);
+    return i;
+  }
+
+  /** Put a chart back (undoing a removal), with its history as it was. */
+  attachChart(slot: ChartSlot, at: number): void {
+    this.charts.splice(Math.min(Math.max(0, at), this.charts.length), 0, slot);
+  }
+
   /**
    * Write a chart, renaming its file first when its name should follow a new
    * tier or key. Returns the old name when it was renamed. A rename the disk

@@ -39,8 +39,11 @@ export function registerBuiltins(app: App): void {
       global: true,
       enabled: () => !!app.project,
       run: async () => {
-        const n = await app.project!.saveAll();
+        const p = app.project!;
+        const n = await p.saveAll();
         toast(n ? `Saved ${n} chart${n === 1 ? '' : 's'}` : 'Nothing to save', n ? 'ok' : 'info');
+        // A chart whose new name the disk refused keeps its old one; say so.
+        for (const f of p.renameFailures.splice(0)) toast(`Kept the old file name - ${f}`, 'warn');
       },
     },
     {
@@ -233,7 +236,22 @@ export function registerBuiltins(app: App): void {
       keys: ['Mod+Shift+B'],
       global: true,
       enabled: () => !!app.project,
-      run: () => (v.workbench = !v.workbench),
+      run: () => {
+        v.workbench = !v.workbench;
+        if (v.workbench) v.songManager = false;
+      },
+    },
+    {
+      id: 'view.songManager',
+      title: 'Song manager (info, category, every chart)',
+      group: 'View',
+      keys: ['Mod+Shift+L'],
+      global: true,
+      enabled: () => !!app.project,
+      run: () => {
+        v.songManager = !v.songManager;
+        if (v.songManager) v.workbench = false;
+      },
     },
     {
       id: 'sounds.import',

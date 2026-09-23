@@ -36,6 +36,12 @@ export class View {
   hoverLane = $state<number | null>(null);
   /** The keysound workbench is open over the playfield. */
   workbench = $state(false);
+  /** The song manager is open over the playfield. */
+  songManager = $state(false);
+  /** Something covers the chart: only app-wide keys act. */
+  get covered(): boolean {
+    return this.workbench || this.songManager;
+  }
   /** How far the background rack is scrolled sideways, design units. */
   rackScroll = $state(0);
 

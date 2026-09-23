@@ -96,3 +96,85 @@ test('a new song key renames every chart on save, and the category is kept in th
   expect(song).toMatchObject({ key: 'neonparty', category: 38 });
   await expect(page.locator('.chart .dot')).toHaveCount(0);
 });
+
+// ---- the song manager
+
+async function manager(page: Page) {
+  await page.goto('/?e2e');
+  await page.getByTestId('open-folder').click();
+  await expect(page.locator('[data-testid=playfield] canvas')).toBeVisible();
+  await page.getByTestId('open-song').click();
+  await expect(page.getByTestId('song-manager')).toBeVisible();
+}
+
+const cell = (page: Page, id: string) => page.locator(`[data-cell="${id}"]`);
+const charts = (page: Page): Promise<string[]> =>
+  page.evaluate(() =>
+    (window as unknown as W).__ez2bms.project.charts
+      .map((c: any) => `${c.mode}.${c.tier}:${c.doc.data.notes.length}`)
+      .sort(),
+  );
+
+test('the matrix makes a chart in an empty cell and opens it', async ({ page }) => {
+  await manager(page);
+  await expect(cell(page, '7k.HD')).toContainText('not listed');
+  await cell(page, '7k.NM').click();
+  await expect(page.getByTestId('song-manager')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /7 KEY NM/ })).toBeVisible();
+  const active = await page.evaluate(() => {
+    const a = (window as unknown as W).__ez2bms;
+    return { file: a.slot.file, sounds: a.doc.data.channels.length };
+  });
+  expect(active).toEqual({ file: '7streetmix1p-neonparade.bmson', sounds: 12 });
+  // A level-1 NM makes the 7K HD listed.
+  await page.keyboard.press('Control+Shift+L');
+  await expect(cell(page, '7k.HD')).not.toContainText('not listed');
+});
+
+test('Copy duplicates a chart into another cell; Move makes it another tier', async ({ page }) => {
+  await manager(page);
+  const [nm, hd7] = (await charts(page)).map((c) => c.split(':')[1]);
+  const hd = cell(page, '7k.HD');
+  await hd.hover();
+  await hd.getByRole('button', { name: 'Copy' }).click();
+  await cell(page, '5k.EX').click();
+  await hd.hover();
+  await hd.getByRole('button', { name: 'Move' }).click();
+  // Moving stays in the mode: other modes' cells are not targets.
+  await expect(cell(page, '10k.EX')).toBeDisabled();
+  await cell(page, '7k.SHD').click();
+  expect(await charts(page)).toEqual([`5k.EX:${hd7}`, `5k.NM:${nm}`, `7k.SHD:${hd7}`]);
+  await expect(cell(page, '7k.SHD')).toContainText('12');
+});
+
+test('removing a chart moves its file aside, and Undo brings it back', async ({ page }) => {
+  await manager(page);
+  const hd = cell(page, '7k.HD');
+  await hd.hover();
+  await hd.getByRole('button', { name: '×' }).click();
+  await expect(page.getByText(/Removed 7 KEY HD/)).toBeVisible();
+  expect(await files(page)).not.toContain('7streetmix1p-neonparade-hd.bmson');
+  expect(await charts(page)).toHaveLength(1);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(() => files(page)).toContain('7streetmix1p-neonparade-hd.bmson');
+  expect(await charts(page)).toHaveLength(2);
+});
+
+test('song info set in the manager is one step per chart, undone everywhere from the toast', async ({
+  page,
+}) => {
+  await manager(page);
+  await page.locator('#sm-genre').fill('Eurobeat');
+  await page.locator('#sm-genre').press('Enter');
+  await expect(page.getByText('Song info changed in 2 charts')).toBeVisible();
+  const genres = () =>
+    page.evaluate(() =>
+      (window as unknown as W).__ez2bms.project.charts.map((c: any) => c.doc.data.info.genre),
+    );
+  expect(await genres()).toEqual(['Eurobeat', 'Eurobeat']);
+  await page.getByRole('button', { name: 'Undo in all charts' }).click();
+  expect(await genres()).toEqual(['DEMO', 'DEMO']);
+  await page.getByTestId('category').selectOption('1');
+  const song = JSON.parse(await readSong(page, 'ez2bms.song.json'));
+  expect(song.category).toBe(1);
+});

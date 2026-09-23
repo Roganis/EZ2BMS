@@ -136,6 +136,7 @@ export class App {
   closeProject(): void {
     this.audio.forget();
     this.view.workbench = false;
+    this.view.songManager = false;
     this.project = null;
   }
 

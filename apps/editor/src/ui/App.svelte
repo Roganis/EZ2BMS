@@ -22,7 +22,7 @@
     void app.init();
     const onKey = (e: KeyboardEvent) => {
       if (app.view.paletteOpen && e.key !== 'Escape') return;
-      app.commands.handleKey(e, app.view.workbench);
+      app.commands.handleKey(e, app.view.covered);
     };
     const onUnload = (e: BeforeUnloadEvent) => {
       if (app.project?.dirty) e.preventDefault();

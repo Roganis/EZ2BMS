@@ -65,33 +65,34 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 
 ## View
 
-| Command                   | Keys              | Palette        |
-| ------------------------- | ----------------- | -------------- |
-| Chart info                | `Ctrl+J`          |                |
-| Coarser snap              | `[`               |                |
-| Command palette           | `Ctrl+K`          |                |
-| Cursor down one measure   | `PageDown`        |                |
-| Cursor down one snap      | `Down`            |                |
-| Cursor up one measure     | `PageUp`          |                |
-| Cursor up one snap        | `Up`              |                |
-| EZ2PORT log               |                   |                |
-| EZ2PORT settings          |                   |                |
-| Finer snap                | `]`               |                |
-| Game skin on / off        |                   |                |
-| Go to last note           | `End`             |                |
-| Go to measure…            |                   | `goto measure` |
-| Go to start               | `Home`            |                |
-| Inspector                 | `Ctrl+I`          |                |
-| Issues (pre-flight check) | `Ctrl+Shift+I`    |                |
-| Keysound workbench        | `Ctrl+Shift+B`    |                |
-| Play speed…               |                   | `speed 250`    |
-| Show / hide sounds        | `Ctrl+B`          |                |
-| Snap to…                  |                   | `snap 1/16`    |
-| Swap P1 / P2 view         | `F2`              |                |
-| Switch Edit / Play view   | `Tab`             |                |
-| Timing                    | `Ctrl+T`          |                |
-| Zoom in                   | `Ctrl+=` `Ctrl++` |                |
-| Zoom out                  | `Ctrl+-`          |                |
+| Command                                    | Keys              | Palette        |
+| ------------------------------------------ | ----------------- | -------------- |
+| Chart info                                 | `Ctrl+J`          |                |
+| Coarser snap                               | `[`               |                |
+| Command palette                            | `Ctrl+K`          |                |
+| Cursor down one measure                    | `PageDown`        |                |
+| Cursor down one snap                       | `Down`            |                |
+| Cursor up one measure                      | `PageUp`          |                |
+| Cursor up one snap                         | `Up`              |                |
+| EZ2PORT log                                |                   |                |
+| EZ2PORT settings                           |                   |                |
+| Finer snap                                 | `]`               |                |
+| Game skin on / off                         |                   |                |
+| Go to last note                            | `End`             |                |
+| Go to measure…                             |                   | `goto measure` |
+| Go to start                                | `Home`            |                |
+| Inspector                                  | `Ctrl+I`          |                |
+| Issues (pre-flight check)                  | `Ctrl+Shift+I`    |                |
+| Keysound workbench                         | `Ctrl+Shift+B`    |                |
+| Play speed…                                |                   | `speed 250`    |
+| Show / hide sounds                         | `Ctrl+B`          |                |
+| Snap to…                                   |                   | `snap 1/16`    |
+| Song manager (info, category, every chart) | `Ctrl+Shift+L`    |                |
+| Swap P1 / P2 view                          | `F2`              |                |
+| Switch Edit / Play view                    | `Tab`             |                |
+| Timing                                     | `Ctrl+T`          |                |
+| Zoom in                                    | `Ctrl+=` `Ctrl++` |                |
+| Zoom out                                   | `Ctrl+-`          |                |
 
 ## Play
 

@@ -8,7 +8,6 @@
     LANES,
     modeDef,
     MODES,
-    newChart,
     type ModeId,
     type Tier,
   } from '@ez2bms/chart-core';
@@ -34,24 +33,10 @@
   const kindOf = (x: number) => LANES.find((l) => l.x === x)?.kind ?? 'white';
 
   function create() {
-    if (!isValidSongKey(key))
-      return toast('Set a song key first (1-15 lowercase letters or digits)', 'warn');
     if (taken) return toast('This song already has that chart', 'warn');
-    const info = base?.info;
-    const data = newChart({
-      mode,
-      tier,
-      level,
-      bpm,
-      title: info?.title || p.name,
-      artist: info?.artist ?? '',
-      genre: info?.genre ?? '',
-    });
-    if (copySounds && base)
-      data.channels = base.channels.map((c, i) => ({ id: i + 1, name: c.name }));
-    p.addChart(file, data, mode, tier);
-    app.selectChart(p.charts.length - 1);
-    toast(`New chart: ${file}`, 'ok');
+    const slot = app.song.createChart(mode, tier, { level, bpm, copySounds });
+    if (!slot) return;
+    toast(`New chart: ${slot.file}`, 'ok');
     onclose();
   }
 

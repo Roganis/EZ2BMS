@@ -28,6 +28,14 @@
 
 <header class="bar">
   <div class="brand"><span class="ez">EZ2</span>BMS</div>
+  <button
+    class="song"
+    class:on={app.view.songManager}
+    title="Song manager: info, category and every chart (Ctrl+Shift+L)"
+    data-testid="open-song"
+    onclick={() => app.commands.run('view.songManager')}
+    >SONG <span>{project.sidecar.key || project.name}</span></button
+  >
   <nav class="charts" aria-label="Charts">
     {#each project.charts as c, i (c.file)}
       <button
@@ -123,6 +131,34 @@
   }
   .ez {
     color: var(--neon);
+  }
+  .song {
+    all: unset;
+    cursor: pointer;
+    flex: none;
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    padding: 4px 10px;
+    border-radius: 7px;
+    border: 1px solid rgba(88, 225, 255, 0.28);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--neon);
+  }
+  .song span {
+    font: 12px var(--font-ui);
+    letter-spacing: 0;
+    color: var(--ink);
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .song:hover,
+  .song.on {
+    background: rgba(88, 225, 255, 0.1);
+    border-color: var(--neon);
   }
   .charts {
     display: flex;
