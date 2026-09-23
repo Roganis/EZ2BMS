@@ -32,8 +32,12 @@ fn game(name: &str) -> PathBuf {
     root
 }
 
-/// Every file under root but our dot-folders, with its bytes.
+/// Every file under root but our dot-folders, with its bytes, keyed by its
+/// path with forward slashes on every platform (as the reports give them).
 fn tree(root: &Path) -> BTreeMap<String, Vec<u8>> {
+    fn rel(root: &Path, p: &Path) -> String {
+        p.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/")
+    }
     fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
         for e in std::fs::read_dir(dir).unwrap().flatten() {
             let p = e.path();
@@ -42,13 +46,10 @@ fn tree(root: &Path) -> BTreeMap<String, Vec<u8>> {
                 continue;
             }
             if p.is_dir() {
-                out.insert(format!("{}/", p.strip_prefix(root).unwrap().display()), vec![]);
+                out.insert(format!("{}/", rel(root, &p)), vec![]);
                 walk(root, &p, out);
             } else {
-                out.insert(
-                    p.strip_prefix(root).unwrap().display().to_string(),
-                    std::fs::read(&p).unwrap(),
-                );
+                out.insert(rel(root, &p), std::fs::read(&p).unwrap());
             }
         }
     }
