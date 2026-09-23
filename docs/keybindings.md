@@ -13,13 +13,14 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 
 ## File
 
-| Command                            | Keys     | Palette |
-| ---------------------------------- | -------- | ------- |
-| Close song                         |          |         |
-| Import a song… (EZ2AC, BMS, bmson) |          |         |
-| New song…                          |          |         |
-| Open song folder…                  | `Ctrl+O` |         |
-| Save                               | `Ctrl+S` |         |
+| Command                                            | Keys     | Palette |
+| -------------------------------------------------- | -------- | ------- |
+| Close song                                         |          |         |
+| Forget what the import said (clear it from Issues) |          |         |
+| Import a song… (EZ2AC, BMS, bmson)                 |          |         |
+| New song…                                          |          |         |
+| Open song folder…                                  | `Ctrl+O` |         |
+| Save                                               | `Ctrl+S` |         |
 
 ## Edit
 

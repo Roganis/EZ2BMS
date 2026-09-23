@@ -63,7 +63,7 @@ export function registerBuiltins(app: App): void {
     {
       id: 'song.clearImportNotes',
       title: 'Forget what the import said (clear it from Issues)',
-      group: 'Song',
+      group: 'File',
       enabled: () =>
         !!app.project &&
         (app.project.importNotes.length > 0 ||
