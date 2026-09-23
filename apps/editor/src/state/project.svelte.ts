@@ -114,6 +114,12 @@ export class Project {
     return p;
   }
 
+  /** Read the folder's file list again (after a rename or an import). */
+  async rescan(): Promise<void> {
+    const scan = await this.backend.scanProject(this.dir);
+    this.samples = scan.samples;
+  }
+
   /** Swap a chart for recovered text (it stays unsaved until you save). */
   recover(file: string, text: string): void {
     const i = this.charts.findIndex((c) => c.file === file);

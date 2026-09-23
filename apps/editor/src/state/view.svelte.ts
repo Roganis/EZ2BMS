@@ -34,6 +34,8 @@ export class View {
   stepInput = $state(false);
   /** Lane under the pointer (bmson x), for the lane header glow. */
   hoverLane = $state<number | null>(null);
+  /** The keysound workbench is open over the playfield. */
+  workbench = $state(false);
   /** How far the background rack is scrolled sideways, design units. */
   rackScroll = $state(0);
 

@@ -49,4 +49,5 @@ export * from './lint/lint';
 export * from './sound/resolve';
 export * from './sound/grouping';
 export * from './sound/usage';
+export * from './sound/rename';
 export { synthChart, synthDoc, type SynthOptions } from './dev/synth';

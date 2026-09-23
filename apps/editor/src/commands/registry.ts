@@ -139,11 +139,15 @@ export class Commands {
     return true;
   }
 
-  /** Run the command bound to this key, if any. True when handled. */
-  handleKey(e: KeyboardEvent): boolean {
+  /**
+   * Run the command bound to this key, if any. True when handled. `globalOnly`
+   * while something covers the chart (the workbench): only app-wide keys act.
+   */
+  handleKey(e: KeyboardEvent, globalOnly = false): boolean {
     const id = this.keyIndex.get(keyOf(e));
     if (!id) return false;
     const c = this.map.get(id)!;
+    if (globalOnly && !c.global) return false;
     const t = e.target as HTMLElement | null;
     const typing = !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
     if (typing && !c.global) return false;

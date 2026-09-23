@@ -97,6 +97,21 @@ export class AudioClient {
     this.planRev = -1;
   }
 
+  /**
+   * A file was renamed: its sound moves to the new name without being
+   * decoded again (and keeps its thumbnail - same Loaded). The old names go,
+   * so a new file that takes one of them later is loaded, not mistaken for it.
+   */
+  rename(renames: ReadonlyMap<string, string>): void {
+    for (const [from, to] of renames) {
+      const l = this.loaded.get(from);
+      this.loaded.delete(from);
+      if (l && !this.loaded.has(to)) this.loaded.set(to, l);
+    }
+    this.loadedRev++;
+    this.planRev = -1;
+  }
+
   loadedInfo(name: string): Loaded | undefined {
     return this.loaded.get(name);
   }

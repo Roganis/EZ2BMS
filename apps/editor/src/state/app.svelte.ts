@@ -13,6 +13,7 @@ import { Project, type ChartSlot } from './project.svelte';
 import { Settings } from './settings.svelte';
 import { SkinState } from './skin.svelte';
 import { ClassicState } from './classic.svelte';
+import { SoundsState } from './sounds.svelte';
 import { ask, toast } from './toasts.svelte';
 import { View } from './view.svelte';
 
@@ -26,6 +27,7 @@ export class App {
   readonly autosave: Autosave;
   readonly skin: SkinState;
   readonly classic: ClassicState;
+  readonly sounds: SoundsState;
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
@@ -40,6 +42,7 @@ export class App {
     this.autosave = new Autosave(backend);
     this.skin = new SkinState(backend);
     this.classic = new ClassicState(this);
+    this.sounds = new SoundsState(this);
     this.commands.onError = (e, c) =>
       toast(`${c.title}: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }
@@ -129,6 +132,7 @@ export class App {
 
   closeProject(): void {
     this.audio.forget();
+    this.view.workbench = false;
     this.project = null;
   }
 

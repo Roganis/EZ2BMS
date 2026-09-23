@@ -342,6 +342,36 @@ export function renameChannel(doc: ChartDoc, id: ChannelId, name: string): void 
   doc.transact('Rename sound', (tx) => tx.patchChannel(id, { name }));
 }
 
+/**
+ * Point these channels at another sound file (the workbench's Replace). It is
+ * a musical edit - the notes now play something else - so it is one undo
+ * step. Returns how many channels changed; no step when none did.
+ */
+export function replaceSound(doc: ChartDoc, ids: Iterable<ChannelId>, name: string): number {
+  const list = [...new Set(ids)].filter((id) => {
+    const c = doc.channel(id);
+    return c && c.name !== name;
+  });
+  if (!list.length) return 0;
+  doc.transact('Replace sound', (tx) => {
+    for (const id of list) tx.patchChannel(id, { name });
+  });
+  return list.length;
+}
+
+/** Remove channels that play no note, in one undo step. Returns how many went. */
+export function removeUnusedChannels(doc: ChartDoc, ids?: Iterable<ChannelId>): ChannelId[] {
+  const want = ids ? new Set(ids) : undefined;
+  const gone = doc.data.channels
+    .filter((c) => (!want || want.has(c.id)) && doc.index.channel(c.id).length === 0)
+    .map((c) => c.id);
+  if (gone.length)
+    doc.transact(`Remove ${gone.length} unused sound${gone.length === 1 ? '' : 's'}`, (tx) => {
+      for (const id of gone) tx.deleteChannel(id);
+    });
+  return gone;
+}
+
 /** Re-assign notes to another sound (the brush). */
 export function setChannel(doc: ChartDoc, ids: Iterable<NoteId>, ch: ChannelId): void {
   if (!doc.channel(ch)) throw new Error(`no channel ${ch}`);

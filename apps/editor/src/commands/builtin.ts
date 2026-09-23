@@ -227,6 +227,22 @@ export function registerBuiltins(app: App): void {
       run: () => (v.leftOpen = !v.leftOpen),
     },
     {
+      id: 'view.workbench',
+      title: 'Keysound workbench',
+      group: 'View',
+      keys: ['Mod+Shift+B'],
+      global: true,
+      enabled: () => !!app.project,
+      run: () => (v.workbench = !v.workbench),
+    },
+    {
+      id: 'sounds.removeUnused',
+      title: 'Remove unused sounds from every chart',
+      group: 'Chart',
+      enabled: () => !!app.project,
+      run: () => app.sounds.removeUnused(),
+    },
+    {
       id: 'view.inspector',
       title: 'Inspector',
       group: 'View',

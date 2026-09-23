@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { buildGroups, groupKeyOf } from '../src/sound/grouping';
 import { resolveSound, SoundIndex } from '../src/sound/resolve';
 import { soundUsage } from '../src/sound/usage';
+import { planSoundRename } from '../src/sound/rename';
+import { ChartDoc } from '../src/edit/doc';
+import { placeNote, removeUnusedChannels, replaceSound } from '../src/edit/commands';
 import { newChart } from '../src/model/defaults';
 
 type N = { id: number; y: number; l: number };
@@ -193,5 +196,101 @@ describe('soundUsage', () => {
     );
     expect(u.sounds).toHaveLength(1);
     expect(u.sounds[0]!.charts[0]).toEqual({ chart: 'a.bmson', channels: [1, 2], lane: 0, bgm: 2 });
+  });
+});
+
+describe('renaming a sound file', () => {
+  const chart = (channels: string[], preview?: string) => {
+    const d = newChart({ mode: '5k', tier: 'NM', level: 1 });
+    d.channels = channels.map((name, i) => ({ id: i + 1, name }));
+    if (preview) d.info.previewMusic = preview;
+    return d;
+  };
+  const folder = ['drums/kick.ogg', 'drums/snare.wav', 'pad.wav', 'pad.ogg'];
+
+  it('rewrites every spelling that meant the file, keeping its folder', () => {
+    const p = planSoundRename(
+      [
+        { file: 'a.bmson', data: chart(['drums/kick.wav', 'drums/snare.wav'], 'drums/KICK.ogg') },
+        { file: 'b.bmson', data: chart(['pad.wav']) },
+        { file: 'c.bmson', data: chart(['drums/Kick.ogg', 'boom.wav']) },
+      ],
+      folder,
+      'drums/kick.ogg',
+      'boom.ogg',
+    );
+    if (!p.ok) throw new Error(p.reason);
+    expect(p.to).toBe('drums/boom.ogg');
+    expect([...p.renames]).toEqual([
+      [
+        'a.bmson',
+        new Map([
+          ['drums/kick.wav', 'drums/boom.ogg'],
+          ['drums/KICK.ogg', 'drums/boom.ogg'],
+        ]),
+      ],
+      ['c.bmson', new Map([['drums/Kick.ogg', 'drums/boom.ogg']])],
+    ]);
+    // "boom.wav" is not in the folder before or after (it is in the root).
+    expect(p.adopts).toEqual([]);
+  });
+
+  it('reports missing names the new name now answers to', () => {
+    const p = planSoundRename(
+      [{ file: 'a.bmson', data: chart(['boom.wav']) }],
+      ['kick.ogg'],
+      'kick.ogg',
+      'boom.ogg',
+    );
+    expect(p.ok && p.adopts).toEqual(['boom.wav']);
+  });
+
+  it('refuses names that would change what another reference plays', () => {
+    const reason = (from: string, to: string) => {
+      const p = planSoundRename([], folder, from, to);
+      return p.ok ? 'ok' : p.reason;
+    };
+    expect(reason('pad.wav', 'PAD.ogg')).toMatch(/extension/);
+    expect(reason('drums/snare.wav', 'Kick.wav')).toMatch(/same name before the extension/);
+    expect(reason('drums/snare.wav', 'snare.wav')).toMatch(/its name already/);
+    expect(reason('drums/kick.ogg', 'a:b.ogg')).toMatch(/Windows/);
+    expect(reason('drums/kick.ogg', 'nul.ogg')).toMatch(/Windows/);
+    expect(reason('drums/kick.ogg', 'a\tb.ogg')).toMatch(/Windows/);
+    expect(reason('drums/kick.ogg', '../x.ogg')).toMatch(/Windows/);
+    expect(reason('gone.wav', 'x.wav')).toMatch(/not in the song folder/);
+    // A case-only rename, and a file whose same-stem sibling keeps the stem, are fine.
+    expect(reason('drums/snare.wav', 'Snare.wav')).toBe('ok');
+    expect(reason('pad.wav', 'pad2.wav')).toBe('ok');
+    expect(reason('pad.ogg', 'pad2.ogg')).toBe('ok');
+  });
+});
+
+describe('song-wide channel edits', () => {
+  const doc = () => {
+    const d = newChart({ mode: '5k', tier: 'NM', level: 1 });
+    d.channels = ['a.wav', 'b.wav', 'c.wav', 'a.wav'].map((name, i) => ({ id: i + 1, name }));
+    return new ChartDoc(d);
+  };
+
+  it('replaces a sound in one undo step, and only when something changes', () => {
+    const d = doc();
+    expect(replaceSound(d, [1, 4], 'z.wav')).toBe(2);
+    expect(d.data.channels.map((c) => c.name)).toEqual(['z.wav', 'b.wav', 'c.wav', 'z.wav']);
+    expect(d.undoLabel).toBe('Replace sound');
+    const mark = d.historyMark();
+    expect(replaceSound(d, [1], 'z.wav')).toBe(0);
+    expect(d.historyMark()).toBe(mark);
+    d.undo();
+    expect(d.data.channels.map((c) => c.name)).toEqual(['a.wav', 'b.wav', 'c.wav', 'a.wav']);
+  });
+
+  it('removes only channels without notes', () => {
+    const d = doc();
+    placeNote(d, { x: 0, y: 0, ch: 2 });
+    expect(removeUnusedChannels(d)).toEqual([1, 3, 4]);
+    expect(d.data.channels.map((c) => c.id)).toEqual([2]);
+    d.undo();
+    expect(d.data.channels.map((c) => c.id)).toEqual([1, 2, 3, 4]);
+    expect(removeUnusedChannels(d, [2, 3])).toEqual([3]);
   });
 });

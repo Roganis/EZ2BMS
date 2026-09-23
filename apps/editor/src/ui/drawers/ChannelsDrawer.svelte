@@ -51,6 +51,13 @@
       placeholder="Filter {slot.doc.data.channels.length} sounds"
       spellcheck="false"
     />
+    <button
+      class="bench"
+      class:on={app.view.workbench}
+      title="Every sound of the song, with waveforms (Ctrl+Shift+B)"
+      data-testid="open-workbench"
+      onclick={() => (app.view.workbench = !app.view.workbench)}>▦</button
+    >
   </div>
   <ul data-testid="channels">
     {#each rows.slice(0, SHOW) as r (r.id)}
@@ -136,6 +143,8 @@
 
 <style>
   .search {
+    display: flex;
+    gap: 6px;
     padding: 8px;
     position: sticky;
     top: 0;
@@ -154,6 +163,22 @@
     outline: none;
   }
   input:focus {
+    border-color: var(--neon);
+  }
+  .bench {
+    all: unset;
+    cursor: pointer;
+    flex: none;
+    width: 30px;
+    text-align: center;
+    border-radius: 7px;
+    border: 1px solid rgba(88, 225, 255, 0.18);
+    color: var(--ink-dim);
+    font-size: 15px;
+  }
+  .bench:hover,
+  .bench.on {
+    color: var(--neon);
     border-color: var(--neon);
   }
   .rename {

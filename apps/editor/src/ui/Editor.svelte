@@ -6,6 +6,7 @@
   import Playfield from './Playfield.svelte';
   import StatusBar from './StatusBar.svelte';
   import TopBar from './TopBar.svelte';
+  import Workbench from './workbench/Workbench.svelte';
 
   let { project }: { project: Project } = $props();
   const slot = $derived(project.active);
@@ -51,6 +52,9 @@
             >New chart <kbd>Ctrl N</kbd></button
           >
         </div>
+      {/if}
+      {#if app.view.workbench}
+        <Workbench {project} />
       {/if}
     </div>
     {#if app.view.right && slot}

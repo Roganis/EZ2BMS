@@ -83,6 +83,7 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 | Go to start               | `Home`            |                |
 | Inspector                 | `Ctrl+I`          |                |
 | Issues (pre-flight check) | `Ctrl+Shift+I`    |                |
+| Keysound workbench        | `Ctrl+Shift+B`    |                |
 | Play speed…               |                   | `speed 250`    |
 | Show / hide sounds        | `Ctrl+B`          |                |
 | Snap to…                  |                   | `snap 1/16`    |
@@ -104,10 +105,11 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 
 ## Chart
 
-| Command             | Keys              | Palette |
-| ------------------- | ----------------- | ------- |
-| New chart…          | `Ctrl+N`          |         |
-| Switch to chart 1-9 | `Ctrl+1 … Ctrl+9` |         |
+| Command                               | Keys              | Palette |
+| ------------------------------------- | ----------------- | ------- |
+| New chart…                            | `Ctrl+N`          |         |
+| Remove unused sounds from every chart |                   |         |
+| Switch to chart 1-9                   | `Ctrl+1 … Ctrl+9` |         |
 
 ## EZ2PORT
 
