@@ -130,6 +130,30 @@ Found and fixed on the way: the rack's hit list was never cleared (M2.8),
 and at 1 280 px the top bar was wider than the window, which made the
 playfield re-bake its textures every frame (see `docs/perf-log.md`).
 
+### Song manager, safe publishing and song art (M3.1-M3.4), 2026-09-23
+
+The assistant is writing Milestone 3 step by step after the owner's
+decisions (a bundled CJK font for plates, rankings kept only for charts
+whose `.ez` and `.ini` are unchanged, the wheel preview drawn from the
+owner's own game art):
+
+- the song model (`song/*`: one set of song info across charts, the 48
+  categories, the song file) and the song manager overlay;
+- publishing into the real songs folder: whose package a folder is, a
+  refusal for a shipped song's key, ranking tables carried over, the
+  replaced package kept in `.ez2bms-backup`;
+- song art: the `ez2bms-media` crate (decode, crop, and a transcription of
+  the port importer's disc and eyecatch arithmetic), the host command that
+  cuts them, and the cropper in the song manager.
+
+The disc and the stretched eyecatch are checked byte for byte against
+EZ2PORT's own importer through the oracle, on random images; the song.ini
+reader against the port's `ez2_usersongs_merge`; the publish rules in Rust
+temp-folder tests and end to end. What has not been seen: a published disc
+spinning on the real wheel, what the eyecatch shows on the owner's screens
+(the `visible` framing assumes the top-left 640x480, read from the port's
+code), and a publish while EZ2PORT has the old package open on Windows.
+
 ---
 
 ## Verification status
@@ -165,3 +189,8 @@ playfield re-bake its textures every frame (see `docs/perf-log.md`).
 | Import never overwrites; renames never replace another file         | Rust tests (Linux and Windows CI), e2e    | Yes, CI               |
 | Import by dropping files from the OS into the desktop app           | not run (browser build's DOM path only)   | **No** - owner        |
 | Workbench scrolls smoothly on WebKitGTK / WebView2 with 1500 sounds | headless Chromium only                    | **No** - owner        |
+| `song.ini` is read and listed as EZ2PORT does                       | oracle: `ez2_usersongs_merge`, random     | Yes, in the container |
+| Publishing keeps rankings, refuses shipped keys, backs up           | Rust temp-folder tests, e2e               | Yes, CI               |
+| Disc and stretched eyecatch bytes equal the port importer's         | oracle, random images up and down         | Yes, in the container |
+| The disc and eyecatch look right in EZ2PORT (wheel, select exit)    | not run (no game here)                    | **No** - owner        |
+| Publishing while EZ2PORT runs (Windows file locks)                  | not run                                   | **No** - owner        |

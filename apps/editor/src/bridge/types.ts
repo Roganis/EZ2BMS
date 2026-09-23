@@ -3,6 +3,8 @@
 // (in-memory files, a silent clock) in a browser and in Playwright. The
 // shapes mirror src-tauri's commands one for one.
 
+import type { ArtJob } from '@ez2bms/chart-core';
+
 export interface Entry {
   name: string;
   is_dir: boolean;
@@ -195,6 +197,21 @@ export interface Imported {
   error: string | null;
 }
 
+/** What an import takes; other files offered with it are refused (src-tauri files::ImportKind). */
+export type ImportKind = 'audio' | 'image';
+
+/** Song art cut by the host (src-tauri media_art): RGB, top-down. */
+export interface ArtPixels {
+  w: number;
+  h: number;
+  rgb: Uint8Array;
+}
+
+export interface MediaBackend {
+  /** The disc or the eyecatch cut from an image, with the port importer's arithmetic. */
+  art(path: string, job: ArtJob): Promise<ArtPixels>;
+}
+
 /** Files dragged over the window (paths only on drop; CSS pixels). */
 export interface FileDrop {
   kind: 'over' | 'drop' | 'leave';
@@ -216,14 +233,15 @@ export interface Backend {
   saveSettings(v: Record<string, unknown>): Promise<void>;
   pickFolder(title: string): Promise<string | null>;
   pickFiles(title: string, extensions: string[]): Promise<string[]>;
-  /** Copy sound files (and the audio in folders) into a song folder, flat, never overwriting. */
-  importFiles(dir: string, paths: string[]): Promise<Imported[]>;
+  /** Copy sound files or images (and those in folders) into a song folder, flat, never overwriting. */
+  importFiles(dir: string, paths: string[], kind?: ImportKind): Promise<Imported[]>;
   /** Rename a file; refuses to replace another one. */
   renameFile(from: string, to: string): Promise<void>;
   /** Files dragged onto the window. Returns the unsubscribe. */
   onFileDrop(cb: (d: FileDrop) => void): () => void;
   readonly audio: AudioBackend;
   readonly port: PortBackend;
+  readonly media: MediaBackend;
 }
 
 /** Path helpers that work on both separators. */

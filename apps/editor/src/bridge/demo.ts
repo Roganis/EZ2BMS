@@ -1,7 +1,9 @@
 // A small synthetic song for the browser build and the end-to-end tests: two
 // charts (StreetMix NM, 7StreetMix HD) over a drum kit and a sliced stem, a
-// tempo change, holds of several kinds. Generated, not recorded: no audio
-// bytes, only names the silent web audio pretends to load.
+// tempo change, holds of several kinds, a jacket and a banner the NM chart
+// names (so its disc and eyecatch come from the charts, as EZ2PORT's importer
+// takes them). Generated, not recorded: no audio bytes, only names the silent
+// web audio pretends to load; the images are drawn in code (demo-art.ts).
 
 import {
   ChartDoc,
@@ -18,6 +20,7 @@ import {
   type ModeId,
   type Tier,
 } from '@ez2bms/chart-core';
+import { demoBanner, demoJacket } from './demo-art';
 
 export const DEMO_DIR = '/demo/Neon Parade';
 
@@ -46,6 +49,10 @@ function chart(mode: ModeId, tier: Tier, level: number, dense: boolean): Uint8Ar
     artist: 'EZ2BMS',
     genre: 'DEMO',
   });
+  if (tier === 'NM') {
+    data.info.eyecatchImage = 'jacket.bmp';
+    data.info.titleImage = 'banner.bmp';
+  }
   const doc = new ChartDoc(data);
   const ch = addChannels(doc, SAMPLES);
   const id = (name: string) => ch[SAMPLES.indexOf(name)]!.id;
@@ -143,6 +150,8 @@ export function demoFiles(modes = false, bench = false): Map<string, Uint8Array>
     }
   }
   for (const s of SAMPLES) files.set(`${DEMO_DIR}/${s}`, new Uint8Array(0));
+  files.set(`${DEMO_DIR}/jacket.bmp`, demoJacket());
+  files.set(`${DEMO_DIR}/banner.bmp`, demoBanner());
   files.set(
     `${DEMO_DIR}/ez2bms.song.json`,
     // Classic mode off to start with, though the song slices a stem (tests switch it on).

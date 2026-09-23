@@ -10,6 +10,36 @@ use crate::error::{CmdError, CmdResult};
 
 /// Audio the editor can use as keysounds (what the audio crate decodes).
 pub const AUDIO_EXTS: [&str; 7] = ["wav", "ogg", "flac", "mp3", "ssf", "ezw", "oga"];
+/// Images the song art is cut from (what ez2bms-media decodes).
+pub const IMAGE_EXTS: [&str; 4] = ["png", "jpg", "jpeg", "bmp"];
+
+/// What an import is for; other files offered with it are refused.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImportKind {
+    #[default]
+    Audio,
+    Image,
+}
+
+impl ImportKind {
+    fn accepts(self, p: &Path) -> bool {
+        let exts: &[&str] = match self {
+            ImportKind::Audio => &AUDIO_EXTS,
+            ImportKind::Image => &IMAGE_EXTS,
+        };
+        p.extension()
+            .map(|x| x.to_string_lossy().to_ascii_lowercase())
+            .is_some_and(|x| exts.contains(&x.as_str()))
+    }
+
+    fn refusal(self) -> &'static str {
+        match self {
+            ImportKind::Audio => "not an audio file EZ2BMS can play",
+            ImportKind::Image => "not an image EZ2BMS can read (PNG, JPEG or BMP)",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Entry {
@@ -137,7 +167,7 @@ pub fn scan_project(dir: &Path) -> CmdResult<ProjectScan> {
                 name.rsplit_once('.').map(|(_, x)| x.to_ascii_lowercase()).unwrap_or_default();
             if AUDIO_EXTS.contains(&ext.as_str()) {
                 scan.samples.push(rel);
-            } else if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "bmp") {
+            } else if IMAGE_EXTS.contains(&ext.as_str()) {
                 scan.images.push(rel);
             }
         }
@@ -158,14 +188,8 @@ pub struct Imported {
     pub error: Option<String>,
 }
 
-fn is_audio(p: &Path) -> bool {
-    p.extension()
-        .map(|x| x.to_string_lossy().to_ascii_lowercase())
-        .is_some_and(|x| AUDIO_EXTS.contains(&x.as_str()))
-}
-
-/// Audio files among `paths`, folders walked (hidden ones skipped), in order.
-fn audio_files(paths: &[PathBuf]) -> Vec<PathBuf> {
+/// The files among `paths`, folders walked (hidden ones skipped), in order.
+fn offered_files(paths: &[PathBuf]) -> Vec<PathBuf> {
     let mut out = Vec::new();
     for p in paths {
         if p.is_dir() {
@@ -180,7 +204,7 @@ fn audio_files(paths: &[PathBuf]) -> Vec<PathBuf> {
                 })
                 .unwrap_or_default();
             inner.sort();
-            out.extend(audio_files(&inner));
+            out.extend(offered_files(&inner));
         } else {
             out.push(p.clone());
         }
@@ -188,14 +212,14 @@ fn audio_files(paths: &[PathBuf]) -> Vec<PathBuf> {
     out
 }
 
-/// Copy sound files (and the audio inside folders) into the song folder,
-/// flat. A file already inside the folder keeps its place; a name the folder
-/// already has is reused when the bytes are the same and otherwise becomes
-/// `name (2).ext`; each copy is written beside its target and renamed into
-/// place, so a failure never leaves half a file.
-pub fn copy_into(dir: &Path, paths: &[PathBuf]) -> Vec<Imported> {
+/// Copy sound files (or images; and those inside folders) into the song
+/// folder, flat. A file already inside the folder keeps its place; a name the
+/// folder already has is reused when the bytes are the same and otherwise
+/// becomes `name (2).ext`; each copy is written beside its target and renamed
+/// into place, so a failure never leaves half a file.
+pub fn copy_into(dir: &Path, paths: &[PathBuf], kind: ImportKind) -> Vec<Imported> {
     let root = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
-    audio_files(paths)
+    offered_files(paths)
         .into_iter()
         .map(|src| {
             let from = src.to_string_lossy().into_owned();
@@ -205,8 +229,8 @@ pub fn copy_into(dir: &Path, paths: &[PathBuf]) -> Vec<Imported> {
                 reused: false,
                 error: Some(e),
             };
-            if !is_audio(&src) {
-                return fail("not an audio file EZ2BMS can play".into());
+            if !kind.accepts(&src) {
+                return fail(kind.refusal().into());
             }
             let real = src.canonicalize().unwrap_or_else(|_| src.clone());
             if let Ok(rel) = real.strip_prefix(&root) {
@@ -351,6 +375,7 @@ mod tests {
                 outside.join("notes.txt"),
                 song.join("stems/pad.wav"),
             ],
+            ImportKind::Audio,
         );
         let names: Vec<_> = got.iter().map(|i| (i.name.clone(), i.reused)).collect();
         assert_eq!(
@@ -366,9 +391,26 @@ mod tests {
         assert_eq!(std::fs::read(song.join("kick.wav")).unwrap(), b"another kick");
         assert!(got[2].error.is_some());
         // Importing the same file again reuses the copy.
-        let again = copy_into(&song, &[outside.join("kick.wav")]);
+        let again = copy_into(&song, &[outside.join("kick.wav")], ImportKind::Audio);
         assert_eq!(again[0].name.as_deref(), Some("kick (2).wav"));
         assert!(again[0].reused);
+    }
+
+    #[test]
+    fn an_image_import_takes_images_only() {
+        let song = scratch("import-art-song");
+        let outside = scratch("import-art-src");
+        std::fs::write(outside.join("Jacket.JPG"), b"jpeg").unwrap();
+        std::fs::write(outside.join("kick.wav"), b"kick").unwrap();
+        let got = copy_into(
+            &song,
+            &[outside.join("Jacket.JPG"), outside.join("kick.wav")],
+            ImportKind::Image,
+        );
+        assert_eq!(got[0].name.as_deref(), Some("Jacket.JPG"));
+        assert_eq!(got[1].name, None);
+        assert!(got[1].error.as_deref().is_some_and(|e| e.contains("not an image")));
+        assert_eq!(std::fs::read(song.join("Jacket.JPG")).unwrap(), b"jpeg");
     }
 
     #[test]

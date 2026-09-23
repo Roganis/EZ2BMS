@@ -8,6 +8,8 @@ pub enum CmdError {
     Audio(#[from] ez2bms_audio::AudioError),
     #[error(transparent)]
     Launch(#[from] ez2bms_launch::LaunchError),
+    #[error(transparent)]
+    Media(#[from] ez2bms_media::MediaError),
     #[error("{0}")]
     Invalid(String),
 }

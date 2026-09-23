@@ -6,6 +6,7 @@
 mod audio;
 mod error;
 mod files;
+mod media;
 mod port;
 
 use std::path::PathBuf;
@@ -19,7 +20,8 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::audio::{Audio, AudioInfo, ClockDto, EventDto, Loaded, TriggerDto};
 use crate::error::{CmdError, CmdResult};
-use crate::files::{Entry, Imported, ProjectScan};
+use crate::files::{Entry, ImportKind, Imported, ProjectScan};
+use crate::media::Media;
 use crate::port::{
     InspectionDto, Located, PackageDto, ProbeDto, PublishOptions, Published, RunEvent, Runs,
     TestDto,
@@ -81,8 +83,13 @@ fn project_scan(dir: PathBuf) -> CmdResult<ProjectScan> {
 
 /// Copy sound files (and the audio in folders) into the song folder.
 #[tauri::command]
-async fn fs_copy_into(dir: PathBuf, paths: Vec<PathBuf>) -> CmdResult<Vec<Imported>> {
-    tauri::async_runtime::spawn_blocking(move || files::copy_into(&dir, &paths))
+async fn fs_copy_into(
+    dir: PathBuf,
+    paths: Vec<PathBuf>,
+    kind: Option<ImportKind>,
+) -> CmdResult<Vec<Imported>> {
+    let kind = kind.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || files::copy_into(&dir, &paths, kind))
         .await
         .map_err(|e| CmdError::Io(e.to_string()))
 }
@@ -90,6 +97,22 @@ async fn fs_copy_into(dir: PathBuf, paths: Vec<PathBuf>) -> CmdResult<Vec<Import
 #[tauri::command]
 fn fs_rename(from: PathBuf, to: PathBuf) -> CmdResult<()> {
     files::rename(&from, &to)
+}
+
+// ---- song art
+
+/// The disc or the eyecatch cut from an image: `[u32 w][u32 h]` + RGB.
+#[tauri::command]
+async fn media_art(
+    media: State<'_, Arc<Media>>,
+    path: PathBuf,
+    job: ez2bms_media::ArtJob,
+) -> CmdResult<Response> {
+    let media = media.inner().clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || media.art(&path, job))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))??;
+    Ok(Response::new(bytes))
 }
 
 // ---- settings (the front end owns the schema)
@@ -274,6 +297,7 @@ pub fn run() {
         .setup(|app| {
             app.manage(Arc::new(Audio::open()));
             app.manage(Arc::new(Runs::default()));
+            app.manage(Arc::new(Media::default()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -286,6 +310,7 @@ pub fn run() {
             project_scan,
             fs_copy_into,
             fs_rename,
+            media_art,
             settings_load,
             settings_save,
             audio_info,

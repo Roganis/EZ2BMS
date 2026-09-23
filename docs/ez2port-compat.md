@@ -8,38 +8,45 @@ row is proven by a test against the vendored engine core
 
 ## Exact (oracle-tested)
 
-| Area                                                    | EZ2BMS                   | Test                                                      |
-| ------------------------------------------------------- | ------------------------ | --------------------------------------------------------- |
-| EZFF `.ez` read/write, v5-v8                            | `io/ez/ezff.ts`          | `ezff.oracle.test.ts` - every field, every record         |
-| Tempo map and every record's time (f32 BPM, ms)         | `timing/engine-tempo.ts` | bit-identical milliseconds                                |
-| `.gds` descriptors                                      | `ez2data/gds.ts`         | `ez2data.oracle.test.ts`                                  |
-| `.pvi` skins (tracks, target bar, note art)             | `ez2data/pvi.ts`         | same                                                      |
-| `.abm` decode (all six header variants, 8/16/24/32-bit) | `ez2data/abm.ts`         | RGBA hash identical                                       |
-| `.abm` encode (Final EX, 24-bit)                        | `ez2data/abm.ts`         | byte-identical to `ez2_abm_write`                         |
-| File cipher                                             | `ez2data/crypt.ts`       | byte-identical for random tables                          |
-| Velocity/pan arithmetic                                 | `ez2data/mixparam.ts`    | same integers                                             |
-| Chart file names (mode, song, tier)                     | `modes/filenames.ts`     | same as `ez2_chart_id_parse`                              |
-| Mode lane sets                                          | `modes/registry.ts`      | same tracks as `ez2/mode.c`                               |
-| Published package (`song.ini`, `.ez`, `.ezi`, `.ini`)   | `publish/package.ts`     | `publish.oracle.test.ts` - the engine reads the plan back |
-| Lane notes and background sounds of a bmson             | `publish/chart-plan.ts`  | same records as the port's own `ez2_bmson_import`         |
-| Judgement, combo, gauge, score and the hold machine     | `engine/score.ts`        | `engine.oracle.test.ts` - random scripts, op for op       |
-| The synthetic player (`tools/ez2judge.c`)               | `engine/judge-sim.ts`    | same counts, score, gauge and grade                       |
-| Published keysounds (`.ssf`, 16-bit 44.1 kHz stereo)    | `ez2bms-audio` `cut.rs`  | `ez2port-oracle/tests/audio.rs` - header and PCM hash     |
+| Area                                                      | EZ2BMS                    | Test                                                                                               |
+| --------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------- |
+| EZFF `.ez` read/write, v5-v8                              | `io/ez/ezff.ts`           | `ezff.oracle.test.ts` - every field, every record                                                  |
+| Tempo map and every record's time (f32 BPM, ms)           | `timing/engine-tempo.ts`  | bit-identical milliseconds                                                                         |
+| `.gds` descriptors                                        | `ez2data/gds.ts`          | `ez2data.oracle.test.ts`                                                                           |
+| `.pvi` skins (tracks, target bar, note art)               | `ez2data/pvi.ts`          | same                                                                                               |
+| `.abm` decode (all six header variants, 8/16/24/32-bit)   | `ez2data/abm.ts`          | RGBA hash identical                                                                                |
+| `.abm` encode (Final EX, 24-bit)                          | `ez2data/abm.ts`          | byte-identical to `ez2_abm_write`                                                                  |
+| File cipher                                               | `ez2data/crypt.ts`        | byte-identical for random tables                                                                   |
+| Velocity/pan arithmetic                                   | `ez2data/mixparam.ts`     | same integers                                                                                      |
+| Chart file names (mode, song, tier)                       | `modes/filenames.ts`      | same as `ez2_chart_id_parse`                                                                       |
+| Mode lane sets                                            | `modes/registry.ts`       | same tracks as `ez2/mode.c`                                                                        |
+| Published package (`song.ini`, `.ez`, `.ezi`, `.ini`)     | `publish/package.ts`      | `publish.oracle.test.ts` - the engine reads the plan back                                          |
+| Lane notes and background sounds of a bmson               | `publish/chart-plan.ts`   | same records as the port's own `ez2_bmson_import`                                                  |
+| Judgement, combo, gauge, score and the hold machine       | `engine/score.ts`         | `engine.oracle.test.ts` - random scripts, op for op                                                |
+| The synthetic player (`tools/ez2judge.c`)                 | `engine/judge-sim.ts`     | same counts, score, gauge and grade                                                                |
+| Published keysounds (`.ssf`, 16-bit 44.1 kHz stereo)      | `ez2bms-audio` `cut.rs`   | `ez2port-oracle/tests/audio.rs` - header and PCM hash                                              |
+| `song.ini` as the port reads and lists it                 | `publish/songini-read.ts` | `songini.oracle.test.ts` - `ez2_usersongs_merge`, random files                                     |
+| Disc (`disc.abm`) and stretched eyecatch (`eyecatch.abm`) | `ez2bms-media` `art.rs`   | `art.oracle.test.ts` - byte-identical to `write_disc` / `write_eyecatch`, random sizes up and down |
 
 ## Deliberate differences
 
-| What                     | EZ2PORT's bmson importer                               | EZ2BMS                                                   | Why                                        |
-| ------------------------ | ------------------------------------------------------ | -------------------------------------------------------- | ------------------------------------------ |
-| Hold across a STOP       | converts the unshifted length: the hold gets shorter   | shifts the hold's end like any position                  | keeps the hold as charted                  |
-| Mode                     | keywords in chart_name / file name first               | `mode_hint` as written; the keyword reading is linted    | an explicit field should not be overridden |
-| Tier                     | keywords (`hd`, `shd`, `ex`) in names                  | `info.x_tier`, file named to match                       | same                                       |
-| Two BPMs at one tick     | written; order then depends on the C library's `qsort` | never written                                            | the engine's sort is not stable            |
-| Velocity, pan, hold kind | fixed at 127 / 64 / 0                                  | `x_vel`, `x_pan`, `x_kind` per note                      | EZ2 charts use them                        |
-| Judgement and gauge      | windows scaled from `judge_rank`, gauge fixed          | `judgement_deltas` / `life_deltas` written to the `.ini` | per-chart, as the original game does       |
-| `up` (release) notes     | the whole note is dropped                              | kept as a plain note; only the release re-trigger goes   | the press is still charted                 |
-| Slice cut points         | rounded to 1 ms                                        | exact frames from the published f32 tempo                | consecutive slices join without a click    |
-| Background tracks        | first track free at that tick                          | first track whose last sound has finished                | the original has one voice per track       |
-| End of the stage         | 26 frames after the last record                        | a closing tempo record after the last sound's tail       | the last sound is not cut off              |
+| What                      | EZ2PORT's bmson importer                               | EZ2BMS                                                                                                                        | Why                                                             |
+| ------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Hold across a STOP        | converts the unshifted length: the hold gets shorter   | shifts the hold's end like any position                                                                                       | keeps the hold as charted                                       |
+| Mode                      | keywords in chart_name / file name first               | `mode_hint` as written; the keyword reading is linted                                                                         | an explicit field should not be overridden                      |
+| Tier                      | keywords (`hd`, `shd`, `ex`) in names                  | `info.x_tier`, file named to match                                                                                            | same                                                            |
+| Two BPMs at one tick      | written; order then depends on the C library's `qsort` | never written                                                                                                                 | the engine's sort is not stable                                 |
+| Velocity, pan, hold kind  | fixed at 127 / 64 / 0                                  | `x_vel`, `x_pan`, `x_kind` per note                                                                                           | EZ2 charts use them                                             |
+| Judgement and gauge       | windows scaled from `judge_rank`, gauge fixed          | `judgement_deltas` / `life_deltas` written to the `.ini`                                                                      | per-chart, as the original game does                            |
+| `up` (release) notes      | the whole note is dropped                              | kept as a plain note; only the release re-trigger goes                                                                        | the press is still charted                                      |
+| Slice cut points          | rounded to 1 ms                                        | exact frames from the published f32 tempo                                                                                     | consecutive slices join without a click                         |
+| Background tracks         | first track free at that tick                          | first track whose last sound has finished                                                                                     | the original has one voice per track                            |
+| End of the stage          | 26 frames after the last record                        | a closing tempo record after the last sound's tail                                                                            | the last sound is not cut off                                   |
+| Disc crop                 | the centred square                                     | the centred square unless you move or size it                                                                                 | the jacket's subject is not always central                      |
+| Eyecatch framing          | the whole image squeezed to 1024x512                   | 2:1 art as the importer; other art a 4:3 crop filling the top-left 640x480 the select screen shows, carried on right and down | a 4:3 or square jacket is not squashed                          |
+| Transparent images        | alpha ignored: the colour under it shows               | composited onto black                                                                                                         | a transparent corner is the port's key colour, as intended      |
+| Photos turned by EXIF     | decoded as stored (the port's decoder hook)            | turned upright, as a browser shows them                                                                                       | what you crop is what you see                                   |
+| Which chart names the art | the first chart's info only                            | the first chart (in mode and tier order) that names an image                                                                  | the same when one chart names it; never empty when another does |
 
 ## Followed from the port's platform code (not in the oracle)
 
@@ -155,6 +162,11 @@ What the check cannot see, and so is not promised:
   tool does); lint will flag these kinds on holds.
 
 ## Open questions
+
+- **What the eyecatch shows.** It is drawn at its own size into the 640x480
+  select screen (`tools/ez2play/select.c`), so only its top-left 640x480
+  should be visible, and the `visible` framing is built on that. How a
+  widescreen build shows it has not been seen on a real screen.
 
 - **5 KEY ONLY and SCRATCH lanes.** `docs/gds-slots.md` lists the turntable and
   pedal tracks (10, 11) in the shipped `5keymix` and `ScratchMix` descriptors,

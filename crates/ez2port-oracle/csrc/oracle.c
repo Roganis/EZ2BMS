@@ -801,15 +801,48 @@ static void log_line(const char *line, void *user)
     jstr(line);
 }
 
+/* Images for the importer's art (disc, eyecatch), from a test's raw file:
+ * "RGBA", u32 LE width, u32 LE height, then top-down RGBA. The port leaves
+ * image decoding to its host (bmson.h ez2_bmson_decoders); this stands in
+ * for it so the art steps themselves can be compared. */
+static int rgba_image(const char *path, unsigned char **rgba, int *w, int *h)
+{
+    size_t n = 0;
+    unsigned char *b = slurp(path, &n);
+    unsigned ww, hh;
+
+    if (!b || n < 12 || memcmp(b, "RGBA", 4)) {
+        free(b);
+        return 0;
+    }
+    ww = b[4] | b[5] << 8 | b[6] << 16 | (unsigned)b[7] << 24;
+    hh = b[8] | b[9] << 8 | b[10] << 16 | (unsigned)b[11] << 24;
+    if (!ww || !hh || n < 12 + (size_t)ww * hh * 4) {
+        free(b);
+        return 0;
+    }
+    *rgba = (unsigned char *)malloc((size_t)ww * hh * 4);
+    if (!*rgba) {
+        free(b);
+        return 0;
+    }
+    memcpy(*rgba, b + 12, (size_t)ww * hh * 4);
+    *w = (int)ww;
+    *h = (int)hh;
+    free(b);
+    return 1;
+}
+
 static int cmd_bmson_import(const char *folder, const char *game_root,
-                            const char *out_root, const char *key)
+                            const char *out_root, const char *key, int images)
 {
     char key_out[64] = "";
     int first = 1, rc;
+    ez2_bmson_decoders dec = { 0, rgba_image };
 
     printf("{\"log\":[");
-    rc = ez2_bmson_import(folder, game_root, out_root, key, 0, log_line, &first,
-                          key_out, sizeof key_out);
+    rc = ez2_bmson_import(folder, game_root, out_root, key, images ? &dec : 0, log_line,
+                          &first, key_out, sizeof key_out);
     printf("],\"rc\":%d,\"key\":", rc);
     jstr(key_out);
     printf("}\n");
@@ -949,8 +982,13 @@ int ez2bms_oracle_main(int argc, char **argv)
                              (unsigned)strtoul(argv[7], 0, 10));
     if (!strcmp(c, "usersongs") && (argc == 4 || argc == 5))
         return cmd_usersongs(argv[2], argv[3], argc == 5 ? argv[4] : 0);
-    if (!strcmp(c, "bmson-import") && (argc == 5 || argc == 6))
-        return cmd_bmson_import(argv[2], argv[3], argv[4], argc == 6 ? argv[5] : 0);
+    if (!strcmp(c, "bmson-import") && argc >= 5 && argc <= 7) {
+        /* [KEY] [--rgba]: --rgba reads the art from test RGBA files */
+        int images = !strcmp(argv[argc - 1], "--rgba");
+        int n = argc - images;
+        if (n == 5 || n == 6)
+            return cmd_bmson_import(argv[2], argv[3], argv[4], n == 6 ? argv[5] : 0, images);
+    }
 
     fprintf(stderr,
             "usage: ez2port-oracle chart|ezi|ssf|abm|gds|pvi|chart-id FILE\n"
@@ -959,7 +997,7 @@ int ez2bms_oracle_main(int argc, char **argv)
             "       ez2port-oracle crypt enc|dec TABLE IN OUT\n"
             "       ez2port-oracle mixparam|score   (script on stdin)\n"
             "       ez2port-oracle judge-sim EZ INI MODE OFFSET JITTER SEED\n"
-            "       ez2port-oracle bmson-import FOLDER GAME_ROOT OUT_ROOT [KEY]\n"
+            "       ez2port-oracle bmson-import FOLDER GAME_ROOT OUT_ROOT [KEY] [--rgba]\n"
             "       ez2port-oracle usersongs ROOT MODE [SHIPPED,KEYS]\n");
     return 2;
 }

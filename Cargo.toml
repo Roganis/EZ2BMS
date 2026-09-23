@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "crates/ez2bms-audio",
   "crates/ez2bms-launch",
+  "crates/ez2bms-media",
   "crates/ez2port-oracle",
   "src-tauri",
 ]
@@ -11,6 +12,7 @@ members = [
 default-members = [
   "crates/ez2bms-audio",
   "crates/ez2bms-launch",
+  "crates/ez2bms-media",
   "crates/ez2port-oracle",
 ]
 

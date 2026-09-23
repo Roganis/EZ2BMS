@@ -15,6 +15,7 @@ processes or the disk. This page is the map; the per-format decisions live in
 | The EZ2PORT judge/score/gauge rules, voice rules, publish plan                                                                     | `packages/chart-core`              | Play mode and Publish must agree with each other by construction                       |
 | Decode, resample, mix, render, cut, encode (`.ssf`/`.ezw`/wav)                                                                     | `crates/ez2bms-audio` (Rust)       | real-time and sample-exact work                                                        |
 | Launching `ez2play`, capturing its log                                                                                             | `crates/ez2bms-launch` (Rust)      | process control                                                                        |
+| Decoding images, cutting the disc and eyecatch (the pixels; chart-core encodes the `.abm`)                                         | `crates/ez2bms-media` (Rust)       | decoders and per-pixel work, byte-checked against the port                             |
 | Files, dialogs, settings, IPC glue                                                                                                 | `src-tauri` (Rust)                 | the host                                                                               |
 
 The front end talks to native code only through one interface,
@@ -42,6 +43,7 @@ apps/editor/src/
 crates/
   ez2bms-audio/    sample cache, peaks, mixer with EZ2 voice rules, offline render, cutting
   ez2bms-launch/   ez2play discovery, capability probe, isolated temp songs root
+  ez2bms-media/    song art: decode images, crop, cut the disc and eyecatch as the port's importer
   ez2port-oracle/  TEST ONLY: builds third_party/ez2port-core and answers JSON queries
 third_party/ez2port-core/  vendored snapshot of EZ2PORT's ez2core (GPL-3.0-or-later)
 ```

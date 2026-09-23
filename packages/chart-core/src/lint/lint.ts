@@ -7,6 +7,7 @@ import { chartMode, portImporterMode } from '../io/bmson/mode-resolve';
 import type { ChartData, NoteId, Tier } from '../model/types';
 import { modeNames, type ModeId } from '../modes/ids';
 import { chartBaseName, isValidSongKey, parseChartName } from '../modes/filenames';
+import type { SongArt } from '../song/art';
 import { categoryLabel, unreachableIn, validCategory } from '../song/categories';
 import { songMeta } from '../song/meta';
 import { modeDef } from '../modes/registry';
@@ -39,6 +40,8 @@ export interface LintSong {
   category?: unknown;
   /** Sound names that could not be read (known to the editor, not the chart). */
   missingSounds?: ReadonlySet<string>;
+  /** The art a publish would use (song/art.ts songArt); checked when given. */
+  art?: SongArt;
 }
 
 /** EZ2PORT's limits (ez2/chart.h, ez2/ezi.h) and the original's. */
@@ -268,6 +271,17 @@ export function lintSong(s: LintSong): Finding[] {
             'warning',
             `${modeNames(m).label} pages past ${categoryLabel(cat)}: its charts cannot be reached there`,
           );
+  }
+  if (s.art) {
+    for (const [what, a] of [
+      ['disc', s.art.disc],
+      ['eyecatch', s.art.eyecatch],
+    ] as const)
+      if (a && !a.path)
+        f('art-missing', 'error', `The ${what} image ${a.src} is not in the song folder`);
+    // The importer says the same of a bmson with no jacket (ez2/bmson.c).
+    if (!s.art.disc)
+      f('no-disc', 'warning', 'The song has no disc art: its disc on the wheel will be blank');
   }
   const meta = songMeta(s.charts);
   for (const field of meta.differs)

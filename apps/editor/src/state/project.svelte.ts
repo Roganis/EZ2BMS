@@ -9,6 +9,7 @@ import {
   chartTier,
   decodeUtf8,
   encodeUtf8,
+  findImage,
   isLegacyHint,
   isValidSongKey,
   modeNames,
@@ -19,9 +20,11 @@ import {
   remapLegacyChart,
   serializeBmson,
   serializeSongFile,
+  songArt,
   type ChartData,
   type ModeId,
   type ParseWarning,
+  type SongArt,
   type SongFile,
   type Tier,
 } from '@ez2bms/chart-core';
@@ -73,6 +76,8 @@ export class Project {
   charts = $state<ChartSlot[]>([]);
   activeIndex = $state(0);
   samples = $state<string[]>([]);
+  /** Images in the folder (relative, forward slashes), for the disc and eyecatch. */
+  images = $state<string[]>([]);
   /** ez2bms.song.json (chart-core song/songfile.ts). */
   sidecar = $state<SongFile>(newSongFile());
   /**
@@ -115,6 +120,19 @@ export class Project {
     return taken ? slot.file : want;
   }
 
+  /**
+   * The disc and eyecatch a publish uses: the song file's choice, else the
+   * image the port's importer would take from the charts' info.
+   */
+  get art(): SongArt {
+    const images = this.images;
+    return songArt(
+      this.sidecar,
+      this.charts.map((c) => c.doc.data.info),
+      (n) => findImage(images, n),
+    );
+  }
+
   /** Unsaved edits, or a name the next save will change. */
   unsaved(slot: ChartSlot): boolean {
     return slot.dirty || this.targetFile(slot) !== slot.file;
@@ -124,6 +142,7 @@ export class Project {
     const p = new Project(dir, backend);
     const scan = await backend.scanProject(dir);
     p.samples = scan.samples;
+    p.images = scan.images;
     if (scan.sidecar) {
       // A broken song file reads as empty (and is rewritten on the next save).
       const text = await backend.readText(joinPath(dir, SIDECAR)).catch(() => '{}');
@@ -144,6 +163,7 @@ export class Project {
   async rescan(): Promise<void> {
     const scan = await this.backend.scanProject(this.dir);
     this.samples = scan.samples;
+    this.images = scan.images;
   }
 
   /** Swap a chart for recovered text (it stays unsaved until you save). */

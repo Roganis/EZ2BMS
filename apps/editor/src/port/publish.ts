@@ -27,7 +27,7 @@ export async function publishSong(app: App, root: string): Promise<void> {
   // A song id tells this song's packages from anyone else's (song.ini [EZ2BMS]).
   p.sidecar.id ??= crypto.randomUUID();
   await p.saveAll();
-  const { spec } = buildPackage(app);
+  const { spec } = buildPackage(app, { art: await app.art.packageArt(p) });
   const key = spec.key;
   const seen = await app.backend.port.inspect(root, key, app.settings.data.gameRoot);
   if (seen.shipped)

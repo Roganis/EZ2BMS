@@ -117,9 +117,23 @@ pnpm tauri dev          # the desktop app
 - [x] M2.11 Import by file chooser or by dropping files and folders on the window; reload edited sounds
 - [x] M2.12 Benchmarks with 1 500 grouped sounds ([perf log](docs/perf-log.md)) and these docs
 
+### M3 - Song manager + full publish
+
+- [x] M3.1 The song model: info shared by every chart, the 48 categories, chart files named by mode, key and tier
+- [x] M3.2 The song manager (Ctrl+Shift+L): info, category and every chart in a mode x tier matrix
+- [x] M3.3 Safe publishing: whose package a folder is, shipped keys refused, rankings kept for unchanged charts, backups
+- [x] M3.4 Disc and eyecatch: crop any PNG/JPEG/BMP, cut byte-for-byte as EZ2PORT's importer cuts - [compat](docs/ez2port-compat.md)
+- [ ] M3.5 Fonts and the title plate renderer
+- [ ] M3.6 Plate designer
+- [ ] M3.7 Preview picker
+- [ ] M3.8 Wheel preview
+- [ ] M3.9 BGA
+- [ ] M3.10 Lint panel with quick fixes
+- [ ] M3.11 Publish dialog
+- [ ] M3.12 Docs, performance, end-to-end
+
 ### Later
 
-- M3 Song manager + full publish (title plate designer, disc, preview, BGA)
 - M4 Stem slicing
 - M5 Importers (`.ez` originals, BMS/BME, BmsTWO, MIDI, circus2bmson)
 - M6 Exporters (cabinet `.ez` v8/v6, BMS/BME)

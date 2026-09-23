@@ -3,8 +3,18 @@
 // the editor fully usable in `pnpm dev` and makes the Playwright tests
 // deterministic.
 
+import {
+  DISC_RADIUS,
+  DISC_SIZE,
+  EYECATCH_H,
+  EYECATCH_W,
+  centreSquare,
+  eyecatchExtent,
+  type ArtJob,
+} from '@ez2bms/chart-core';
 import { demoFiles, demoSeconds, DEMO_DIR } from './demo';
 import type {
+  ArtPixels,
   AudioEvent,
   Backend,
   ClockSnapshot,
@@ -37,6 +47,45 @@ export function wavSeconds(b: Uint8Array): number | undefined {
     o += 8 + size + (size & 1);
   }
   return undefined;
+}
+
+/**
+ * The browser's stand-in for ez2bms-media: the canvas scales (smoothly, not
+ * with the importer's box average) and the disc is keyed as the port keys it.
+ * Enough to see and test the cropper; the desktop app cuts the real bytes.
+ */
+export async function canvasArt(bytes: Uint8Array, job: ArtJob): Promise<ArtPixels> {
+  const img = await createImageBitmap(new Blob([bytes as BlobPart]));
+  const disc = job.kind === 'disc';
+  const [w, h] = disc ? [DISC_SIZE, DISC_SIZE] : [EYECATCH_W, EYECATCH_H];
+  const from = disc
+    ? (job.crop ?? centreSquare(img.width, img.height))
+    : job.mode === 'visible'
+      ? eyecatchExtent(job.crop)
+      : { x: 0, y: 0, w: img.width, h: img.height };
+  const canvas = new OffscreenCanvas(w, h);
+  const g = canvas.getContext('2d')!;
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, w, h);
+  // A source rectangle past the image is clipped, its destination with it: black there.
+  g.drawImage(img, from.x, from.y, from.w, from.h, 0, 0, w, h);
+  img.close();
+  const d = g.getImageData(0, 0, w, h).data;
+  const rgb = new Uint8Array(w * h * 3);
+  const c = DISC_SIZE / 2 - 0.5;
+  for (let i = 0; i < w * h; i++) {
+    const px = d.subarray(i * 4, i * 4 + 3);
+    if (disc) {
+      const [dx, dy] = [(i % w) - c, Math.floor(i / w) - c];
+      if (dx * dx + dy * dy > DISC_RADIUS * DISC_RADIUS) continue;
+      if (!px[0] && !px[1] && !px[2]) {
+        rgb.fill(1, i * 3, i * 3 + 3);
+        continue;
+      }
+    }
+    rgb.set(px, i * 3);
+  }
+  return { w, h, rgb };
 }
 
 /** `defaults` are settings used where the stored ones say nothing (the demo's game folder). */
@@ -159,7 +208,9 @@ export function webBackend(
         samples: all
           .filter((p) => AUDIO.test(p) && !p.split('/').some((s) => s.startsWith('.')))
           .sort(),
-        images: all.filter((p) => IMAGE.test(p)).sort(),
+        images: all
+          .filter((p) => IMAGE.test(p) && !p.split('/').some((s) => s.startsWith('.')))
+          .sort(),
       };
     },
     loadSettings: async () => {
@@ -198,8 +249,9 @@ export function webBackend(
         input.oncancel = () => resolve([]);
         input.click();
       }),
-    importFiles: async (dir, paths) => {
+    importFiles: async (dir, paths, kind = 'audio') => {
       const d = norm(dir);
+      const takes = kind === 'image' ? IMAGE : AUDIO;
       const out: Imported[] = [];
       const wanted: string[] = [];
       for (const p of paths.map(norm)) {
@@ -208,7 +260,7 @@ export function webBackend(
       }
       for (const from of wanted) {
         const base = from.slice(from.lastIndexOf('/') + 1);
-        if (!AUDIO.test(base) || base.startsWith('.')) {
+        if (!takes.test(base) || base.startsWith('.')) {
           if (
             !from
               .slice(0, from.lastIndexOf('/'))
@@ -219,7 +271,10 @@ export function webBackend(
               from,
               name: null,
               reused: false,
-              error: 'not an audio file EZ2BMS can play',
+              error:
+                kind === 'image'
+                  ? 'not an image EZ2BMS can read (PNG, JPEG or BMP)'
+                  : 'not an audio file EZ2BMS can play',
             });
           continue;
         }
@@ -356,6 +411,13 @@ export function webBackend(
       streamClock: (on) => {
         const t = setInterval(() => on(snapshot()), 8);
         return () => clearInterval(t);
+      },
+    },
+    media: {
+      art: async (path, job) => {
+        const b = files.get(norm(path));
+        if (!b) throw missing(path);
+        return canvasArt(b, job);
       },
     },
     port: {

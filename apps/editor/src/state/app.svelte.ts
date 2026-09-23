@@ -15,6 +15,7 @@ import { SkinState } from './skin.svelte';
 import { ClassicState } from './classic.svelte';
 import { SoundsState } from './sounds.svelte';
 import { SongState } from './song.svelte';
+import { ArtState } from './art.svelte';
 import { ask, toast } from './toasts.svelte';
 import { View } from './view.svelte';
 
@@ -30,6 +31,7 @@ export class App {
   readonly classic: ClassicState;
   readonly sounds: SoundsState;
   readonly song: SongState;
+  readonly art: ArtState;
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
@@ -46,6 +48,7 @@ export class App {
     this.classic = new ClassicState(this);
     this.sounds = new SoundsState(this);
     this.song = new SongState(this);
+    this.art = new ArtState(this);
     this.commands.onError = (e, c) =>
       toast(`${c.title}: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }

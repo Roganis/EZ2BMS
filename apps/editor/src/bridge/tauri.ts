@@ -53,7 +53,8 @@ export function tauriBackend(): Backend {
       const r = await open({ multiple: true, title, filters: [{ name: 'Files', extensions }] });
       return Array.isArray(r) ? r : r ? [r] : [];
     },
-    importFiles: (dir, paths) => invoke<Imported[]>('fs_copy_into', { dir, paths }),
+    importFiles: (dir, paths, kind = 'audio') =>
+      invoke<Imported[]>('fs_copy_into', { dir, paths, kind }),
     renameFile: (from, to) => invoke('fs_rename', { from, to }),
     onFileDrop: (cb) => {
       // Tauri takes OS file drops itself (dragDropEnabled), so the page never
@@ -105,6 +106,14 @@ export function tauriBackend(): Backend {
         return () => {
           live = false;
         };
+      },
+    },
+    media: {
+      art: async (path, job) => {
+        // [u32 width][u32 height] then the pixels.
+        const b = bytesOf(await invoke('media_art', { path, job }));
+        const dv = new DataView(b.buffer, b.byteOffset, 8);
+        return { w: dv.getUint32(0, true), h: dv.getUint32(4, true), rgb: b.subarray(8) };
       },
     },
     port: {

@@ -1,0 +1,15 @@
+[package]
+name = "ez2bms-media"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "EZ2BMS: song art for EZ2PORT - decode images, crop, and cut the disc and eyecatch as the port's importer does"
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp"] }
+thiserror.workspace = true
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json.workspace = true

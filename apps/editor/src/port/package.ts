@@ -22,8 +22,19 @@ export interface Built {
   plan: PackagePlan;
 }
 
-/** The whole song, or just `only` (a test run needs one chart). */
-export function buildPackage(app: App, opts: { only?: ChartSlot; key?: string } = {}): Built {
+/**
+ * The whole song, or just `only` (a test run needs one chart). `art` is the
+ * disc and eyecatch, cut beforehand (ArtState.packageArt: the host cuts them,
+ * which a test run can do without - ez2play shows neither).
+ */
+export function buildPackage(
+  app: App,
+  opts: {
+    only?: ChartSlot;
+    key?: string;
+    art?: { discAbm?: Uint8Array; eyecatchAbm?: Uint8Array };
+  } = {},
+): Built {
   const p = app.project;
   if (!p) throw new PublishError('no song is open');
   const slots = opts.only ? [opts.only] : p.charts;
@@ -42,6 +53,7 @@ export function buildPackage(app: App, opts: { only?: ChartSlot; key?: string } 
       // Always written: a song without one is CUSTOM (48), which song.ini now says.
       category: effectiveCategory(p.sidecar.category),
       ...(plate ? { songnameAbm: plate } : {}),
+      ...opts.art,
       ...(p.sidecar.id ? { songId: p.sidecar.id } : {}),
     },
     charts,

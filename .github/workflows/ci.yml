@@ -23,9 +23,11 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       # The oracle CLI lets chart-core tests compare against EZ2PORT's own code;
-      # render_specs lets them compare the sound model against the real mixer.
+      # render_specs lets them compare the sound model against the real mixer;
+      # art, our disc and eyecatch cuts against the port's importer.
       - run: cargo build -p ez2port-oracle --release
       - run: cargo build -p ez2bms-audio --example render_specs --release
+      - run: cargo build -p ez2bms-media --example art --release
       - run: pnpm test
         env:
           EZ2PORT_ORACLE: ${{ github.workspace }}/target/release/ez2port-oracle
@@ -76,5 +78,5 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test -p ez2bms-audio -p ez2bms-launch -p ez2bms
+      - run: cargo test -p ez2bms-audio -p ez2bms-launch -p ez2bms-media -p ez2bms
       - run: cargo build -p ez2bms-audio --features cpal

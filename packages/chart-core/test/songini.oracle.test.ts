@@ -164,6 +164,8 @@ describe.skipIf(!ORACLE)("readSongIni against the port's merge", () => {
         genre: 'G',
         category: 38,
         songnameAbm: new Uint8Array(10),
+        discAbm: new Uint8Array(10),
+        eyecatchAbm: new Uint8Array(10),
         songId: 'abcd-1234',
       },
       [{ data, mode: '5k', tier: 'NM' }],
@@ -182,6 +184,8 @@ describe.skipIf(!ORACLE)("readSongIni against the port's merge", () => {
     expect(e.levels).toEqual([4, 0, 0, 0]);
     expect(e.groups).toEqual([38]);
     expect(e.assets.Songname).toBe('lanes/songname.abm');
+    expect(e.assets.Disc).toBe('lanes/disc.abm');
+    expect(e.assets.Eyecatch).toBe('lanes/eyecatch.abm');
     expect(readSongIni(ini).ez2bms).toEqual({ SongId: 'abcd-1234' });
     // Ranking tables go beside the charts, named as rankingFile reads them.
     for (const [t, path] of e.rank.entries()) {
