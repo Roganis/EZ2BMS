@@ -1,5 +1,6 @@
 //! Song art for EZ2PORT packages: the disc (`disc.abm`, 256x256) and the
-//! eyecatch (`eyecatch.abm`, 1024x512), cut from any PNG, JPEG or BMP.
+//! eyecatch (`eyecatch.abm`, 1024x512), cut from any PNG, JPEG or BMP, and
+//! the title plate (`songname.abm`, text.rs).
 //!
 //! The pixel work follows EZ2PORT's own bmson importer (ez2/bmson.c
 //! `resize_rgba`, `write_disc`, `write_eyecatch`) exactly, so a default crop
@@ -12,6 +13,7 @@ use std::io::Cursor;
 use image::{DynamicImage, ImageDecoder, ImageReader};
 
 pub mod art;
+pub mod text;
 
 pub use art::{disc, eyecatch, render, resize_rgb, resize_view, ArtJob, Eyecatch, Rect};
 

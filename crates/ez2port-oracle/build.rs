@@ -74,6 +74,11 @@ fn main() {
     if !build.get_compiler().is_like_msvc() {
         build.flag("-std=gnu99");
     }
+    // As EZ2PORT ships (RelWithDebInfo by default, Release in check.sh; both
+    // NDEBUG): stb_truetype asserts on some tiny glyph edges and, built
+    // without NDEBUG, would abort where the port renders on. ez2core itself
+    // has no asserts, so nothing else changes.
+    build.define("NDEBUG", None);
     for f in EZ2CORE {
         build.file(core.join("ez2").join(format!("{f}.c")));
     }

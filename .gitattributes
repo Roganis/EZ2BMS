@@ -9,3 +9,6 @@
 *.png binary
 *.ico binary
 *.icns binary
+# Fonts are binary whatever git guesses (a plate must render from the same bytes everywhere).
+*.ttf binary
+*.ttc binary

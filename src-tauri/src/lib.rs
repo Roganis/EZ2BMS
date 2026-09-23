@@ -26,6 +26,7 @@ use crate::port::{
     InspectionDto, Located, PackageDto, ProbeDto, PublishOptions, Published, RunEvent, Runs,
     TestDto,
 };
+use ez2bms_media::text::PlateSpec;
 
 /// Which clock stream is current; older ones stop (a reloaded page opens a new one).
 static CLOCK_STREAM: AtomicU64 = AtomicU64::new(0);
@@ -100,6 +101,16 @@ fn fs_rename(from: PathBuf, to: PathBuf) -> CmdResult<()> {
 }
 
 // ---- song art
+
+/// The title plate (media.rs `Media::plate`).
+#[tauri::command]
+async fn media_plate(media: State<'_, Arc<Media>>, spec: PlateSpec) -> CmdResult<Response> {
+    let media = media.inner().clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || media.plate(&spec))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))??;
+    Ok(Response::new(bytes))
+}
 
 /// The disc or the eyecatch cut from an image: `[u32 w][u32 h]` + RGB.
 #[tauri::command]
@@ -290,6 +301,20 @@ fn port_stop(runs: State<'_, Arc<Runs>>, id: u32) -> CmdResult<()> {
     runs.stop(id)
 }
 
+/// The plate fonts (fonts/README.md): `EZ2BMS_FONTS`, else the bundle's
+/// `fonts` resource folder, else - running from the source tree - the
+/// repository's `fonts/`.
+fn fonts_dir(app: &AppHandle) -> PathBuf {
+    if let Some(dir) = std::env::var_os("EZ2BMS_FONTS") {
+        return PathBuf::from(dir);
+    }
+    let bundled = app.path().resource_dir().ok().map(|d| d.join("fonts"));
+    match bundled {
+        Some(d) if d.join("Roboto-Bold.ttf").is_file() => d,
+        _ => PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../fonts"),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -297,7 +322,7 @@ pub fn run() {
         .setup(|app| {
             app.manage(Arc::new(Audio::open()));
             app.manage(Arc::new(Runs::default()));
-            app.manage(Arc::new(Media::default()));
+            app.manage(Arc::new(Media::new(fonts_dir(app.handle()))));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -311,6 +336,7 @@ pub fn run() {
             fs_copy_into,
             fs_rename,
             media_art,
+            media_plate,
             settings_load,
             settings_save,
             audio_info,

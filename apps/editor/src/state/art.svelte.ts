@@ -1,15 +1,18 @@
 // The song's disc and eyecatch in the editor: which image each is cut from
 // and how (ez2bms.song.json; the rules are chart-core's song/art.ts), the
 // cut the cropper previews - the host's own, so what you see is what is
-// published - and the .abm files a publish writes.
+// published - and the .abm files a publish writes, the title plate with them.
 
 import {
   PublishError,
   defaultEyecatch,
   encodeAbm,
+  songMeta,
+  titlePlate,
   type ArtJob,
   type DiscArt,
   type EyecatchArt,
+  type PlateSpec,
 } from '@ez2bms/chart-core';
 import { baseName, joinPath, type ArtPixels } from '../bridge';
 import type { App } from './app.svelte';
@@ -18,6 +21,13 @@ import { plural } from './songwide';
 import { toast } from './toasts.svelte';
 
 export type ArtKind = 'disc' | 'eyecatch';
+
+/** The art files of a package, as compileSong takes them. */
+export interface PackageArt {
+  songnameAbm?: Uint8Array;
+  discAbm?: Uint8Array;
+  eyecatchAbm?: Uint8Array;
+}
 
 export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'bmp'];
 
@@ -122,10 +132,25 @@ export class ArtState {
     return names;
   }
 
-  /** The disc and eyecatch as package files, cut by the host and encoded as .abm. */
-  async packageArt(p: Project): Promise<{ discAbm?: Uint8Array; eyecatchAbm?: Uint8Array }> {
+  /**
+   * The song's title plate: the shipped plates' layout (TEXT.md s7) from its
+   * title and subtitle.
+   */
+  plateSpec(p: Project): PlateSpec {
+    const meta = songMeta(p.charts.map((c) => ({ data: c.doc.data, tier: c.tier }))).values;
+    return titlePlate(meta.title || p.name, meta.subtitle);
+  }
+
+  /**
+   * The title plate, disc and eyecatch as package files: rendered and cut by
+   * the host, encoded as .abm.
+   */
+  async packageArt(p: Project): Promise<PackageArt> {
     const art = p.art;
-    const out: { discAbm?: Uint8Array; eyecatchAbm?: Uint8Array } = {};
+    const plate = await this.app.backend.media.plate(this.plateSpec(p)).catch((e: unknown) => {
+      throw new PublishError(`The title plate: ${e instanceof Error ? e.message : String(e)}`);
+    });
+    const out: PackageArt = { songnameAbm: encodeAbm(plate.rgb, plate.w, plate.h) };
     for (const kind of ['disc', 'eyecatch'] as const) {
       const a = art[kind];
       if (!a) continue;

@@ -1,0 +1,13 @@
+Fonts EZ2BMS renders song title plates with (crates/ez2bms-media, text.rs).
+
+Roboto Bold (Roboto-Bold.ttf)
+Copyright 2011 Google Inc. All Rights Reserved.
+Licensed under the Apache License, Version 2.0 - see LICENSE-Apache-2.0.txt.
+The copy EZ2PORT (build 1582) ships and draws its own titles with, so a
+plate made here matches the plates the port makes.
+
+Noto Sans CJK Bold (NotoSansCJK-Bold.ttc) - not in the repository
+Copyright 2014-2021 Adobe (http://www.adobe.com/).
+Licensed under the SIL Open Font License 1.1 - see LICENSE-OFL-NotoSansCJK.txt.
+Fetched by scripts/fetch-fonts.mjs (notofonts/noto-cjk, tag Sans2.004) and
+shipped with the desktop app, for titles in Korean, Japanese and Chinese.

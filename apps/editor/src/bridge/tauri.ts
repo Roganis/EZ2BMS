@@ -115,6 +115,18 @@ export function tauriBackend(): Backend {
         const dv = new DataView(b.buffer, b.byteOffset, 8);
         return { w: dv.getUint32(0, true), h: dv.getUint32(4, true), rgb: b.subarray(8) };
       },
+      plate: async (spec) => {
+        // [u32 w][u32 h][u32 n][n code points] then the pixels.
+        const b = bytesOf(await invoke('media_plate', { spec }));
+        const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+        const n = dv.getUint32(8, true);
+        const missing = Array.from({ length: n }, (_, i) =>
+          String.fromCodePoint(dv.getUint32(12 + i * 4, true)),
+        );
+        const w = dv.getUint32(0, true);
+        const h = dv.getUint32(4, true);
+        return { w, h, missing, rgb: b.subarray(12 + n * 4) };
+      },
     },
     port: {
       locate: (start) => invoke<Located>('port_locate', { start }),

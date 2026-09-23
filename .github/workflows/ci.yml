@@ -24,10 +24,16 @@ jobs:
       - run: pnpm typecheck
       # The oracle CLI lets chart-core tests compare against EZ2PORT's own code;
       # render_specs lets them compare the sound model against the real mixer;
-      # art, our disc and eyecatch cuts against the port's importer.
+      # art and plate, our song art and title plates against the port's own.
       - run: cargo build -p ez2port-oracle --release
       - run: cargo build -p ez2bms-audio --example render_specs --release
-      - run: cargo build -p ez2bms-media --example art --release
+      - run: cargo build -p ez2bms-media --examples --release
+      # The CJK font for plates in Korean, Japanese and Chinese (20 MB, pinned).
+      - uses: actions/cache@v4
+        with:
+          path: fonts/NotoSansCJK-Bold.ttc
+          key: fonts-${{ hashFiles('scripts/fetch-fonts.mjs') }}
+      - run: node scripts/fetch-fonts.mjs
       - run: pnpm test
         env:
           EZ2PORT_ORACLE: ${{ github.workspace }}/target/release/ez2port-oracle
@@ -50,6 +56,11 @@ jobs:
       # ALSA headers, for the audio crate's real-device backend (cpal).
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev
       - run: cargo fmt --all -- --check
+      - uses: actions/cache@v4
+        with:
+          path: fonts/NotoSansCJK-Bold.ttc
+          key: fonts-${{ hashFiles('scripts/fetch-fonts.mjs') }}
+      - run: node scripts/fetch-fonts.mjs
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test
       - run: cargo build -p ez2bms-audio --features cpal

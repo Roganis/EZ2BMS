@@ -3,7 +3,7 @@
 // (in-memory files, a silent clock) in a browser and in Playwright. The
 // shapes mirror src-tauri's commands one for one.
 
-import type { ArtJob } from '@ez2bms/chart-core';
+import type { ArtJob, PlateSpec } from '@ez2bms/chart-core';
 
 export interface Entry {
   name: string;
@@ -207,9 +207,17 @@ export interface ArtPixels {
   rgb: Uint8Array;
 }
 
+/** A rendered title plate (src-tauri media_plate). */
+export interface PlatePixels extends ArtPixels {
+  /** Characters the fonts have no glyph for (drawn as boxes). */
+  missing: string[];
+}
+
 export interface MediaBackend {
   /** The disc or the eyecatch cut from an image, with the port importer's arithmetic. */
   art(path: string, job: ArtJob): Promise<ArtPixels>;
+  /** The title plate, from the bundled fonts, as EZ2PORT renders one. */
+  plate(spec: PlateSpec): Promise<PlatePixels>;
 }
 
 /** Files dragged over the window (paths only on drop; CSS pixels). */

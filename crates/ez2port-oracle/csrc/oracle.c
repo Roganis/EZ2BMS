@@ -51,6 +51,8 @@
 #include "ez2/songdb.h"
 #include "ez2/songini.h"
 #include "ez2/ssf.h"
+#include "ez2/textspec.h"
+#include "ez2/ttf.h"
 #include "ez2/usersongs.h"
 #include "ez2/util.h"
 
@@ -867,6 +869,69 @@ static void jrel(const char *root, const char *path)
         jstr(path);
 }
 
+static int write_file(const char *path, const unsigned char *b, size_t n)
+{
+    FILE *f = fopen(path, "wb");
+    int ok = f && fwrite(b, 1, n, f) == n;
+    if (f)
+        fclose(f);
+    return ok;
+}
+
+/* One line through ez2_ttf_render_box, white on black: the plate
+ * renderer's core. `text` comes from a file (any bytes, no shell quoting);
+ * the RGB goes to OUT. */
+static int cmd_ttf(const char *font, const char *text_path, int w, int h, int x,
+                   int baseline, float cap, int align, int max_width, const char *out)
+{
+    size_t n = 0;
+    unsigned char *text = slurp(text_path, &n), *rgb;
+    char *z;
+    int ok;
+
+    if (!text || w <= 0 || h <= 0) {
+        free(text);
+        printf("{\"error\":\"bad input\"}\n");
+        return 1;
+    }
+    z = (char *)malloc(n + 1);
+    rgb = (unsigned char *)calloc((size_t)w * h * 3, 1);
+    if (!z || !rgb) {
+        free(text); free(z); free(rgb);
+        return 1;
+    }
+    memcpy(z, text, n);
+    z[n] = 0;
+    ok = ez2_ttf_render_box(font, z, rgb, w, h, x, baseline, cap, align, max_width);
+    if (ok)
+        ok = write_file(out, rgb, (size_t)w * h * 3);
+    printf("{\"ok\":%d}\n", ok);
+    free(text); free(z); free(rgb);
+    return ok ? 0 : 1;
+}
+
+/* A plate through the port's manifest path: ez2_textspec_load(DIR) then
+ * ez2_textspec_render(REL, SCALE), the RGBA to OUT. */
+static int cmd_textspec(const char *dir, const char *rel, int scale, const char *out)
+{
+    int w = 0, h = 0, lw = 0, lh = 0, count = ez2_textspec_load(dir, 0);
+    unsigned char *rgba = count ? ez2_textspec_render(rel, scale, &w, &h, &lw, &lh) : 0;
+
+    if (!rgba) {
+        printf("{\"entries\":%d,\"rendered\":0}\n", count);
+        ez2_textspec_unload();
+        return 0;
+    }
+    if (!write_file(out, rgba, (size_t)w * h * 4)) {
+        free(rgba);
+        return 1;
+    }
+    printf("{\"entries\":%d,\"rendered\":1,\"w\":%d,\"h\":%d}\n", count, w, h);
+    free(rgba);
+    ez2_textspec_unload();
+    return 0;
+}
+
 static int cmd_usersongs(const char *root, const char *mode, const char *shipped)
 {
     static const char *const kinds[4] = { "Disc", "Songname", "Eyecatch", "Preview" };
@@ -980,6 +1045,12 @@ int ez2bms_oracle_main(int argc, char **argv)
     if (!strcmp(c, "judge-sim") && argc == 8)
         return cmd_judge_sim(argv[2], argv[3], argv[4], atof(argv[5]), atof(argv[6]),
                              (unsigned)strtoul(argv[7], 0, 10));
+    if (!strcmp(c, "ttf") && argc == 12)
+        return cmd_ttf(argv[2], argv[3], atoi(argv[4]), atoi(argv[5]), atoi(argv[6]),
+                       atoi(argv[7]), (float)atof(argv[8]), atoi(argv[9]), atoi(argv[10]),
+                       argv[11]);
+    if (!strcmp(c, "textspec") && argc == 6)
+        return cmd_textspec(argv[2], argv[3], atoi(argv[4]), argv[5]);
     if (!strcmp(c, "usersongs") && (argc == 4 || argc == 5))
         return cmd_usersongs(argv[2], argv[3], argc == 5 ? argv[4] : 0);
     if (!strcmp(c, "bmson-import") && argc >= 5 && argc <= 7) {
@@ -998,6 +1069,8 @@ int ez2bms_oracle_main(int argc, char **argv)
             "       ez2port-oracle mixparam|score   (script on stdin)\n"
             "       ez2port-oracle judge-sim EZ INI MODE OFFSET JITTER SEED\n"
             "       ez2port-oracle bmson-import FOLDER GAME_ROOT OUT_ROOT [KEY] [--rgba]\n"
-            "       ez2port-oracle usersongs ROOT MODE [SHIPPED,KEYS]\n");
+            "       ez2port-oracle usersongs ROOT MODE [SHIPPED,KEYS]\n"
+            "       ez2port-oracle ttf FONT TEXTFILE W H X BASELINE CAP ALIGN MAXW OUT\n"
+            "       ez2port-oracle textspec DIR REL SCALE OUT\n");
     return 2;
 }

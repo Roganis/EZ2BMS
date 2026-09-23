@@ -18,3 +18,5 @@ src-tauri/gen/
 !**/test/fixtures/**/*.abm
 /game/
 /exe/
+# Fetched by scripts/fetch-fonts.mjs (20 MB; licence and hash in fonts/README.md).
+/fonts/NotoSansCJK-Bold.ttc

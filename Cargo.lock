@@ -911,6 +911,7 @@ dependencies = [
 name = "ez2bms-media"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "image",
  "serde",
  "serde_json",

@@ -130,7 +130,7 @@ Found and fixed on the way: the rack's hit list was never cleared (M2.8),
 and at 1 280 px the top bar was wider than the window, which made the
 playfield re-bake its textures every frame (see `docs/perf-log.md`).
 
-### Song manager, safe publishing and song art (M3.1-M3.4), 2026-09-23
+### Song manager, safe publishing, song art and plates (M3.1-M3.5), 2026-09-23
 
 The assistant is writing Milestone 3 step by step after the owner's
 decisions (a bundled CJK font for plates, rankings kept only for charts
@@ -144,10 +144,16 @@ owner's own game art):
   replaced package kept in `.ez2bms-backup`;
 - song art: the `ez2bms-media` crate (decode, crop, and a transcription of
   the port importer's disc and eyecatch arithmetic), the host command that
-  cuts them, and the cropper in the song manager.
+  cuts them, and the cropper in the song manager;
+- title plates: the port's text renderer transcribed around the same
+  stb_truetype, with Roboto Bold (EZ2PORT's copy, Apache-2.0, committed)
+  and Noto Sans CJK Bold (OFL-1.1, fetched by a pinned hash and shipped
+  with the app). Font licences are in `fonts/`.
 
 The disc and the stretched eyecatch are checked byte for byte against
-EZ2PORT's own importer through the oracle, on random images; the song.ini
+EZ2PORT's own importer through the oracle, on random images; plates
+against the port's own text renderer on random lines and plates, Korean
+and Japanese included (on Linux; Windows is expected to round the same); the song.ini
 reader against the port's `ez2_usersongs_merge`; the publish rules in Rust
 temp-folder tests and end to end. What has not been seen: a published disc
 spinning on the real wheel, what the eyecatch shows on the owner's screens
@@ -194,3 +200,5 @@ code), and a publish while EZ2PORT has the old package open on Windows.
 | Disc and stretched eyecatch bytes equal the port importer's         | oracle, random images up and down         | Yes, in the container |
 | The disc and eyecatch look right in EZ2PORT (wheel, select exit)    | not run (no game here)                    | **No** - owner        |
 | Publishing while EZ2PORT runs (Windows file locks)                  | not run                                   | **No** - owner        |
+| Title plates equal the port's own renderer's, CJK included          | oracle, random text and plates (Linux)    | Yes, in the container |
+| A plate on the real wheel beside the game's titles (a Korean one)   | not run (no game here)                    | **No** - owner        |

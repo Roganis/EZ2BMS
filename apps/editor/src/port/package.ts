@@ -12,8 +12,8 @@ import {
 import { soundPath } from '../audio/paths';
 import type { PackageSpec } from '../bridge';
 import type { App } from '../state/app.svelte';
+import type { PackageArt } from '../state/art.svelte';
 import type { ChartSlot } from '../state/project.svelte';
-import { renderPlate } from './plate';
 
 const PUBLISH_RATE = 44100;
 
@@ -24,16 +24,13 @@ export interface Built {
 
 /**
  * The whole song, or just `only` (a test run needs one chart). `art` is the
- * disc and eyecatch, cut beforehand (ArtState.packageArt: the host cuts them,
- * which a test run can do without - ez2play shows neither).
+ * title plate, disc and eyecatch, made beforehand (ArtState.packageArt: the
+ * host renders and cuts them, which a test run does without - ez2play shows
+ * none of them).
  */
 export function buildPackage(
   app: App,
-  opts: {
-    only?: ChartSlot;
-    key?: string;
-    art?: { discAbm?: Uint8Array; eyecatchAbm?: Uint8Array };
-  } = {},
+  opts: { only?: ChartSlot; key?: string; art?: PackageArt } = {},
 ): Built {
   const p = app.project;
   if (!p) throw new PublishError('no song is open');
@@ -43,7 +40,6 @@ export function buildPackage(
   const meta = songMeta(p.charts.map((c) => ({ data: c.doc.data, tier: c.tier }))).values;
   const title = meta.title || p.name;
   const charts: SongChart[] = slots.map((c) => ({ data: c.doc.data, mode: c.mode, tier: c.tier }));
-  const plate = typeof document !== 'undefined' ? renderPlate(title) : undefined;
   const plan = compileSong(
     {
       key,
@@ -52,7 +48,6 @@ export function buildPackage(
       genre: meta.genre,
       // Always written: a song without one is CUSTOM (48), which song.ini now says.
       category: effectiveCategory(p.sidecar.category),
-      ...(plate ? { songnameAbm: plate } : {}),
       ...opts.art,
       ...(p.sidecar.id ? { songId: p.sidecar.id } : {}),
     },

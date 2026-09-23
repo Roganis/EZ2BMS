@@ -11,10 +11,12 @@ import {
   centreSquare,
   eyecatchExtent,
   type ArtJob,
+  type PlateSpec,
 } from '@ez2bms/chart-core';
 import { demoFiles, demoSeconds, DEMO_DIR } from './demo';
 import type {
   ArtPixels,
+  PlatePixels,
   AudioEvent,
   Backend,
   ClockSnapshot,
@@ -86,6 +88,43 @@ export async function canvasArt(bytes: Uint8Array, job: ArtJob): Promise<ArtPixe
     rgb.set(px, i * 3);
   }
   return { w, h, rgb };
+}
+
+/**
+ * The browser's stand-in for the plate renderer: the canvas's own bold sans
+ * where the desktop app sets Roboto through stb_truetype. The layout follows
+ * the spec (anchor, baseline, capital height, condensing); the pixels are
+ * only a likeness.
+ */
+export function canvasPlate(spec: PlateSpec): PlatePixels {
+  const canvas = new OffscreenCanvas(spec.w, spec.h);
+  const g = canvas.getContext('2d')!;
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, spec.w, spec.h);
+  for (const l of spec.lines) {
+    // A bold sans's capitals are about 0.72 of its size.
+    g.font = `bold ${l.cap / 0.72}px Roboto, "Noto Sans CJK KR", sans-serif`;
+    const natural = g.measureText(l.text).width;
+    const sx = l.maxWidth > 0 && natural > l.maxWidth ? l.maxWidth / natural : 1;
+    const w = natural * sx;
+    const x0 = l.align === 'right' ? l.x - w : l.align === 'center' ? l.x - w / 2 : l.x;
+    g.save();
+    g.translate(x0, l.baseline);
+    g.scale(sx, 1);
+    if (l.glow) {
+      g.shadowColor = `#${l.glow}`;
+      g.shadowBlur = 4;
+    }
+    g.fillStyle = `#${l.ink}`;
+    g.textAlign = 'left';
+    g.textBaseline = 'alphabetic';
+    g.fillText(l.text, 0, 0);
+    g.restore();
+  }
+  const d = g.getImageData(0, 0, spec.w, spec.h).data;
+  const rgb = new Uint8Array(spec.w * spec.h * 3);
+  for (let i = 0; i < spec.w * spec.h; i++) rgb.set(d.subarray(i * 4, i * 4 + 3), i * 3);
+  return { w: spec.w, h: spec.h, rgb, missing: [] };
 }
 
 /** `defaults` are settings used where the stored ones say nothing (the demo's game folder). */
@@ -419,6 +458,7 @@ export function webBackend(
         if (!b) throw missing(path);
         return canvasArt(b, job);
       },
+      plate: async (spec) => canvasPlate(spec),
     },
     port: {
       locate: async () => ({ game_root: null, ez2play: null, songs_root: null }),
