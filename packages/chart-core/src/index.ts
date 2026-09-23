@@ -37,6 +37,7 @@ export * from './publish/keysounds';
 export * from './publish/tracks';
 export * from './publish/chart-plan';
 export * from './publish/playback';
+export * from './publish/audible';
 export * from './publish/text';
 export * from './publish/package';
 export * from './engine/songini';
