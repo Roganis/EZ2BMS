@@ -118,6 +118,25 @@ fn fs_rename(from: PathBuf, to: PathBuf) -> CmdResult<()> {
     files::rename(&from, &to)
 }
 
+/// An imported song's folder, all or nothing (ez2bms-audio import.rs); the
+/// game's .ssf keysounds become .wav with their PCM untouched.
+#[tauri::command]
+async fn import_run(
+    dest: PathBuf,
+    job: files::ImportJobDto,
+    on_progress: Channel<[usize; 2]>,
+) -> CmdResult<files::ImportReportDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let job = job.into_job();
+        let r = ez2bms_audio::import::import_song(&dest, &job, &mut |done, total| {
+            let _ = on_progress.send([done, total]);
+        })?;
+        Ok(files::ImportReportDto::from(r))
+    })
+    .await
+    .map_err(|e| CmdError::Invalid(e.to_string()))?
+}
+
 // ---- song art
 
 /// The title plate (media.rs `Media::plate`).
@@ -425,6 +444,7 @@ pub fn run() {
             project_scan,
             fs_copy_into,
             fs_rename,
+            import_run,
             media_art,
             media_plate,
             settings_load,

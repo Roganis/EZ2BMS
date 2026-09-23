@@ -268,6 +268,19 @@ export interface Imported {
   error: string | null;
 }
 
+/** An imported song's folder: its text files, and keysounds to copy in (`pcm`: an .ssf/.ezw's PCM as a .wav). */
+export interface ImportJob {
+  files: { path: string; text: string }[];
+  copies: { from: string; to: string; convert: 'pcm' | 'copy' }[];
+}
+
+export interface ImportReport {
+  dir: string;
+  copied: number;
+  /** [target, why] for each keysound that could not be copied. */
+  failed: [string, string][];
+}
+
 /** What an import takes; other files offered with it are refused (src-tauri files::ImportKind). */
 export type ImportKind = 'audio' | 'image' | 'movie';
 
@@ -324,6 +337,16 @@ export interface Backend {
   importFiles(dir: string, paths: string[], kind?: ImportKind): Promise<Imported[]>;
   /** Rename a file; refuses to replace another one. */
   renameFile(from: string, to: string): Promise<void>;
+  /**
+   * Write an imported song's folder, all or nothing (src-tauri import_run):
+   * `dest` must not exist or be empty. A keysound that cannot be copied is
+   * reported, not fatal.
+   */
+  importRun(
+    dest: string,
+    job: ImportJob,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<ImportReport>;
   /** Files dragged onto the window. Returns the unsubscribe. */
   onFileDrop(cb: (d: FileDrop) => void): () => void;
   readonly audio: AudioBackend;

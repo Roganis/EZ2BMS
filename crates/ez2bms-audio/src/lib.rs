@@ -11,6 +11,8 @@
 //! - [`analysis`] finds a stem's onsets and tempo, suggestions for slicing.
 //! - [`cut`] and [`ssf`] write published keysounds: 16-bit 44.1 kHz stereo,
 //!   sliced sample-exactly.
+//! - [`import`] writes an imported song's folder, the game's `.ssf`
+//!   keysounds becoming `.wav` with their PCM untouched.
 //!
 //! Timing and voice assignment come from chart-core (TypeScript), which
 //! compiles the chart exactly as it will be published; this crate only plays
@@ -25,6 +27,7 @@ pub mod decode;
 pub mod disk;
 pub mod engine;
 pub mod error;
+pub mod import;
 pub mod level;
 pub mod mixer;
 pub mod offline;

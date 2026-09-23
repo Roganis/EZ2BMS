@@ -302,6 +302,63 @@ pub fn copy_into(dir: &Path, paths: &[PathBuf], kind: ImportKind) -> Vec<Importe
         .collect()
 }
 
+/// An import job as the editor sends it: the new folder's text files and the
+/// keysounds to copy (`convert`: "pcm" for an .ssf/.ezw, else "copy").
+#[derive(Debug, serde::Deserialize)]
+pub struct ImportJobDto {
+    pub files: Vec<ImportFileDto>,
+    pub copies: Vec<ImportCopyDto>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct ImportFileDto {
+    pub path: String,
+    pub text: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct ImportCopyDto {
+    pub from: PathBuf,
+    pub to: String,
+    pub convert: String,
+}
+
+impl ImportJobDto {
+    pub fn into_job(self) -> ez2bms_audio::import::ImportJob {
+        use ez2bms_audio::import::{Convert, ImportCopy, ImportJob};
+        ImportJob {
+            files: self.files.into_iter().map(|f| (f.path, f.text.into_bytes())).collect(),
+            copies: self
+                .copies
+                .into_iter()
+                .map(|c| ImportCopy {
+                    from: c.from,
+                    to: c.to,
+                    convert: if c.convert == "pcm" { Convert::Pcm } else { Convert::Copy },
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct ImportReportDto {
+    pub dir: String,
+    pub copied: usize,
+    /// [target, why] per keysound that could not be copied.
+    pub failed: Vec<(String, String)>,
+}
+
+impl From<ez2bms_audio::import::ImportReport> for ImportReportDto {
+    fn from(r: ez2bms_audio::import::ImportReport) -> Self {
+        ImportReportDto {
+            dir: r.dir.to_string_lossy().into_owned(),
+            copied: r.copied,
+            failed: r.failed,
+        }
+    }
+}
+
 /// Rename a file, never over another one. A change of case only goes through
 /// a temporary name (a case-insensitive disk would otherwise refuse or do
 /// nothing).

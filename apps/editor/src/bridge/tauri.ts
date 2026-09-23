@@ -13,6 +13,7 @@ import type {
   ClockSnapshot,
   Entry,
   Imported,
+  ImportReport,
   Inspection,
   Loaded,
   Located,
@@ -68,6 +69,11 @@ export function tauriBackend(): Backend {
     importFiles: (dir, paths, kind = 'audio') =>
       invoke<Imported[]>('fs_copy_into', { dir, paths, kind }),
     renameFile: (from, to) => invoke('fs_rename', { from, to }),
+    importRun: (dest, job, onProgress) => {
+      const ch = new Channel<[number, number]>();
+      if (onProgress) ch.onmessage = ([done, total]) => onProgress(done, total);
+      return invoke<ImportReport>('import_run', { dest, job, onProgress: ch });
+    },
     onFileDrop: (cb) => {
       // Tauri takes OS file drops itself (dragDropEnabled), so the page never
       // sees them as DOM events; its positions are physical pixels.

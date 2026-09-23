@@ -16,6 +16,35 @@ import {
   type PlateSpec,
 } from '@ez2bms/chart-core';
 import { demoFiles, demoSeconds, demoStem, demoStemLevel, DEMO_DIR } from './demo';
+
+/** An .ssf/.ezw as a WAV, its PCM untouched (the host's ez2bms-audio import.rs / wav::wrap_pcm). */
+function ssfToWav(b: Uint8Array): Uint8Array | undefined {
+  if (b.length < 18) return undefined;
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const channels = dv.getUint16(0, true);
+  const rate = dv.getUint32(2, true);
+  const block = dv.getUint16(10, true);
+  const bits = dv.getUint16(12, true);
+  const data = dv.getUint32(14, true);
+  if (block !== channels * (bits / 8) || data > b.length - 18) return undefined;
+  const pad = data & 1;
+  const out = new Uint8Array(44 + data + pad);
+  const o = new DataView(out.buffer);
+  out.set([0x52, 0x49, 0x46, 0x46], 0);
+  o.setUint32(4, 36 + data + pad, true);
+  out.set([0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20], 8);
+  o.setUint32(16, 16, true);
+  o.setUint16(20, 1, true);
+  o.setUint16(22, channels, true);
+  o.setUint32(24, rate, true);
+  o.setUint32(28, rate * block, true);
+  o.setUint16(32, block, true);
+  o.setUint16(34, bits, true);
+  out.set([0x64, 0x61, 0x74, 0x61], 36);
+  o.setUint32(40, data, true);
+  out.set(b.subarray(18, 18 + data), 44);
+  return out;
+}
 import type {
   ArtPixels,
   PlatePixels,
@@ -402,6 +431,36 @@ export function webBackend(
         }
       }
       return out;
+    },
+    // The host's import_run, in memory: the same all-or-nothing rule and the
+    // same conversion (an .ssf's PCM behind a WAV header, untouched).
+    importRun: async (dest, job, onProgress) => {
+      const d = norm(dest);
+      if ([...files.keys()].some((k) => k.startsWith(d + '/'))) {
+        throw new Error(`${dest}: the folder for the new song is not empty`);
+      }
+      const staged = new Map<string, Uint8Array>();
+      for (const f of job.files) {
+        if (f.path.split('/').some((s) => s === '..' || s === ''))
+          throw new Error(`${f.path}: not inside the song folder`);
+        staged.set(`${d}/${f.path}`, new TextEncoder().encode(f.text));
+      }
+      const total = job.files.length + job.copies.length;
+      let done = job.files.length;
+      const failed: [string, string][] = [];
+      for (const c of job.copies) {
+        const src = files.get(norm(c.from));
+        const bytes = !src ? undefined : c.convert === 'pcm' ? ssfToWav(src) : src.slice();
+        if (bytes) staged.set(`${d}/${c.to}`, bytes);
+        else
+          failed.push([c.to, src ? '.ssf: header is not self-consistent' : `${c.from}: not found`]);
+        onProgress?.(++done, total);
+      }
+      for (const [k, v] of staged) {
+        files.set(k, v);
+        mtimes.set(k, Date.now());
+      }
+      return { dir: d, copied: job.copies.length - failed.length, failed };
     },
     renameFile: async (from, to) => {
       const [f, t] = [norm(from), norm(to)];

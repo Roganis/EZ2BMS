@@ -24,6 +24,50 @@ function wav(frames: number): Uint8Array {
 }
 
 describe('the browser backend', () => {
+  it('writes an imported song all at once, an .ssf becoming a WAV of the same PCM', async () => {
+    const ssf = new Uint8Array(18 + 6);
+    const dv = new DataView(ssf.buffer);
+    dv.setUint16(0, 1, true);
+    dv.setUint32(2, 22050, true);
+    dv.setUint32(6, 44100, true);
+    dv.setUint16(10, 2, true);
+    dv.setUint16(12, 16, true);
+    dv.setUint32(14, 6, true);
+    ssf.set([1, 2, 3, 4, 5, 6], 18);
+    const files = new Map<string, Uint8Array>([
+      ['/game/sound/a/kick.ssf', ssf],
+      ['/game/sound/a/bad.ssf', enc('xx')],
+      ['/taken/x', enc('x')],
+    ]);
+    const b = webBackend(files);
+    const seen: number[][] = [];
+    const r = await b.importRun(
+      '/songs/new',
+      {
+        files: [{ path: 'streetmix1p-new.bmson', text: '{}' }],
+        copies: [
+          { from: '/game/sound/a/kick.ssf', to: 'kick.wav', convert: 'pcm' },
+          { from: '/game/sound/a/bad.ssf', to: 'bad.wav', convert: 'pcm' },
+          { from: '/game/sound/a/gone.ssf', to: 'gone.wav', convert: 'pcm' },
+        ],
+      },
+      (d, t) => seen.push([d, t]),
+    );
+    expect(r).toMatchObject({
+      copied: 1,
+      failed: [
+        ['bad.wav', expect.any(String)],
+        ['gone.wav', expect.any(String)],
+      ],
+    });
+    expect(seen.at(-1)).toEqual([4, 4]);
+    const w = await b.readFile('/songs/new/kick.wav');
+    expect(new TextDecoder().decode(w.subarray(0, 4))).toBe('RIFF');
+    expect([...w.subarray(44)]).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(await b.readText('/songs/new/streetmix1p-new.bmson')).toBe('{}');
+    await expect(b.importRun('/taken', { files: [], copies: [] })).rejects.toThrow(/not empty/);
+  });
+
   it('imports flat into the song, reusing the same bytes and never overwriting', async () => {
     const files = new Map<string, Uint8Array>([
       ['/song/kick.wav', enc('old kick')],
