@@ -1,9 +1,15 @@
 // Pulses <-> song milliseconds exactly as the published chart plays: the
 // engine's f32 tempo map, with each STOP turned into a gap (time runs, the
 // position stays put). Play-from-cursor and the moving cursor both use it,
-// so what you see lines up with what EZ2PORT will play.
+// so what you see lines up with what EZ2PORT will play; so do the stem
+// strips, drawing a stem where it sounds and placing its onsets.
+//
+// Unlike ChartClock it does not round positions to EZ2 ticks: it maps any
+// pulse, and any millisecond back to a (fractional) pulse.
 
-import { TICKS_PER_BEAT, type ChartData, type EngineTempo } from '@ez2bms/chart-core';
+import type { ChartData } from '../model/types';
+import type { EngineTempo } from './engine-tempo';
+import { TICKS_PER_BEAT } from './ticks';
 
 export class PlanTimeline {
   private readonly stops: { y: number; duration: number }[];

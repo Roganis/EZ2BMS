@@ -9,6 +9,7 @@ import { readEzff, EZ_NOTE } from '../src/io/ez/ezff';
 import { newChart } from '../src/model/defaults';
 import type { ChartData } from '../src/model/types';
 import { modeDef } from '../src/modes/registry';
+import { chopToGrid } from '../src/slice/ops';
 import { compileChart } from '../src/publish/chart-plan';
 import { KeysoundRegistry, OUT_RATE } from '../src/publish/keysounds';
 import { compileSong, PublishError } from '../src/publish/package';
@@ -145,6 +146,36 @@ describe('publish plan', () => {
   });
 });
 
+/** A stereo 16-bit WAV at 44.1 kHz, `seconds` long, of a pattern set by `seed`. */
+function wav(seconds: number, seed: number) {
+  const frames = Math.round(OUT_RATE * seconds);
+  const buf = Buffer.alloc(44 + frames * 4);
+  buf.write('RIFF', 0);
+  buf.writeUInt32LE(36 + frames * 4, 4);
+  buf.write('WAVEfmt ', 8);
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(2, 22);
+  buf.writeUInt32LE(OUT_RATE, 24);
+  buf.writeUInt32LE(OUT_RATE * 4, 28);
+  buf.writeUInt16LE(4, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write('data', 36);
+  buf.writeUInt32LE(frames * 4, 40);
+  for (let i = 0; i < frames * 2; i++) buf.writeInt16LE(((i * seed) % 20000) - 10000, 44 + i * 2);
+  return buf;
+}
+
+/** Background records of an .ez as `tick keysound-name`, sorted. */
+function backgroundOf(ez: ReturnType<typeof readEzff>, names: string[], lanes: Set<number>) {
+  const out: string[] = [];
+  ez.tracks.forEach((t, ti) => {
+    if (lanes.has(ti)) return;
+    for (const r of t.records) if (r.type === EZ_NOTE) out.push(`${r.tick} ${names[r.key! - 1]}`);
+  });
+  return out.sort();
+}
+
 function writePackage(
   dir: string,
   meta: Parameters<typeof compileSong>[0],
@@ -231,25 +262,6 @@ describe.skipIf(!ORACLE)('published packages against EZ2PORT (oracle)', () => {
       const data = sampleChart();
       const src = join(dir, 'src', 'psong');
       mkdirSync(join(src, 'keys'), { recursive: true });
-      const wav = (seconds: number, seed: number) => {
-        const frames = Math.round(OUT_RATE * seconds);
-        const buf = Buffer.alloc(44 + frames * 4);
-        buf.write('RIFF', 0);
-        buf.writeUInt32LE(36 + frames * 4, 4);
-        buf.write('WAVEfmt ', 8);
-        buf.writeUInt32LE(16, 16);
-        buf.writeUInt16LE(1, 20);
-        buf.writeUInt16LE(2, 22);
-        buf.writeUInt32LE(OUT_RATE, 24);
-        buf.writeUInt32LE(OUT_RATE * 4, 28);
-        buf.writeUInt16LE(4, 32);
-        buf.writeUInt16LE(16, 34);
-        buf.write('data', 36);
-        buf.writeUInt32LE(frames * 4, 40);
-        for (let i = 0; i < frames * 2; i++)
-          buf.writeInt16LE(((i * seed) % 20000) - 10000, 44 + i * 2);
-        return buf;
-      };
       writeFileSync(join(src, 'kick.wav'), wav(0.2, 7));
       writeFileSync(join(src, 'keys', 'piano 1.wav'), wav(0.5, 11));
       writeFileSync(join(src, 'stem.wav'), wav(2, 13));
@@ -318,5 +330,100 @@ describe.skipIf(!ORACLE)('published packages against EZ2PORT (oracle)', () => {
       )!;
       expect([hold.vel, hold.pan, hold.kind]).toEqual([100, 20, 1]);
     });
+  });
+
+  it('packages a chopped stem as EZ2PORT reads and imports it', () => {
+    // Chopped by M4's slicing at random grids and resolutions: our package's
+    // background sounds are the importer's, slice for slice, and the engine
+    // reads each record's keysound as planned.
+    const cases = fc.sample(
+      fc.record({
+        res: fc.constantFrom(240, 480, 96),
+        step: fc.constantFrom(1, 2, 3, 4, 6, 8),
+        from: fc.integer({ min: 0, max: 8 }),
+        bpm: fc.constantFrom(120, 150, 174),
+      }),
+      { numRuns: 12, seed: 2026 },
+    );
+    for (const c of cases) {
+      withTmpDir((dir) => {
+        const data = newChart({ mode: '5k', tier: 'NM', level: 3, bpm: c.bpm });
+        data.info.resolution = c.res;
+        const doc = new ChartDoc(data);
+        const [stemCh, kick] = addChannels(doc, ['stem.wav', 'kick.wav']);
+        placeNote(doc, { ch: stemCh!.id, x: 0, y: 0 });
+        placeNote(doc, { ch: kick!.id, x: 11, y: c.res });
+        const seconds = 3;
+        const samples = (src: string) =>
+          src === 'stem.wav' ? { frames: seconds * OUT_RATE } : { frames: OUT_RATE / 5 };
+        // Quarter beats times `step` from beat `from`, to past the stem's end.
+        const r = chopToGrid(
+          doc,
+          'stem.wav',
+          (c.from * c.res) / 4,
+          64 * c.res,
+          (c.step * c.res) / 4,
+          {
+            samples,
+          },
+        );
+        expect(r.ok).toBe(true);
+
+        const src = join(dir, 'src', 'chop');
+        mkdirSync(src, { recursive: true });
+        writeFileSync(join(src, 'stem.wav'), wav(seconds, 13));
+        writeFileSync(join(src, 'kick.wav'), wav(0.2, 7));
+        writeFileSync(join(src, 'chart.bmson'), serializeBmson(doc.data));
+        const game = join(dir, 'game');
+        mkdirSync(join(game, 'system', 'StreetMix'), { recursive: true });
+        writeFileSync(
+          join(game, 'system', 'StreetMix', 'StreetMix.gds'),
+          readFileSync(join(import.meta.dirname, 'fixtures', 'synthetic', 'StreetMix.gds')),
+        );
+        mkdirSync(join(dir, 'songs'));
+        const imp = oracle<{ key: string; log: string[] }>([
+          'bmson-import',
+          src,
+          game,
+          join(dir, 'songs'),
+        ]);
+        expect(imp.key, imp.log.join('\n')).toBe('chop');
+        const pdir = join(dir, 'songs', 'chop');
+        const portEz = readdirSync(pdir).find((f) => f.endsWith('.ez'))!;
+        const theirs = readEzff(new Uint8Array(readFileSync(join(pdir, portEz))));
+        const theirNames = readFileSync(join(pdir, portEz.replace(/\.ez$/, '.ezi')), 'latin1')
+          .split('\n')
+          .filter(Boolean)
+          .map((l) => l.split(' ').slice(2).join(' '));
+
+        const { plan, out } = writePackage(
+          join(dir, 'ours'),
+          { key: 'chop', title: '', artist: '', genre: '' },
+          [{ data: doc.data, mode: '5k', tier: 'NM' }],
+        );
+        const pc = plan.charts[0]!;
+        const ourNames = pc.plan.keysoundSlots.map((i) => `${plan.registry.defs[i]!.name}.wav`);
+        const lanes = new Set(modeDef('5k').columns.map((col) => col.track));
+        const ours = backgroundOf(pc.plan.ezff, ourNames, lanes);
+        expect(ours.length, JSON.stringify(c)).toBeGreaterThan(2);
+        expect(ours, JSON.stringify(c)).toEqual(backgroundOf(theirs, theirNames, lanes));
+
+        // The engine reads our files back as planned.
+        const stem = join(out, pc.stem);
+        const ezi = oracle<{ entries: { name: string }[] }>(['ezi', `${stem}.ezi`]);
+        expect(ezi.entries.map((e) => e.name)).toEqual(ourNames);
+        const chart = oracle<{
+          tracks: { records: { tick: number; type: number; key?: number }[] }[];
+        }>(['chart', `${stem}.ez`]);
+        for (const e of pc.plan.events) {
+          const rec = chart.tracks[e.track]!.records.find(
+            (x) => x.type === EZ_NOTE && x.tick === e.tick,
+          )!;
+          expect(ezi.entries[rec.key! - 1]!.name).toBe(
+            `${plan.registry.defs[e.keysound]!.name}.wav`,
+          );
+        }
+      });
+    }
   });
 });

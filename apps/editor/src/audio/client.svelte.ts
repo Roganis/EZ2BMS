@@ -10,6 +10,7 @@ import {
   engineEvents,
   KeysoundRegistry,
   modeDef,
+  PlanTimeline,
   type ChartPlan,
   type SampleLookup,
 } from '@ez2bms/chart-core';
@@ -20,7 +21,6 @@ import type { Settings } from '../state/settings.svelte';
 import { toast } from '../state/toasts.svelte';
 import type { View } from '../state/view.svelte';
 import { soundNames, soundPath } from './paths';
-import { PlanTimeline } from './timeline';
 
 /** Voice for auditions: its own, so a new audition cuts the last one. */
 const AUDITION_VOICE = (1 << 16) + 255;

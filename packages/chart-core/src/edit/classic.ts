@@ -24,15 +24,11 @@
 //   clearing (EZ2 does not publish x_stop).
 
 import type { ChannelId, NoteId, NoteRec } from '../model/types';
-import { audible, audibleDiff, type AudibleSeg } from '../publish/audible';
-import {
-  ChartClock,
-  channelEvents,
-  type ChannelEvent,
-  type SampleLookup,
-} from '../publish/chart-plan';
+import { audible, audibleDiff } from '../publish/audible';
+import type { SampleLookup } from '../publish/chart-plan';
 import { OUT_RATE } from '../publish/keysounds';
 import { groupKeyOf } from '../sound/grouping';
+import { analysis } from './analysis';
 import { BGM, movedConflict, placementConflict } from './commands';
 import type { ChartDoc, NotePatch } from './doc';
 
@@ -63,77 +59,6 @@ export interface ClassicChange {
   patch?: { id: NoteId; patch: NotePatch }[];
   insert?: NoteRec[];
   remove?: NoteId[];
-}
-
-// ---- cached analysis, per document --------------------------------------------
-
-class Analysis {
-  private clockCache: ChartClock | undefined;
-  private events = new Map<ChannelId, ChannelEvent[]>();
-  private sound = new Map<string, AudibleSeg[]>();
-  private srcOf = new Map<ChannelId, string>();
-  private samples: SampleLookup | undefined;
-
-  constructor(private readonly doc: ChartDoc) {
-    doc.onChange((cs) => {
-      if (cs.timing || cs.channelList) {
-        this.clockCache = cs.timing ? undefined : this.clockCache;
-        this.events.clear();
-        this.sound.clear();
-        this.srcOf.clear();
-        return;
-      }
-      for (const ch of cs.channels) {
-        this.events.delete(ch);
-        const old = this.srcOf.get(ch);
-        if (old !== undefined) this.sound.delete(old);
-        const cur = doc.channel(ch)?.name;
-        if (cur !== undefined) this.sound.delete(cur);
-        this.srcOf.delete(ch);
-      }
-    });
-  }
-
-  get clock(): ChartClock {
-    return (this.clockCache ??= new ChartClock(this.doc.data));
-  }
-
-  eventsOf(ch: ChannelId): ChannelEvent[] {
-    let e = this.events.get(ch);
-    if (!e) this.events.set(ch, (e = channelEvents(this.clock, this.doc.index.channel(ch))));
-    return e;
-  }
-
-  /** The current sound of one source, cached until one of its channels changes. */
-  soundOf(src: string, samples: SampleLookup | undefined): AudibleSeg[] {
-    if (samples !== this.samples) {
-      this.sound.clear();
-      this.samples = samples;
-    }
-    let s = this.sound.get(src);
-    if (!s) {
-      s = audible(this.doc.data, this.opts(new Set([src]), samples)).get(src) ?? [];
-      this.sound.set(src, s);
-      for (const c of this.doc.data.channels) if (c.name === src) this.srcOf.set(c.id, src);
-    }
-    return s;
-  }
-
-  opts(srcs: ReadonlySet<string>, samples: SampleLookup | undefined) {
-    return {
-      srcs,
-      clock: this.clock,
-      notesOf: (ch: ChannelId) => this.doc.index.channel(ch),
-      ...(samples ? { samples } : {}),
-    };
-  }
-}
-
-const analyses = new WeakMap<ChartDoc, Analysis>();
-function analysis(doc: ChartDoc): Analysis {
-  let a = analyses.get(doc);
-  if (!a) analyses.set(doc, (a = new Analysis(doc)));
-  return a;
 }
 
 // ---- the check ------------------------------------------------------------------

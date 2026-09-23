@@ -1,6 +1,6 @@
-import { EngineTempo } from '@ez2bms/chart-core';
 import { describe, expect, it } from 'vitest';
-import { PlanTimeline } from './timeline';
+import { EngineTempo } from '../src/timing/engine-tempo';
+import { PlanTimeline } from '../src/timing/plan-timeline';
 
 describe('plan timeline', () => {
   const tempo = new EngineTempo(150, [{ tick: 192 * 4, bpm: Math.fround(174) }]);

@@ -4,9 +4,13 @@
   // the window on the whole song's loudness - drag it, pull its right edge
   // for the length, the arrow keys to nudge - and hear it as the wheel will:
   // faded in and out, restarted hard at its end.
-  import { PREVIEW_MAX_MS, PREVIEW_MIN_MS, defaultPreviewStart } from '@ez2bms/chart-core';
+  import {
+    PREVIEW_MAX_MS,
+    PREVIEW_MIN_MS,
+    PlanTimeline,
+    defaultPreviewStart,
+  } from '@ez2bms/chart-core';
   import { onDestroy } from 'svelte';
-  import { PlanTimeline } from '../../audio/timeline';
   import { app } from '../../state/app.svelte';
   import type { Project } from '../../state/project.svelte';
 
