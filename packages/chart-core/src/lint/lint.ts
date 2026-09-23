@@ -38,11 +38,25 @@ export interface Finding {
   fix?: Fix;
 }
 
+/**
+ * Something said about a chart when it was opened or imported: a file read
+ * by upgrading or renumbering it, members that could not be read, what an
+ * importer could not bring across. Listed with the chart's findings.
+ */
+export interface OpenNote {
+  rule: string;
+  severity: Severity;
+  message: string;
+  /** Where to look, in pulses. */
+  at?: number;
+}
+
 export interface LintChart {
   file: string;
   data: ChartData;
   mode: ModeId;
   tier: Tier;
+  notes?: readonly OpenNote[];
 }
 
 export interface LintSong {
@@ -117,6 +131,8 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
   const d = c.data;
   const info = d.info;
   const res = info.resolution && info.resolution > 0 ? info.resolution : 240;
+  for (const n of c.notes ?? [])
+    f(n.rule, n.severity, n.message, n.at !== undefined ? { at: n.at } : {});
 
   const level = info.level ?? 0;
   if (!(Number.isInteger(level) && level >= 1 && level <= 20)) {

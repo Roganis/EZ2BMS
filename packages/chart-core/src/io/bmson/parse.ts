@@ -4,8 +4,8 @@
 // does not know is kept in the object's `extra`; a known member with the wrong
 // type (a level written as "12", say) is also kept verbatim in `extra`, left
 // undefined in the model, and reported, so the file round-trips and lint can
-// say what is wrong with it. Only a document that is not bmson 1.0 at all is
-// refused.
+// say what is wrong with it. bmson 0.21 is read by upgrading it to 1.0 first
+// (./v021.ts); only a document that is neither is refused.
 
 import type {
   BarLine,
@@ -22,6 +22,7 @@ import type {
   Tier,
 } from '../../model/types';
 import { decodeUtf8 } from '../text';
+import { isBmson021, upgradeBmson021 } from './v021';
 
 export class BmsonError extends Error {}
 
@@ -36,6 +37,8 @@ export interface ParseResult {
   warnings: ParseWarning[];
   /** The file started with a UTF-8 BOM (EZ2BMS will not write one back). */
   hadBom: boolean;
+  /** The bmson version the file was written in, when it was read by upgrading it ("0.21"). */
+  upgradedFrom?: string;
 }
 
 type Obj = Record<string, unknown>;
@@ -224,8 +227,13 @@ export function parseBmson(input: Uint8Array | string, opts: ParseOptions = {}):
     throw new BmsonError(`not JSON: ${(e as Error).message}`);
   }
   if (!isObj(doc)) throw new BmsonError('not a JSON object');
-  if (typeof doc.version !== 'string') {
-    throw new BmsonError('no "version": this is bmson 0.21, which EZ2BMS cannot read yet');
+  let upgradedFrom: string | undefined;
+  if (isBmson021(doc)) {
+    doc = upgradeBmson021(doc);
+    upgradedFrom = '0.21';
+  }
+  if (!isObj(doc) || typeof doc.version !== 'string') {
+    throw new BmsonError('no "version", and not bmson 0.21 either: not a bmson EZ2BMS can read');
   }
 
   const r = new Reader();
@@ -369,7 +377,7 @@ export function parseBmson(input: Uint8Array | string, opts: ParseOptions = {}):
     extra: r.rest(doc, ROOT_KEYS) ?? {},
   };
   if (absent.length) chart.absent = [...absent];
-  return { chart, warnings: r.warnings, hadBom };
+  return { chart, warnings: r.warnings, hadBom, ...(upgradedFrom ? { upgradedFrom } : {}) };
 }
 
 function withExtra<T extends object>(v: T, extra: Extra | undefined): T & { extra?: Extra } {

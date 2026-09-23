@@ -86,6 +86,14 @@ stems have strips is a view, kept in the app's settings, not in the song.
   save unless something is put in them.
 - A UTF-8 byte-order mark is accepted and never written: EZ2PORT's text parsers
   do not strip one.
+- bmson 0.21 (no `version`, camelCase names, `bpmNotes`/`stopNotes` with `v`,
+  `ID`) is read by renaming it to 1.0 first, member for member as BmsONE's
+  converter does, and saved as 1.0. Its absolute `total` is kept as
+  `info.x_total_v021`, since 1.0's `total` is relative.
+- Legacy `beat-*` lane numbers are renumbered onto the EZ2 lanes as a chart
+  opens, and the hint becomes the `ez2-*` one; Issues says what moved. A
+  `beat-10k` chart with notes on x 9 or 10 is read in the bmson spec's
+  numbering (2P keys x 9-13), anything else in EZ2's (x 11-15).
 
 ## Output
 

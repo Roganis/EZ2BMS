@@ -127,6 +127,10 @@ should give the same song.
    still a note. Keep it, drop only the release.
 9. **Title plates are Latin-only.** Render CJK titles with the CJK face when
    one is installed.
+10. **`beat-10k` has two numberings.** The bmson spec puts the 2P keys on
+    x 9-13 and the 2P scratch on 16; EZ2's conversions use x 11-15. Notes on
+    x 9 or 10 can only be the spec's: read those files the spec's way (EZ2BMS
+    does, and warns when a file's 2P notes are all on x 11-13, which fits both).
 
 **Detection:** none needed. `docs/ez2port-compat.md` lists these as the
 differences between the importer and EZ2BMS, and they shrink as they are fixed.

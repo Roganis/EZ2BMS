@@ -10,6 +10,8 @@ export * from './io/bmson/parse';
 export * from './io/bmson/serialize';
 export * from './io/bmson/mode-resolve';
 export * from './io/bmson/legacy-remap';
+export * from './io/bmson/open';
+export * from './io/bmson/v021';
 export { stableStringify, JsonValueError } from './util/stable-json';
 export * from './timing/timing-map';
 export * from './timing/ticks';

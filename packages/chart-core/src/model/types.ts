@@ -133,7 +133,7 @@ export interface ChartInfo {
 }
 
 export interface ChartData {
-  /** bmson `version`; absent means bmson 0.21, which EZ2BMS does not read. */
+  /** bmson `version` (a 0.21 file is read as 1.0.0: io/bmson/v021.ts). */
   version?: string;
   info: ChartInfo;
   /** Bar lines; `null` when the file has none (EZ2 draws 4/4 regardless). */

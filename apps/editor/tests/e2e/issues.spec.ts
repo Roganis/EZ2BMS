@@ -93,3 +93,33 @@ test('errors are filtered, song fixes go to the song file, and F5 refuses a char
   await expect(page.getByTestId('lint')).not.toHaveText(/error/);
   expect(await page.evaluate(() => (window as unknown as W).__ez2bms.doc.data.info.level)).toBe(20);
 });
+
+test('a bmson 0.21 file opens as 1.0, and Issues says what was converted', async ({ page }) => {
+  await open(page);
+  // As BmsONE 0.2 wrote it: camelCase names, 7-key lanes, no version.
+  const old = {
+    info: { title: 'Old', artist: 'A', genre: 'G', initBPM: 140, judgeRank: 3, level: 4 },
+    bpmNotes: [],
+    stopNotes: [],
+    soundChannel: [
+      {
+        name: 'kick.wav',
+        notes: [
+          { x: 1, y: 0, l: 0, c: false },
+          { x: 8, y: 240, l: 0, c: false },
+        ],
+      },
+    ],
+  };
+  const lanes = await page.evaluate(async (text) => {
+    const a = (window as unknown as W).__ez2bms;
+    await a.backend.writeText('/demo/Old Song/old.bmson', text, false);
+    await a.openProject('/demo/Old Song');
+    return a.doc.data.notes.map((n: { x: number }) => n.x);
+  }, JSON.stringify(old));
+  // Key 1 and the turntable of 7StreetMix.
+  expect(lanes).toEqual([11, 1]);
+  await page.getByTestId('lint').click();
+  await expect(issues(page).locator('[data-rule="bmson-0.21"]')).toContainText('saving writes 1.0');
+  await expect(issues(page).locator('[data-rule="legacy-lanes"]')).toContainText('2 notes moved');
+});

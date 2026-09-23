@@ -5,26 +5,23 @@
 import {
   ChartDoc,
   chartBaseName,
-  chartMode,
   chartTier,
   decodeUtf8,
   encodeUtf8,
   findImage,
-  isLegacyHint,
   isValidSongKey,
   modeNames,
   newSongFile,
-  parseBmson,
+  openChart,
   parseChartName,
   parseSongFile,
-  remapLegacyChart,
   serializeBmson,
   serializeSongFile,
   songArt,
   songBga,
   type ChartData,
   type ModeId,
-  type ParseWarning,
+  type OpenNote,
   type SongArt,
   type SongBga,
   type SongFile,
@@ -42,7 +39,8 @@ export class ChartSlot {
   file = $state('');
   /** From the chart's info (an edit, so undo moves it back), else its file name. */
   tier = $state<Tier>('NM');
-  warnings: ParseWarning[] = [];
+  /** What opening it said (a 0.21 upgrade, a renumbering, members it could not read): shown in Issues. */
+  notes: OpenNote[] = [];
 
   constructor(
     file: string,
@@ -196,12 +194,9 @@ export class Project {
   }
 
   static slotFor(file: string, bytes: Uint8Array): ChartSlot {
-    const { chart, warnings } = parseBmson(bytes);
-    const resolved = chartMode(chart.info, file);
-    const mode = resolved?.mode ?? '5k';
-    if (isLegacyHint(chart.info.modeHint)) remapLegacyChart(chart, mode);
-    const slot = new ChartSlot(file, new ChartDoc(chart), mode, chartTier(chart.info, file));
-    slot.warnings = warnings;
+    const o = openChart(file, bytes);
+    const slot = new ChartSlot(file, new ChartDoc(o.chart), o.mode, o.tier);
+    slot.notes = o.notes;
     return slot;
   }
 
