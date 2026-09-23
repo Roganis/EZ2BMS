@@ -182,3 +182,23 @@ does (each `.ssf` rewritten as a `.wav` without decoding it); reading and
 converting even the largest charts stays well under a second. The wizard
 converts a BMS folder again on every choice, which these figures leave room
 for.
+
+## M6.9 - exporters
+
+Timed by chart-core `test/bench.test.ts` ("exporters at full size") in this
+container (Node 22, one core); three runs.
+
+| Date       | What                                                                                                                        | Time       |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 2026-09-23 | Build the CP949 encoder (invert the decoder's KS X 1001 region, compute the 8822 UHC syllables), once a session             | 6-9 ms     |
+| 2026-09-23 | Build the Shift-JIS encoder, once a session                                                                                 | 4-6 ms     |
+| 2026-09-23 | A 50k-note, 1500-sound chart into the synthetic game: plan, keysound names, encrypted `.ez`/`.ezi`, `song.bin`, every check | 300-336 ms |
+| 2026-09-23 | ...its `.ez`, for scale (the original loads 128 KB)                                                                         | 641 KB     |
+| 2026-09-23 | The same 50k notes (1500 whole sounds) written as a BMS                                                                     | 216-233 ms |
+| 2026-09-23 | FNV-1a of 200 KB (what the export expects of each file it replaces)                                                         | 18 ms      |
+
+Reading: making the bytes is a fraction of a second even for a chart five
+times what the cabinet can load. An export's time is the host's: making
+the keysounds, where only a new or changed one is written. The dialog
+works the export out again on each choice, which these figures leave room
+for.

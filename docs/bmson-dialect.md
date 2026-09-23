@@ -72,10 +72,12 @@ is kept beside the charts, as `classic` in `ez2bms.song.json`. Renaming a
 sound in the workbench renames the file and rewrites each channel's `name`.
 
 A chart imported from the game's own `.ez` (M5) keeps what bmson has no
-place for. An EZ2PORT publish ignores all of it; a cabinet export (M6)
-writes it back - background notes on their own tracks, their raw lengths,
-the kept records on theirs, the header's names (CP949), second BPM, track
-count and length - so an unedited chart returns as the game had it:
+place for. An EZ2PORT publish ignores all of it; a cabinet export (M6,
+`exporting.md`) writes it back - background notes on their own tracks
+(re-placed where the track is a lane in the mode), raw lengths where they
+still fit the note, the kept records on their tracks, the header's names
+(CP949), second BPM, track count and length - so an unedited chart returns
+as the game had it:
 
 | Member         | Where        | Meaning                                                                                                                                                                                                                     |
 | -------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -83,6 +85,13 @@ count and length - so an unedited chart returns as the game had it:
 | `x_len`        | note         | the record's raw length when a publish would write another: a background note's (published as a tap), a lane tap's 1-6                                                                                                      |
 | `x_ez`         | chart (root) | the `.ez` header and `.ini` it came from: `file`, `version`, `name`, `name2`, `bpm`, `bpm2`, `total_ticks`, `last_tick` (its last record's tick), `ticks_per_measure`, `tracks`, `measure_scale`                            |
 | `x_ez_records` | chart (root) | records with no bmson home, `{track, y, type, value?, bpm?, raw?, scroll?}`: volume (2), beats (4), marks (5), scroll speed (6), stops (7), unknown kinds, out-of-range tempi. Not moved by edits; not published to EZ2PORT |
+
+A chart imported from BMS (M5) keeps the headers EZ2 has no use for in
+`info`: `x_bms_rank`, `x_bms_defexrank`, `x_bms_total`, `x_bms_player`,
+`x_bms_difficulty`, `x_bms_lnmode`, each the header's text as the file had
+it. A BMS export (M6) writes `#RANK`, `#DEFEXRANK`, `#TOTAL` and `#LNMODE`
+back from them; `#PLAYER` and `#DIFFICULTY` it writes from the chart's mode
+and tier.
 
 Stem slicing (M4) adds nothing either: a cut is a background note with
 `c: true` on the stem's channel, a keyed slice an ordinary lane note. Which

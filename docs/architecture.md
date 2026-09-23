@@ -210,6 +210,36 @@ result through one host command.
   chosen; `ui/import/ImportWizard.svelte` shows it. The browser build stages
   a made-up game folder (`?game`, chart-core `dev/synthgame.ts`) for tests.
 
+## Exporters (M6)
+
+The bytes are chart-core's, as publishing's are ([exporting](exporting.md));
+the host makes the sounds and writes the files, all or nothing.
+
+- **To the game.** `publish/chart-plan.ts` compiles a chart with
+  `target: 'cabinet'`: an imported chart's `x_*` members pin its background
+  notes to their tracks (the allocator in `publish/tracks.ts` keeps busy
+  intervals and places everything else around them), and its kept records
+  and header go back. `publish/cabinet.ts` plans a song into one the game
+  has (`planCabinet`: files, one keysound table, the `song.bin` edits), names
+  its keysounds against the folder (`nameSounds`) and makes the bytes
+  (`finishCabinet`: encrypted with the executable's tables;
+  `ez2data/songdb.ts` `patchSongdb` changes only the edited bytes).
+  `lint/cabinet.ts` is what the original executable does differently.
+  `io/legacy-text.ts` writes CP949 and Shift-JIS by inverting the platform's
+  own decoders, with no table committed.
+- **BMS.** `io/bms/write.ts` is the reader's inverse (`convert.ts`'s maps,
+  turned around); `io/bms/export.ts` makes a song a folder.
+- **The host.** `ez2bms-audio` `export.rs` makes each keysound: a 16-bit PCM
+  file rewrapped untouched (so the game's own sound goes back as it was and
+  is recognised in its folder), anything else cut as a publish cuts it.
+  `ez2bms-launch` `gamepatch.rs` writes into a game folder: every file checked
+  against what the plan read, staged, the replaced ones backed up with a
+  manifest, then renamed into place, with a rollback; `restore` undoes it.
+- **The dialog.** `apps/editor/src/port/{cabinet,bms}.ts` run the steps and
+  build the job; `state/exporter.svelte.ts` holds the choices;
+  `ui/export/ExportDialog.svelte` shows the review. `state/game.ts` is the
+  game folder as both the importer and the exporter read it.
+
 ## The desktop host (`src-tauri`)
 
 The host does what a browser cannot, and nothing else; chart logic never
@@ -223,6 +253,8 @@ crosses the bridge. Its commands, each mirrored by the web mock in
 | Audio    | `audio_info`, `audio_load`, `audio_peaks`, `audio_thumbs` (a screenful of waveforms in one call), `audio_set_events`, `audio_play` / `seek` / `stop`, `audio_trigger`, `audio_set_master` |
 | Clock    | `audio_clock`, `audio_now` (for offset pings), `audio_clock_stream` (a snapshot every 8 ms over a Tauri channel)                                                                          |
 | EZ2PORT  | `port_locate`, `port_probe`, `port_publish` (cuts keysounds, writes the package whole), `port_test` / `port_stop`                                                                         |
+| Import   | `import_run` (a new song folder, staged and renamed into place)                                                                                                                           |
+| Export   | `export_probe` (which keysounds the game's folder already holds), `export_game` (into a game folder, with a backup), `export_folder`, `export_backups`, `export_restore`                  |
 
 Without an output device the audio engine falls back to a silent real-time
 clock, so Play mode still runs. `port_test` publishes into a private songs

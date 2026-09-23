@@ -25,6 +25,12 @@ import { decodeBms } from '../src/io/bms/decode';
 import { parseBms } from '../src/io/bms/parse';
 import { newChart } from '../src/model/defaults';
 import { planMidiCuts } from '../src/slice/midi';
+import { encodeLegacy } from '../src/io/legacy-text';
+import { exportBmsSong } from '../src/io/bms/export';
+import { memoryGameFs, openGame } from '../src/io/ez/game';
+import { synthGame, SYNTH_EZ_TABLES } from '../src/dev/synthgame';
+import { cabinetTargets, finishCabinet, nameSounds, planCabinet } from '../src/publish/cabinet';
+import { lintCabinet } from '../src/lint/cabinet';
 
 function time<T>(f: () => T): [T, number] {
   const t0 = performance.now();
@@ -230,5 +236,73 @@ describe('importers at full size', () => {
     expect(report.bms57600).toBeLessThan(2000);
     expect(report.encoding1MB).toBeLessThan(1000);
     expect(report.midiPlan10k).toBeLessThan(1000);
+  });
+});
+
+// M6: the exporters at full size - building the CP949 and Shift-JIS encoders
+// (inverting the decoders, once per session), a 50k-note, 1500-sound chart
+// sent into the synthetic game (plan, names, encrypted bytes, song.bin, the
+// checks with every sound's length) and written as BMS.
+describe('exporters at full size', () => {
+  const report: Record<string, number> = {};
+
+  it('builds encoders, plans a cabinet export and writes BMS within budget', async () => {
+    report.encoderCp949 = time(() => encodeLegacy('\uAC00', 'euc-kr'))[1];
+    report.encoderSjis = time(() => encodeLegacy('\u3042', 'shift_jis'))[1];
+
+    const g = synthGame();
+    const game = await openGame(memoryGameFs(g.files), g.exe, undefined, {
+      tables: SYNTH_EZ_TABLES,
+    });
+    const target = cabinetTargets(game).find((t) => t.dir === 'alpha')!;
+    const files = await game.fs.list('sound/alpha');
+    const data = synthChart({ mode: '5k', notes: 50_000, channels: 1500 });
+    const samples = () => ({ frames: 22_050 });
+    const [out, cabTime] = time(() => {
+      const plan = planCabinet({
+        target,
+        files,
+        gds: game.gds,
+        charts: [{ file: 'streetmix1p-bench-shd.bmson', data, mode: '5k', tier: 'SHD' }],
+        samples,
+      });
+      const names = nameSounds(plan, files, () => null);
+      const out = finishCabinet(plan, names, {
+        tables: SYNTH_EZ_TABLES,
+        songdb: game.songdbFiles,
+        ...(game.songdbTables ? { songdbTables: game.songdbTables } : {}),
+      });
+      return { plan, out, findings: lintCabinet(plan, { out, names, samples }) };
+    });
+    report.cabinet50k = cabTime;
+    const ez = out.out.files.find((f) => f.kind === 'ez')!;
+    report.cabinetEzKB = ez.bytes.length / 1024;
+    // Far past what the original can load, and said so.
+    expect(out.findings.some((f) => f.rule === 'cabinet-size')).toBe(true);
+
+    // The same notes as whole sounds, at twice the resolution: its slices
+    // (7 000 and more) are past what a BMS can name (3 843), and its 1 330
+    // measures past the 999 a BMS has; at 480 it is 665.
+    const whole = {
+      ...data,
+      info: { ...data.info, resolution: 480 },
+      notes: data.notes.map((n) => ({ ...n, c: false })),
+    };
+    const [bms, bmsTime] = time(() =>
+      exportBmsSong([{ file: 'bench.bmson', data: whole, mode: '5k', tier: 'NM' }], {
+        map: 'ez2',
+        resolve: (n) => n,
+      }),
+    );
+    report.bmsWrite50k = bmsTime;
+    expect(bms.files).toHaveLength(1);
+    console.log(
+      'bench M6 (ms):',
+      Object.fromEntries(Object.entries(report).map(([k, v]) => [k, Math.round(v * 100) / 100])),
+    );
+    expect(report.encoderCp949).toBeLessThan(2000);
+    expect(report.encoderSjis).toBeLessThan(2000);
+    expect(report.cabinet50k).toBeLessThan(5000);
+    expect(report.bmsWrite50k).toBeLessThan(3000);
   });
 });

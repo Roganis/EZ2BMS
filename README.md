@@ -22,8 +22,10 @@ engine loads as-is.
   chart the same way it publishes it, and plays it through EZ2PORT's own voice,
   judgement, hold and gauge rules.
 - **Publishing** - an EZ2PORT song package (`song.ini`, `.ez`, `.ezi`, `.ini`,
-  `.ssf`, title plate) straight into the engine's songs folder, and later `.ez`
-  exports for the original cabinet software.
+  `.ssf`, title plate) straight into the engine's songs folder.
+- **Going back out** - a song sent into the original game in place of one it
+  has (encrypted v8 charts, keysounds, its `song.bin` levels), with a backup
+  and Restore; or a BMS/BME folder for LR2 and beatoraja.
 
 ## Nothing from the game ships
 
@@ -39,7 +41,7 @@ still works, with a procedural skin and plaintext packages.
 | `packages/chart-core`   | TypeScript: model, timing, modes, EZ2 formats, editing, engine emulation, publishing, lint |
 | `apps/editor`           | Svelte 5 + PixiJS front end                                                                |
 | `crates/ez2bms-audio`   | Rust: decode, resample, mixer with EZ2 voice rules, offline render, cutting                |
-| `crates/ez2bms-launch`  | Rust: find and launch `ez2play`                                                            |
+| `crates/ez2bms-launch`  | Rust: find and launch `ez2play`; write into a game folder with a backup                    |
 | `crates/ez2port-oracle` | Rust + C, **tests only**: EZ2PORT's own core, used to prove parity                         |
 | `src-tauri`             | the desktop host                                                                           |
 | `docs/`                 | architecture, the bmson dialect, the EZ2PORT contract and requests, performance log        |
@@ -154,9 +156,23 @@ pnpm tauri dev          # the desktop app
 - [x] M5.8 The import wizard, and the MIDI cut in the strip panel
 - [x] M5.9 [How importing works](docs/importing.md), timings in the [perf log](docs/perf-log.md), end-to-end specs
 
+### M6 - Exporters
+
+- [x] M6.1 Korean (CP949) and Shift-JIS written by inverting the platform's decoders; BMS ids and channel maps both ways (and 10K/Catch "keys in order" fixed)
+- [x] M6.2 Charts compiled for the cabinet: a game chart goes back as the game had it (oracle, random charts), EZ2PORT's packages unchanged (goldens)
+- [x] M6.3 A song into one the game has: files by the game's own names, `song.bin` patched in place, keysounds that never overwrite (oracle)
+- [x] M6.4 What the original executable does differently, linted: 128 KB files, 2047 keysounds, one sound per track
+- [x] M6.5 Keysounds sent back as they came (16-bit PCM rewrapped), and a game folder written all or nothing, with a backup and Restore
+- [x] M6.6 The host's export commands, and the browser build's
+- [x] M6.7 BMS/BME export, read back note for note by the importer
+- [x] M6.8 The Export dialog: review, into the game or a folder, BMS, past exports
+- [x] M6.9 [How exporting works](docs/exporting.md), timings in the [perf log](docs/perf-log.md), end-to-end specs
+
+The cabinet export writes v8 (encrypted) charts; the older plaintext v6 is
+deferred.
+
 ### Later
 
-- M6 Exporters (cabinet `.ez` v8/v6, BMS/BME)
 - M7 Record mode + cabinet controller
 - M8 EZ2-native extras
 - M9 Polish and distribution
