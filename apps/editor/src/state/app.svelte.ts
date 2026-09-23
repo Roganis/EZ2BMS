@@ -19,6 +19,7 @@ import { ArtState } from './art.svelte';
 import { PreviewState } from './preview.svelte';
 import { BgaState } from './bga.svelte';
 import { PublishState } from './publish.svelte';
+import { StripsState } from './strips.svelte';
 import { ask, toast } from './toasts.svelte';
 import { View } from './view.svelte';
 
@@ -38,6 +39,7 @@ export class App {
   readonly preview: PreviewState;
   readonly bga: BgaState;
   readonly publish: PublishState;
+  readonly strips: StripsState;
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
@@ -58,6 +60,7 @@ export class App {
     this.preview = new PreviewState(this);
     this.bga = new BgaState(this);
     this.publish = new PublishState(this);
+    this.strips = new StripsState(this);
     this.commands.onError = (e, c) =>
       toast(`${c.title}: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }

@@ -1,6 +1,6 @@
 import { columnsFor, modeDef } from '@ez2bms/chart-core';
 import { describe, expect, it } from 'vitest';
-import { computeLayout, laneAtX, RACK_GAP, RACK_SUB, Viewport } from './geometry';
+import { computeLayout, laneAtX, RACK_GAP, RACK_SUB, STRIP_W, Viewport } from './geometry';
 
 const layout = (
   mode: Parameters<typeof modeDef>[0],
@@ -80,5 +80,46 @@ describe('playfield geometry', () => {
     const last = far.rack.groups.at(-1)!;
     expect(last.left + last.width).toBeCloseTo(far.rack.left + far.rack.width, 6);
     expect(computeLayout({ ...base, rackGroups: [], extras: 1 }).rack.width).toBe(0);
+  });
+
+  it('puts stem strips between the lanes and the rack, and hides them in Play', () => {
+    for (const [w, h] of [
+      [1440, 900],
+      [900, 700],
+      [1920, 1080],
+    ] as const) {
+      for (const n of [1, 3, 4]) {
+        const l = computeLayout({
+          width: w,
+          height: h,
+          columns: columnsFor(modeDef('7k'), 'P1'),
+          offModeXs: [21],
+          strips: n,
+          rackGroups: [{ key: 'drums', subLanes: 3 }],
+          extras: 1,
+        });
+        expect(l.strips).toHaveLength(n);
+        const first = l.strips[0]!;
+        const lastLane = [...l.lanes, ...l.offLanes].at(-1)!;
+        expect(first.left).toBeGreaterThanOrEqual(lastLane.left + lastLane.width);
+        for (let i = 1; i < n; i++)
+          expect(l.strips[i]!.left).toBeGreaterThan(l.strips[i - 1]!.left + l.strips[i - 1]!.width);
+        const last = l.strips.at(-1)!;
+        expect(l.rack.left).toBeGreaterThanOrEqual(last.left + last.width);
+        expect(l.rack.left + l.rack.width).toBeLessThanOrEqual(w + 1);
+        // They scale with the window, as everything does.
+        expect(first.width).toBeCloseTo(STRIP_W * l.scale, 6);
+      }
+    }
+    const play = computeLayout({
+      width: 1440,
+      height: 900,
+      columns: columnsFor(modeDef('7k'), 'P1'),
+      offModeXs: [],
+      strips: 2,
+      rackGroups: [],
+      extras: 0,
+    });
+    expect(play.strips.every((g) => g.width === 0)).toBe(true);
   });
 });

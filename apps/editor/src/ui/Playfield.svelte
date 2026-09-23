@@ -231,8 +231,22 @@
       classicHint: classicOn && ghost ? app.classic.hint : null,
       brush: v.brush,
       rackScroll: v.rackScroll,
+      strips: v.mode === 'edit' ? app.strips.specs(slot.doc) : [],
+      stripsRev: app.strips.rev,
+      hoverSlice: app.strips.hover,
     });
   });
+
+  /** The slice under the pointer: in a strip, or a stem's note on a lane. */
+  function hoverSlice(e: PointerEvent): number | null {
+    if (!renderer || v.mode !== 'edit') return null;
+    const i = renderer.stripAt(e.offsetX);
+    if (i !== undefined) return renderer.stripSliceAt(i, e.offsetY)?.slice.id ?? null;
+    const n = renderer.noteAt(e.offsetX, e.offsetY)?.note;
+    if (!n) return null;
+    const name = slot.doc.channel(n.ch)?.name;
+    return name !== undefined && app.strips.has(slot.doc, name) ? n.id : null;
+  }
 
   function onWheel(e: WheelEvent) {
     e.preventDefault();
@@ -257,12 +271,15 @@
 
   function onMove(e: PointerEvent) {
     v.hoverLane = renderer?.laneAt(e.offsetX)?.x ?? null;
+    const hov = hoverSlice(e);
+    if (hov !== app.strips.hover) app.strips.hover = hov;
     const h = host_();
     if (h) tool.move(e, h);
   }
 
   function onLeave() {
     v.hoverLane = null;
+    app.strips.hover = null;
     if (!tool.busy) ghost = null;
   }
 </script>

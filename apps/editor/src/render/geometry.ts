@@ -31,6 +31,9 @@ const OFF_W = 22;
 export const RACK_SUB = 14;
 export const RACK_GAP = 8;
 export const RACK_LABEL = 16;
+/** A stem strip's width and the gap between strips (BmsTWO's wide sound column is 64). */
+export const STRIP_W = 64;
+const STRIP_GAP = 6;
 /** The rack never takes more than this share of the window; a wider one scrolls sideways. */
 const RACK_SHARE = 0.4;
 /** The judge line, in design units above the bottom edge. */
@@ -57,6 +60,8 @@ export interface Layout {
   offLanes: LaneGeom[];
   /** Measure numbers and BPM/STOP flags. */
   gutter: { left: number; right: number };
+  /** Stem strips, in order, between the lanes and the rack. */
+  strips: { left: number; width: number }[];
   /** Background sounds: one column per sound group, split into sub-lanes; scrolls sideways. */
   rack: RackGeom;
   /**
@@ -102,6 +107,8 @@ export interface LayoutInput {
   columns: readonly Column[];
   /** Lanes that hold notes but are not in the mode. */
   offModeXs: readonly number[];
+  /** How many stem strips to make room for. */
+  strips?: number;
   /** The rack's groups, in order, and their sub-lane counts. */
   rackGroups: readonly { key: string; subLanes: number }[];
   /** How far the rack is scrolled, design units (clamped). */
@@ -120,20 +127,22 @@ export function computeLayout(i: LayoutInput): Layout {
     ? Math.max(...i.columns.map((c) => boxes.get(c.x)!.x + boxes.get(c.x)!.w)) - x0
     : i.columns.reduce((w, c) => w + LANE_W[c.kind] + GAP, -GAP);
   const offUnits = i.offModeXs.length * (OFF_W + GAP) * i.extras;
+  const nStrips = i.strips ?? 0;
+  const stripUnits = nStrips ? (nStrips * (STRIP_W + STRIP_GAP) + 6) * i.extras : 0;
   const groups = i.rackGroups;
   const contentUnits = groups.length
     ? groups.reduce((w, g) => w + g.subLanes * RACK_SUB, 0) + RACK_GAP * (groups.length - 1)
     : 0;
   const shownUnits = Math.min(contentUnits, (RACK_SHARE * i.width) / scale);
   const rackUnits = (shownUnits + (groups.length ? 12 : 0)) * i.extras;
-  const need = GUTTER + laneUnits + 12 + offUnits + rackUnits + 16;
+  const need = GUTTER + laneUnits + 12 + offUnits + stripUnits + rackUnits + 16;
   // Shrink to fit a narrow window rather than overflow it.
   const s = Math.min(scale, i.width / Math.max(1, need));
   const fieldW = laneUnits * s;
   // Centre the lanes; push right when the gutter would not fit.
   let fieldLeft = (i.width - fieldW) / 2;
   fieldLeft = Math.max(fieldLeft, GUTTER * s);
-  const extrasW = (offUnits + rackUnits + 12) * s;
+  const extrasW = (offUnits + stripUnits + rackUnits + 12) * s;
   fieldLeft = Math.min(fieldLeft, Math.max(GUTTER * s, i.width - extrasW - fieldW - 8 * s));
   let x = fieldLeft;
   const lanes = i.columns.map((c) => {
@@ -165,6 +174,12 @@ export function computeLayout(i: LayoutInput): Layout {
     return g;
   });
   if (offLanes.length) x += 12 * s * i.extras;
+  const strips = Array.from({ length: nStrips }, () => {
+    const g = { left: x, width: STRIP_W * s * i.extras };
+    x += (STRIP_W + STRIP_GAP) * s * i.extras;
+    return g;
+  });
+  if (nStrips) x += 6 * s * i.extras;
   return {
     width: i.width,
     height: i.height,
@@ -175,6 +190,7 @@ export function computeLayout(i: LayoutInput): Layout {
     lanes,
     offLanes,
     gutter: { left: Math.max(0, fieldLeft - GUTTER * s), right: fieldLeft - 6 * s },
+    strips,
     rack: rackGeom(x, s * i.extras, groups, contentUnits, shownUnits, i.rackScroll ?? 0),
     design: boxes ? { x0, judgeY: i.skin!.judgeY } : null,
   };

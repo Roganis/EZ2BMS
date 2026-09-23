@@ -25,6 +25,8 @@ export interface SettingsData {
   gameSkin: boolean;
   /** Disk kept for long files (stems) decoded across runs, MB; 0 = off. */
   audioCacheMB: number;
+  /** Per song folder: the files with stem strips, once the song has chosen. */
+  strips: Record<string, string[]>;
 }
 
 export const DEFAULT_SETTINGS: SettingsData = {
@@ -41,6 +43,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   keys: {},
   gameSkin: true,
   audioCacheMB: 2048,
+  strips: {},
 };
 
 export class Settings {

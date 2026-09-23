@@ -10,6 +10,7 @@ import { registerNoteCommands } from './notes';
 import { registerPlayCommands } from './play';
 import { registerPortCommands } from './port';
 import { registerClassicCommands } from './classic';
+import { registerSliceCommands } from './slice';
 import type { CommandGroup } from './registry';
 
 const DOC = resolve(import.meta.dirname, '../../../../docs/keybindings.md');
@@ -35,6 +36,7 @@ function render(): string {
   registerPlayCommands(app);
   registerPortCommands(app);
   registerClassicCommands(app);
+  registerSliceCommands(app);
   const lines = [
     '# Keys and commands',
     '',

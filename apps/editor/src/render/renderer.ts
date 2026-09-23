@@ -7,21 +7,25 @@
 import {
   buildGroups,
   groupKeyOf,
+  laneInfo,
+  sliceAt,
   type ChannelId,
   type ChartDoc,
   type Column,
   type NoteId,
   type NoteRec,
   type SoundGroup,
+  type StemSlice,
   type TimingMap,
 } from '@ez2bms/chart-core';
-import { Application, Container, FillGradient, Graphics, type Sprite } from 'pixi.js';
+import { Application, Container, FillGradient, Graphics, Sprite } from 'pixi.js';
 import { channelHue } from '../colors';
 import { beamColor, noteVariant, targetSway, type GameSkin, type SkinBlend } from '../skin/game';
 import { GameSkinTextures } from './gameskin';
 import {
   computeLayout,
   laneAtX,
+  RACK_LABEL,
   Viewport,
   type LaneGeom,
   type Layout,
@@ -29,6 +33,8 @@ import {
 } from './geometry';
 import { SpritePool, TextPool } from './pool';
 import { hsl, KIND_COLOR, KIND_FILL, NEON, NEON_2, NeonSkin, PAD, type SkinTextures } from './skin';
+import { stripKey, StripPainter } from './strip';
+import { onsetTimes, stripRows, type StripSpec } from './striprows';
 
 export interface FieldState {
   doc: ChartDoc;
@@ -63,7 +69,17 @@ export interface FieldState {
   rackScroll: number;
   /** Classic: the rack note whose sound the ghost would key, lit. */
   classicHint: NoteId | null;
+  /** Stem strips beside the lanes (Edit), in order. */
+  strips: readonly StripSpec[];
+  /** Bumped as strip waveforms and onsets arrive. */
+  stripsRev: number;
+  /** The slice under the pointer: lit in its strip and, when keyed, on its lane. */
+  hoverSlice: NoteId | null;
 }
+
+/** Background slices alternate between two tints so neighbours read apart. */
+const SLICE_TINTS = [0x58e1ff, 0x9d7bff];
+const ONSET = 0xffd166;
 
 const HOLD_LABEL: Record<number, string> = {
   1: '½',
@@ -123,6 +139,15 @@ export class PlayfieldRenderer {
   private readonly chips = new Container();
   private readonly overlay = new Graphics();
   private readonly text = new Container();
+  /** Stem strips: their waveforms (one canvas texture each), then lines and marks over them. */
+  private readonly stripLayer = new Container();
+  private readonly stripLines = new Graphics();
+  private readonly stripMarks = new Container();
+  private readonly stripCross = new SpritePool(this.stripMarks);
+  private readonly stripHi = new Graphics();
+  private readonly painters = new Map<string, { painter: StripPainter; sprite: Sprite }>();
+  private readonly viewIds = new WeakMap<object, number>();
+  private viewSeq = 0;
   /** The game skin's field backdrop, black at 0x96 over black (made once). */
   private backdrop: FillGradient | undefined;
   private readonly bodyPool = new SpritePool(this.holds);
@@ -168,6 +193,12 @@ export class PlayfieldRenderer {
     fill: 0xffffff,
     fontWeight: 'bold',
   });
+  private readonly stripText = new TextPool(this.text, {
+    fontFamily: 'sans-serif',
+    fontSize: 10,
+    fill: 0xffffff,
+    fontWeight: 'bold',
+  });
 
   static async create(host: HTMLElement): Promise<PlayfieldRenderer> {
     const r = new PlayfieldRenderer();
@@ -192,11 +223,15 @@ export class PlayfieldRenderer {
       r.bed,
       r.beams,
       r.holds,
+      r.stripLayer,
+      r.stripLines,
+      r.stripMarks,
       r.chips,
       r.chipMarks,
       r.notes,
       r.glow,
       r.rings,
+      r.stripHi,
       r.overlay,
       r.text,
     );
@@ -230,6 +265,7 @@ export class PlayfieldRenderer {
 
   destroy(): void {
     cancelAnimationFrame(this.raf);
+    for (const p of this.painters.values()) p.painter.destroy();
     this.skin?.destroy();
     this.game?.tex.destroy();
     this.app.destroy(true, { children: true, texture: true });
@@ -303,6 +339,42 @@ export class PlayfieldRenderer {
   overRack(px: number): boolean {
     const l = this.layout;
     return !!l && l.rack.width > 0 && px >= l.rack.left - 6 && px <= l.rack.left + l.rack.width + 6;
+  }
+
+  /** The stem strip under a screen x (its index in the strips drawn), if any. */
+  stripAt(px: number): number | undefined {
+    const l = this.layout;
+    if (!l || this.extras < 0.5) return undefined;
+    const i = l.strips.findIndex((g) => px >= g.left && px < g.left + g.width);
+    return i < 0 ? undefined : i;
+  }
+
+  /** Where a strip is on screen, and its header's height. */
+  stripBox(i: number): { left: number; width: number; header: number } | undefined {
+    const l = this.layout;
+    const g = l?.strips[i];
+    return g && l ? { ...g, header: RACK_LABEL * l.scale } : undefined;
+  }
+
+  /**
+   * The slice of strip i at screen y: its cut line when within a few pixels
+   * of one (a fresh hit's too, though that cannot move), else the slice
+   * playing there.
+   */
+  stripSliceAt(i: number, py: number): { slice: StemSlice; part: 'line' | 'body' } | undefined {
+    const spec = this.state?.strips[i];
+    const vp = this.vp;
+    if (!spec || !vp) return undefined;
+    let best: { slice: StemSlice; d: number } | undefined;
+    for (const sl of spec.view.slices) {
+      const d = Math.abs(vp.yOf(sl.y) - py);
+      if (d <= 4 && (!best || d < best.d)) best = { slice: sl, d };
+    }
+    if (best) return { slice: best.slice, part: 'line' };
+    const p = vp.pulseOf(py);
+    if (p < 0) return undefined;
+    const hit = sliceAt(spec.view, spec.timeline.msAt(p));
+    return hit ? { slice: hit, part: 'body' } : undefined;
   }
 
   /** How far the rack can scroll, design units (0 when it fits). */
@@ -384,6 +456,7 @@ export class PlayfieldRenderer {
       height: H,
       columns: s.columns,
       offModeXs,
+      strips: s.strips.length,
       rackGroups: this.rack.groups,
       rackScroll: s.rackScroll,
       extras: this.extras,
@@ -409,6 +482,7 @@ export class PlayfieldRenderer {
     this.drawMarkers(s, l, vp, p0, p1);
     this.drawBed(s, l, vp, gs, p0, p1);
     this.drawNotes(s, l, vp, tex, gs, p0 - pad, p1 + pad);
+    this.drawStrips(s, l, vp, tex, p0, p1);
     this.drawRack(s, l, vp, tex, p0 - pad, p1 + pad);
     this.drawGlow(s, gs);
     this.drawOverlay(s, l, vp, tex, gs);
@@ -871,6 +945,174 @@ export class PlayfieldRenderer {
         r.height = h + 2 * PAD;
       }
     }
+  }
+
+  /** A strip's StemView by identity, for its paint key (views are cached until they change). */
+  private viewId(o: object): number {
+    let id = this.viewIds.get(o);
+    if (id === undefined) this.viewIds.set(o, (id = ++this.viewSeq));
+    return id;
+  }
+
+  private drawStrips(
+    s: FieldState,
+    l: Layout,
+    vp: Viewport,
+    tex: SkinTextures,
+    p0: number,
+    p1: number,
+  ): void {
+    const g = this.stripLines;
+    const hi = this.stripHi;
+    g.clear();
+    hi.clear();
+    this.stripText.begin();
+    this.stripCross.begin();
+    const used = new Set<string>();
+    const H = l.height;
+    const header = RACK_LABEL * l.scale;
+    const dpr = this.app.renderer.resolution;
+    const shown = this.extras > 0.02;
+    s.strips.forEach((spec, i) => {
+      const box = l.strips[i];
+      if (!box || box.width < 2 || !shown) return;
+      used.add(spec.src);
+      const view = spec.view;
+      const lit = new Set<number>();
+      view.slices.forEach((sl, k) => {
+        if (s.selection.has(sl.id) || s.hoverSlice === sl.id) lit.add(k);
+      });
+      // The column, lit when it is the one slicing acts on.
+      g.rect(box.left, 0, box.width, H).fill({
+        color: spec.focused ? NEON : 0xffffff,
+        alpha: (spec.focused ? 0.045 : 0.02) * this.extras,
+      });
+      // The waveform, painted again only when something it shows changed.
+      let p = this.painters.get(spec.src);
+      if (!p) {
+        const painter = new StripPainter();
+        const sprite = new Sprite(painter.texture);
+        this.stripLayer.addChild(sprite);
+        this.painters.set(spec.src, (p = { painter, sprite }));
+      }
+      const w = Math.max(1, Math.round(box.width));
+      const key = stripKey([
+        this.viewId(view),
+        this.viewId(spec.timeline),
+        s.cursor,
+        vp.pxPerBeat,
+        vp.judgeY,
+        w,
+        H,
+        dpr,
+        s.stripsRev,
+        [...lit].join(','),
+      ]);
+      if (p.painter.stale(key))
+        p.painter.paint(key, stripRows(spec, vp, H), w, H, dpr, {
+          of: (k) => {
+            const sl = view.slices[k]!;
+            if (sl.keyed) return KIND_COLOR[laneInfo(sl.x)?.kind ?? 'white'];
+            return SLICE_TINTS[sl.index % 2]!;
+          },
+          lit: (k) => lit.has(k),
+        });
+      p.sprite.visible = true;
+      p.sprite.position.set(box.left, 0);
+      p.sprite.width = w;
+      p.sprite.height = H;
+      p.sprite.alpha = this.extras;
+
+      // Beats, faintly, to read the stem against the grid.
+      const res = s.doc.resolution;
+      for (let q = Math.ceil(p0 / res) * res; q <= p1; q += res) {
+        const y = Math.round(vp.yOf(q)) + 0.5;
+        g.rect(box.left, y, box.width, 1).fill({ color: 0xffffff, alpha: 0.05 * this.extras });
+      }
+      // The cuts: where a sound starts, bright; a continuation, a thin line and the rack's red cross.
+      const size = tex.cross.height - 2 * PAD;
+      for (const sl of view.slices) {
+        if (sl.y < p0 - res || sl.y > p1 + res) continue;
+        const y = vp.yOf(sl.y);
+        if (y < header) continue;
+        if (sl.fresh) {
+          g.rect(box.left, y - 1, box.width, 2).fill({ color: 0xffffff, alpha: 0.9 * this.extras });
+          g.poly([box.left, y - 5, box.left + 7, y, box.left, y + 5]).fill({
+            color: 0xffffff,
+            alpha: this.extras,
+          });
+        } else {
+          g.rect(box.left, y - 0.5, box.width, 1).fill({
+            color: 0xffffff,
+            alpha: 0.5 * this.extras,
+          });
+          const m = this.stripCross.next(tex.cross);
+          m.position.set(box.left + box.width - size - PAD - 1, y - size / 2 - PAD);
+          m.alpha = this.extras;
+        }
+        if (sl.keyed) {
+          const info = laneInfo(sl.x);
+          const t = this.stripText.next(info?.short ?? String(sl.x));
+          t.scale.set(Math.min(1.1, l.scale * 0.65));
+          t.tint = KIND_COLOR[info?.kind ?? 'white'];
+          t.alpha = this.extras;
+          t.position.set(box.left + 9, y - t.height - 1);
+        }
+      }
+      // Onsets: ticks on the right edge, stronger ones brighter.
+      if (spec.onsets.length) {
+        const t0 = spec.timeline.msAt(Math.max(0, p0));
+        const t1 = spec.timeline.msAt(Math.max(0, p1));
+        for (const o of onsetTimes(view, spec.onsets, spec.minStrength, t0, t1)) {
+          const y = vp.yOf(spec.timeline.pulseAt(o.ms));
+          if (y < header) continue;
+          g.rect(box.left + box.width - 7, y - 0.75, 7, 1.5).fill({
+            color: ONSET,
+            alpha: (0.3 + 0.7 * o.strength) * this.extras,
+          });
+        }
+      }
+      // The header: the file, its length and tempo.
+      g.rect(box.left, 0, box.width, header).fill({
+        color: spec.focused ? NEON : 0x1a2034,
+        alpha: (spec.focused ? 0.35 : 0.9) * this.extras,
+      });
+      const t = this.stripText.next(spec.label);
+      t.scale.set(Math.min(1.2, l.scale * 0.62));
+      t.tint = spec.focused ? 0xffffff : 0xa9b3d6;
+      t.alpha = this.extras;
+      const room = box.width - 4;
+      if (t.width > room) {
+        const name = t.text;
+        const keep = Math.max(1, Math.floor((name.length * room) / t.width) - 1);
+        t.text = `${name.slice(0, keep)}…`;
+      }
+      t.position.set(box.left + 2, (header - t.height) / 2);
+    });
+    // The hovered slice's note on its lane, ringed.
+    const n = s.hoverSlice !== null ? s.doc.index.get(s.hoverSlice) : undefined;
+    if (n && n.x !== 0 && shown) {
+      const lane = [...l.lanes, ...l.offLanes].find((g2) => g2.x === n.x);
+      if (lane) {
+        const y = vp.yOf(n.y);
+        hi.rect(lane.left - 2, y - 7, lane.width + 4, 14).stroke({
+          width: 2,
+          color: 0xffffff,
+          alpha: 0.9,
+        });
+      }
+    }
+    for (const [src, p] of this.painters) {
+      if (used.has(src)) continue;
+      p.sprite.visible = false;
+      if (!s.strips.some((x) => x.src === src)) {
+        p.sprite.destroy();
+        p.painter.destroy();
+        this.painters.delete(src);
+      }
+    }
+    this.stripText.end();
+    this.stripCross.end();
   }
 
   /** Group the chart's sounds for the rack (BmsTWO's Classic BMS layout). */

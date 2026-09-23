@@ -549,7 +549,8 @@ export function webBackend(
         const a = Math.min(from, length);
         const b = Math.min(a + count, length);
         const data = new Int16Array((b - a) * 2);
-        const stem = demoStem(path);
+        // The demo's own stems are empty files; a real WAV is drawn from its samples.
+        const stem = wav ? undefined : demoStem(path);
         for (let i = a; i < b; i++) {
           const t0 = (i * bucket) / RATE;
           const t1 = Math.min(((i + 1) * bucket) / RATE, seconds);
@@ -577,7 +578,8 @@ export function webBackend(
       // The demo stem's hits and tempo, as the Rust analysis would find them.
       analysis: async (id) => {
         const path = [...ids].find(([, v]) => v === id)?.[0] ?? '';
-        const stem = demoStem(path);
+        const bytes = files.get(norm(path));
+        const stem = bytes && wavPcm(bytes) ? undefined : demoStem(path);
         if (!stem) return { onsets: [], tempo: [] };
         return {
           onsets: stem.hits.map((h): [number, number] => [h.sec, Math.min(1, h.amp / 0.8)]),

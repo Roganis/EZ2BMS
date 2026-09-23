@@ -88,6 +88,8 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 | Show / hide sounds                         | `Ctrl+B`          |                |
 | Snap to…                                   |                   | `snap 1/16`    |
 | Song manager (info, category, every chart) | `Ctrl+Shift+L`    |                |
+| Stem strip for the picked sound on / off   |                   |                |
+| Stem strips shown / hidden                 |                   |                |
 | Swap P1 / P2 view                          | `F2`              |                |
 | Switch Edit / Play view                    | `Tab`             |                |
 | Timing                                     | `Ctrl+T`          |                |

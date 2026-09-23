@@ -19,6 +19,7 @@ import type { ChannelId, NoteId } from '../model/types';
 import type { AudibleSeg } from '../publish/audible';
 import type { SampleLookup } from '../publish/chart-plan';
 import { OUT_RATE } from '../publish/keysounds';
+import type { PlanTimeline } from '../timing/plan-timeline';
 
 export interface StemSlice {
   /** The note that starts it. */
@@ -92,6 +93,11 @@ export function stemView(doc: ChartDoc, src: string, samples?: SampleLookup): St
       ...(frames !== undefined ? { seconds: frames / OUT_RATE } : {}),
     };
   });
+}
+
+/** The chart's plan timeline (pulses <-> song ms, STOPs as gaps), cached until the timing changes. */
+export function timelineOf(doc: ChartDoc): PlanTimeline {
+  return analysis(doc).timeline;
 }
 
 /** When a segment stops, song ms (Infinity: plays out with no known length). */
