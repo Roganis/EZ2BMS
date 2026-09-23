@@ -34,6 +34,8 @@ export interface SongFile {
   bga?: BgaSettings | null;
   /** Where the song was last published (a key change offers to retire that package). */
   published?: { root: string; key: string };
+  /** The game song a cabinet export last went into (its folder under sound/), offered next time. */
+  cabinet?: { key: string };
   /** What the song was imported from, and what the import could not bring across. */
   source?: ImportSource;
   /** Members EZ2BMS does not know, in file order. */
@@ -107,6 +109,7 @@ const KNOWN = [
   'preview',
   'bga',
   'published',
+  'cabinet',
   'source',
 ] as const;
 
@@ -187,6 +190,10 @@ export function parseSongFile(text: string): { song: SongFile; warnings: string[
   if (pub && typeof pub.root === 'string' && typeof pub.key === 'string')
     song.published = { root: pub.root, key: pub.key };
   else if (o.published !== undefined) song.extra.published = o.published;
+  const cab = o.cabinet as { key?: unknown } | undefined;
+  if (cab && typeof cab === 'object' && typeof cab.key === 'string')
+    song.cabinet = { key: cab.key };
+  else if (o.cabinet !== undefined) song.extra.cabinet = o.cabinet;
   for (const [k, v] of Object.entries(o))
     if (!(KNOWN as readonly string[]).includes(k)) song.extra[k] = v;
   return { song, warnings };
@@ -204,6 +211,7 @@ export function serializeSongFile(s: SongFile): string {
   if (s.preview !== undefined) out.preview = s.preview;
   if (s.bga !== undefined) out.bga = s.bga;
   if (s.published !== undefined) out.published = s.published;
+  if (s.cabinet !== undefined) out.cabinet = s.cabinet;
   if (s.source !== undefined) out.source = s.source;
   for (const [k, v] of Object.entries(s.extra)) if (!(k in out)) out[k] = v;
   return JSON.stringify(out, null, 2) + '\n';

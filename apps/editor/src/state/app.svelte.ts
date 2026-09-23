@@ -21,6 +21,7 @@ import { BgaState } from './bga.svelte';
 import { PublishState } from './publish.svelte';
 import { StripsState } from './strips.svelte';
 import { Importer } from './importer.svelte';
+import { Exporter } from './exporter.svelte';
 import { ask, toast } from './toasts.svelte';
 import { View } from './view.svelte';
 
@@ -42,6 +43,7 @@ export class App {
   readonly publish: PublishState;
   readonly strips: StripsState;
   readonly importer: Importer;
+  readonly exporter: Exporter;
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
@@ -64,6 +66,7 @@ export class App {
     this.publish = new PublishState(this);
     this.strips = new StripsState(this);
     this.importer = new Importer(this);
+    this.exporter = new Exporter(this);
     this.commands.onError = (e, c) =>
       toast(`${c.title}: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }
@@ -165,6 +168,7 @@ export class App {
     this.audio.forget();
     this.view.workbench = false;
     this.view.songManager = false;
+    this.exporter.close();
     this.project = null;
   }
 

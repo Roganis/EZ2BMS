@@ -16,11 +16,14 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 | Command                                            | Keys     | Palette |
 | -------------------------------------------------- | -------- | ------- |
 | Close song                                         |          |         |
+| Export as BMS…                                     |          |         |
+| Export to EZ2AC… (into a song the game has)        |          |         |
 | Forget what the import said (clear it from Issues) |          |         |
 | Import a song… (EZ2AC, BMS, bmson)                 |          |         |
 | New song…                                          |          |         |
 | Open song folder…                                  | `Ctrl+O` |         |
 | Save                                               | `Ctrl+S` |         |
+| Undo a cabinet export…                             |          |         |
 
 ## Edit
 

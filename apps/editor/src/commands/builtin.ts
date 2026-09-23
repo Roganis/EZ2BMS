@@ -61,6 +61,27 @@ export function registerBuiltins(app: App): void {
       run: () => app.importer.show(),
     },
     {
+      id: 'file.exportCabinet',
+      title: 'Export to EZ2AC… (into a song the game has)',
+      group: 'File',
+      enabled: () => !!app.project?.charts.length,
+      run: () => app.exporter.show('cabinet'),
+    },
+    {
+      id: 'file.exportBms',
+      title: 'Export as BMS…',
+      group: 'File',
+      enabled: () => !!app.project?.charts.length,
+      run: () => app.exporter.show('bms'),
+    },
+    {
+      id: 'file.exportRestore',
+      title: 'Undo a cabinet export…',
+      group: 'File',
+      enabled: () => !!app.project,
+      run: () => app.exporter.show('history'),
+    },
+    {
       id: 'song.clearImportNotes',
       title: 'Forget what the import said (clear it from Issues)',
       group: 'File',

@@ -40,7 +40,7 @@ export * from './ez2data/mixparam';
 export * from './ez2data/selectwheel';
 export * from './ez2data/songdb';
 export * from './ez2data/songtext';
-export { decodeCp949 } from './ez2data/initext';
+export { ciEq, decodeCp949 } from './ez2data/initext';
 export * from './edit/note-index';
 export * from './edit/doc';
 export * from './edit/commands';

@@ -9,22 +9,17 @@ import {
   ezSongSource,
   importBmsSong,
   importEzSong,
-  keyTableFromExe,
-  openGame,
-  SONGDB_TABLE_SIZE,
-  SONGDB_TABLE_VA,
-  exeRead,
   serializeBmson,
   serializeSongFile,
   type BmsFileChoice,
   type BmsSongImport,
   type EzSongImport,
   type Game,
-  type GameFs,
   type GameSong,
 } from '@ez2bms/chart-core';
 import { baseName, dirName, joinPath, type ImportJob } from '../bridge';
 import type { App } from './app.svelte';
+import { loadGame } from './game';
 import { SIDECAR } from './project.svelte';
 import { toast } from './toasts.svelte';
 
@@ -87,68 +82,15 @@ export class Importer {
 
   // ---- the game -----------------------------------------------------------------
 
-  private fs(root: string): GameFs {
-    const b = this.app.backend;
-    return {
-      list: async (dir) =>
-        (await b.list(dir ? joinPath(root, dir) : root).catch(() => [])).map((e) => e.name),
-      read: (p) => b.readFile(joinPath(root, p)).catch(() => undefined),
-    };
-  }
-
-  /**
-   * The user's unpacked executable: the one set, else (as EZ2PORT does) the
-   * first .exe in the game folder whose bytes hold the keys.
-   */
-  private async findExe(root: string): Promise<Uint8Array | undefined> {
-    const b = this.app.backend;
-    const set = this.app.settings.data.exe;
-    if (set) return b.readFile(set).catch(() => undefined);
-    for (const e of await b.list(root).catch(() => [])) {
-      if (e.is_dir || !/\.exe$/i.test(e.name)) continue;
-      const bytes = await b.readFile(joinPath(root, e.name)).catch(() => undefined);
-      if (!bytes) continue;
-      try {
-        keyTableFromExe(bytes, 'ez');
-        return bytes;
-      } catch {
-        try {
-          exeRead(bytes, SONGDB_TABLE_VA, SONGDB_TABLE_SIZE);
-          return bytes;
-        } catch {
-          // not this one
-        }
-      }
-    }
-    return undefined;
-  }
-
   async loadGame(): Promise<void> {
-    const root = this.app.settings.data.gameRoot;
     this.gameError = null;
-    if (!root) {
+    if (!this.app.settings.data.gameRoot) {
       this.gameError = 'Set your EZ2AC data folder on the EZ2PORT panel first';
       return;
     }
     this.loadingGame = true;
     try {
-      const exe = await this.findExe(root);
-      // The port's song titles: text/ beside ez2play, else in the game folder.
-      const play = this.app.settings.data.ez2play;
-      const manifestAt = [
-        play && joinPath(joinPath(dirName(play), 'text'), 'manifest.songs.ini'),
-        joinPath(joinPath(root, 'text'), 'manifest.songs.ini'),
-      ];
-      let manifest: string | undefined;
-      for (const p of manifestAt) {
-        if (!p) continue;
-        const bytes = await this.app.backend.readFile(p).catch(() => undefined);
-        if (bytes) {
-          manifest = new TextDecoder().decode(bytes);
-          break;
-        }
-      }
-      const game = await openGame(this.fs(root), exe, manifest);
+      const game = await loadGame(this.app.backend, this.app.settings);
       this.game = game;
       if (!game.songs.length)
         this.gameError =

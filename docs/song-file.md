@@ -28,6 +28,7 @@ cannot read is kept as it is and reported, never silently changed.
   "preview": { "startMs": 61500, "lengthMs": 25000 },
   "bga": { "file": "movie/intro.mp4", "startMs": -250 },
   "published": { "root": "D:/EZ2AC/ez2port/songs", "key": "neonparade" },
+  "cabinet": { "key": "stay" },
   "source": {
     "from": "bms",
     "path": "D:/BMS/Neon Parade",
@@ -59,6 +60,7 @@ importer would do it" wherever the importer has a rule.
 | `preview`   | `{ chart?, file?, startMs?, lengthMs?, fadeMs? }`: a chart's mix (by file name) or an audio file, the window and its fades                                                                                                                                                                   | the first chart's mix, 20 s from the first note a quarter of the way in, 1 s fades |
 | `bga`       | `{ file?, startMs? }`: the movie and the chart time its frame 0 shows at (ms, may be negative); `null` for none                                                                                                                                                                              | the first chart's earliest `bga_events` movie, at that event's time                |
 | `published` | `{ root, key }`: where the song was last published, so a key change can offer to take the old package off the wheel                                                                                                                                                                          | nothing published yet                                                              |
+| `cabinet`   | `{ key }`: the game song a cabinet export last went into (its folder under `sound/`), offered first the next time                                                                                                                                                                            | the song it was imported from (`source.key`), when there is one                    |
 | `source`    | `{ from, key?, path?, charts?, notes? }`: what the song was imported from (`ez2ac`, `bms`, `bmson`), the game song's key, each chart's original file, and what the import could not bring across (shown in Issues). Kept for a cabinet export (M6) to write the song back where it came from | not imported                                                                       |
 
 Paths are relative to the song folder with forward slashes, and are found in
