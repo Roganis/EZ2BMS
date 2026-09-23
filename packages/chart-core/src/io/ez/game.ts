@@ -8,10 +8,12 @@
 
 import { parseGds, type Gds } from '../../ez2data/gds';
 import { decodeCp949 } from '../../ez2data/initext';
-import { keyTableFromExe } from '../../ez2data/keytable';
+import { exeRead, keyTableFromExe } from '../../ez2data/keytable';
 import { ez2Decrypt, looksPlaintext } from '../../ez2data/crypt';
 import {
   readSongdb,
+  SONGDB_TABLE_SIZE,
+  SONGDB_TABLE_VA,
   songdbCharts,
   songdbSongDir,
   type SongDb,
@@ -53,6 +55,12 @@ export interface Game {
   songs: GameSong[];
   gds: Partial<Record<ModeId, Gds>>;
   songdbs: Partial<Record<ModeId, SongDb>>;
+  /** Each mode's song.bin as it is on disk, and where (a cabinet export patches it). */
+  songdbFiles: Partial<Record<ModeId, { path: string; bytes: Uint8Array }>>;
+  /** song.bin's cipher tables, from the executable (undefined without one, or for a plaintext game). */
+  songdbTables?: Uint8Array;
+  /** The port's titles, by key and by folder (lower case). */
+  titles: Map<string, SongTitle>;
   tables?: EzTables;
   /** Why the executable gave no chart keys (only matters for encrypted charts). */
   tablesError?: string;
@@ -67,19 +75,35 @@ async function findIn(fs: GameFs, dir: string, name: string): Promise<string | u
   return hit === undefined ? undefined : dir ? `${dir}/${hit}` : hit;
 }
 
+export interface OpenGameOptions {
+  /**
+   * Chart tables to use when the executable gives none. Only the browser
+   * build's made-up game passes these (its made-up executable cannot carry the
+   * real tables, whose digests are checked); the desktop app never does.
+   */
+  tables?: EzTables;
+}
+
 /**
  * Open a data folder: each mode's `.gds` and `song.bin` (decrypted with the
  * executable's tables when it is not plaintext), the titles from the port's
  * manifest (`manifest`: the text of text/manifest.songs.ini, or undefined),
  * and the songs the tables list whose folder is there.
  */
-export async function openGame(fs: GameFs, exe?: Uint8Array, manifest?: string): Promise<Game> {
+export async function openGame(
+  fs: GameFs,
+  exe?: Uint8Array,
+  manifest?: string,
+  opts: OpenGameOptions = {},
+): Promise<Game> {
   const problems: string[] = [];
   const sound = await fs.list('sound');
   const system = await fs.list('system');
   const titles = manifest ? parseSongTitles(manifest) : new Map<string, SongTitle>();
   const gds: Game['gds'] = {};
   const songdbs: Game['songdbs'] = {};
+  const songdbFiles: Game['songdbFiles'] = {};
+  let songdbTables: Uint8Array | undefined;
   let tables: EzTables | undefined;
   let tablesError: string | undefined = exe ? undefined : 'no executable is set';
   if (exe) {
@@ -92,6 +116,15 @@ export async function openGame(fs: GameFs, exe?: Uint8Array, manifest?: string):
     } catch (e) {
       tablesError = e instanceof Error ? e.message : String(e);
     }
+    try {
+      songdbTables = exeRead(exe, SONGDB_TABLE_VA, SONGDB_TABLE_SIZE);
+    } catch {
+      // Not this executable: a table that is encrypted says so below.
+    }
+  }
+  if (!tables && opts.tables) {
+    tables = opts.tables;
+    tablesError = undefined;
   }
   const byDir = new Map<string, GameSong>();
   for (const m of MODES) {
@@ -103,6 +136,7 @@ export async function openGame(fs: GameFs, exe?: Uint8Array, manifest?: string):
     const b = await findIn(fs, `system/${dir}`, 'song.bin');
     const bytes = b && (await fs.read(b));
     if (!bytes) continue;
+    songdbFiles[m.id] = { path: b, bytes };
     let db: SongDb;
     try {
       db = readSongdb(bytes, exe);
@@ -134,6 +168,9 @@ export async function openGame(fs: GameFs, exe?: Uint8Array, manifest?: string):
     songs,
     gds,
     songdbs,
+    songdbFiles,
+    ...(songdbTables ? { songdbTables } : {}),
+    titles,
     ...(tables ? { tables } : {}),
     ...(tablesError ? { tablesError } : {}),
     problems,

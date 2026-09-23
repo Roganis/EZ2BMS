@@ -266,3 +266,74 @@ export function writeSongdb(db: SongDb): Uint8Array {
   }
   return out;
 }
+
+/** One change to a song's record: a tier's level, its `a`, its BPM (`b`). */
+export interface SongdbEdit {
+  key: string;
+  tier: 0 | 1 | 2 | 3;
+  level?: number;
+  a?: number;
+  bpm?: number;
+}
+
+/** Where a key's record starts in a decrypted song.bin (the first match, any case, as ez2_songdb_find). */
+export function songdbRecordAt(plain: Uint8Array, key: string): number | undefined {
+  const dv = new DataView(plain.buffer, plain.byteOffset, plain.byteLength);
+  const count = dv.getUint16(6, true);
+  const off = dv.getUint32(8, true);
+  for (let i = 0; i < count; i++) {
+    const r = off + i * SONGDB_RECORD;
+    if (r + SONGDB_RECORD > plain.length) break;
+    if (ciEq(field(plain.subarray(r, r + 16)), key)) return r;
+  }
+  return undefined;
+}
+
+/**
+ * Change a song's levels and BPM in a song.bin as it is on disk, and nothing
+ * else. writeSongdb lays a table out afresh (it would drop what it does not
+ * model: header bytes 4-5, whatever follows a key's NUL); a cabinet export
+ * must not touch another song's bytes. The cipher masks each byte by its
+ * position alone, so decrypting, changing a few bytes and encrypting again
+ * gives the file back with only those bytes different; `changed` lists the
+ * offsets whose bytes are not what they were (none: the input, untouched).
+ */
+export function patchSongdb(
+  bytes: Uint8Array,
+  tables: Uint8Array | undefined,
+  edits: readonly SongdbEdit[],
+): { bytes: Uint8Array; changed: number[] } {
+  const encrypted = field(bytes.subarray(0, 4)) !== 'EZSL';
+  if (encrypted && !tables)
+    throw new SongDbError('tables', 'song.bin is encrypted: set the unpacked EZ2AC executable');
+  const plain = encrypted ? songdbCrypt(bytes, tables!) : bytes.slice();
+  parseSongdb(plain); // EZSL, and a header that fits
+  const dv = new DataView(plain.buffer, plain.byteOffset, plain.byteLength);
+  const was = plain.slice();
+  const put = (at: number, v: number) => dv.setFloat32(at, v, true);
+  for (const e of edits) {
+    const r = songdbRecordAt(plain, e.key);
+    if (r === undefined) throw new SongDbError('short', `song.bin does not list ${e.key}`);
+    const g = r + 0x32 + e.tier * 9;
+    if (e.level !== undefined) {
+      if (!Number.isInteger(e.level) || e.level < 0 || e.level > 255)
+        throw new RangeError(`a song.bin level is a byte, not ${e.level}`);
+      plain[g] = e.level;
+    }
+    if (e.a !== undefined) {
+      if (!Number.isFinite(e.a)) throw new RangeError(`song.bin's a must be a number, not ${e.a}`);
+      put(g + 1, e.a);
+    }
+    if (e.bpm !== undefined) {
+      if (!Number.isFinite(e.bpm) || e.bpm <= 0)
+        throw new RangeError(`a song.bin BPM must be above 0, not ${e.bpm}`);
+      put(g + 5, e.bpm);
+    }
+  }
+  const changed: number[] = [];
+  for (let i = 0; i < plain.length; i++) if (plain[i] !== was[i]) changed.push(i);
+  return {
+    bytes: changed.length ? (encrypted ? songdbCrypt(plain, tables!) : plain) : bytes,
+    changed,
+  };
+}

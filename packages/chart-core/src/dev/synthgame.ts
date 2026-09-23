@@ -6,6 +6,7 @@
 
 import { SONGDB_TABLE_VA, songdbCrypt, writeSongdb, type SongEntry } from '../ez2data/songdb';
 import { nameField, writeEzff, type EzffChart, type EzffRecord } from '../io/ez/ezff';
+import type { EzTables } from '../io/ez/import';
 import { modeDef } from '../modes/registry';
 import { modeNames, type ModeId } from '../modes/ids';
 
@@ -101,6 +102,19 @@ export function synthSsf(frames: number, seed: number, rate = 44100): Uint8Array
 
 /** Made-up song.bin cipher tables (never the game's). */
 export const SYNTH_SONGDB_TABLES = Uint8Array.from({ length: 64 }, (_, i) => (i * 73 + 29) & 0xff);
+
+/**
+ * Made-up chart cipher tables (512 bytes each). The synthetic game's charts
+ * are plaintext; these are what the tests and the browser build encrypt a
+ * cabinet export with - a real game's come from its executable, and can
+ * never be made up (their digests are checked), so they are handed in
+ * directly (openGame's `tables`).
+ */
+export const SYNTH_EZ_TABLES: EzTables = {
+  ez: Uint8Array.from({ length: 512 }, (_, i) => (i * 131 + 7) & 0xff),
+  ezi: Uint8Array.from({ length: 512 }, (_, i) => (i * 197 + 13) & 0xff),
+  ini: Uint8Array.from({ length: 512 }, (_, i) => (i * 53 + 101) & 0xff),
+};
 
 export interface SynthGame {
   /** Game-relative path (forward slashes, as cased on "disk") -> bytes. */

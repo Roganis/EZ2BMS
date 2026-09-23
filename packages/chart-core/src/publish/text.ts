@@ -45,6 +45,16 @@ export function chartIniText(ini: ChartIni, eol: Eol = '\n'): string {
   ].join(eol);
 }
 
+/**
+ * A chart .ini for the original game: the same keys, written `Key=value`
+ * with CRLF as the game's own .ini files are (and as its format is written
+ * down) - EZ2PORT trims around the `=`, but whether the original does is not
+ * known, so the cabinet gets the form it ships with.
+ */
+export function cabinetIniText(ini: ChartIni): string {
+  return chartIniText(ini, '\r\n').replace(/ = /g, '=');
+}
+
 /** Make a value safe for song.ini: one line, no comment character. */
 export function iniValue(s: string): string {
   return s

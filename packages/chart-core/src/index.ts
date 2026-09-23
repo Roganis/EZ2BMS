@@ -58,6 +58,7 @@ export * from './publish/playback';
 export * from './publish/audible';
 export * from './publish/text';
 export * from './publish/package';
+export * from './publish/cabinet';
 export * from './publish/plate';
 export * from './publish/preview';
 export * from './publish/bga';
@@ -74,4 +75,12 @@ export * from './sound/usage';
 export * from './sound/rename';
 export * from './song';
 export { synthChart, synthDoc, synthSoundName, type SynthOptions } from './dev/synth';
-export { synthGame, synthGds, synthPe, synthSsf, type SynthGame } from './dev/synthgame';
+export {
+  synthGame,
+  synthGds,
+  synthPe,
+  synthSsf,
+  SYNTH_EZ_TABLES,
+  SYNTH_SONGDB_TABLES,
+  type SynthGame,
+} from './dev/synthgame';
