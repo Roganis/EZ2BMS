@@ -66,18 +66,16 @@ pub struct Inspection {
 }
 
 /// `dir/name`, matched as EZ2PORT does (ez2/vfs.c ez2_vfs_child): the exact
-/// name first, then any case.
+/// name first, then any case. The folder is listed rather than probed: on a
+/// case-insensitive disk (Windows) a probe for "abc" also finds "ABC", and
+/// the name reported - which the caller shows and compares - would be wrong.
 fn child_ci(dir: &Path, name: &str) -> Option<PathBuf> {
-    let exact = dir.join(name);
-    if exact.exists() {
-        return Some(exact);
-    }
-    let want = name.to_ascii_lowercase();
-    std::fs::read_dir(dir)
-        .ok()?
-        .flatten()
-        .find(|e| e.file_name().to_string_lossy().to_ascii_lowercase() == want)
-        .map(|e| e.path())
+    let names: Vec<_> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.file_name()).collect();
+    let hit = names
+        .iter()
+        .find(|n| n.as_os_str() == name)
+        .or_else(|| names.iter().find(|n| n.to_string_lossy().eq_ignore_ascii_case(name)))?;
+    Some(dir.join(hit))
 }
 
 /// song.ini compared as the text the caller was shown (it crossed the bridge
