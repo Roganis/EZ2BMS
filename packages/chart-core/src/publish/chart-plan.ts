@@ -102,11 +102,133 @@ export interface CompileOptions {
 
 const f32 = Math.fround;
 /** EZ2PORT's importer never cuts a slice shorter than 0.5 ms. */
-const MIN_SLICE_FRAMES = Math.round(0.0005 * OUT_RATE);
+export const MIN_SLICE_FRAMES = Math.round(0.0005 * OUT_RATE);
+
+/** Whole 44.1 kHz frames between two song times - how slices are cut. */
+export function framesBetween(fromMs: number, toMs: number): number {
+  return Math.round(((toMs - fromMs) * OUT_RATE) / 1000);
+}
+
+/**
+ * A chart's time as EZ2PORT will keep it: positions to ticks with STOPs as
+ * gaps, the tempo from the published f32 records (the header holds the BPM at
+ * tick 0, later changes are records; two at one tick, the later wins).
+ */
+export class ChartClock {
+  readonly resolution: number;
+  readonly ticks: TickConverter;
+  readonly tempo: EngineTempo;
+  readonly headerBpm: number;
+  readonly tempoRecords: EzffRecord[];
+  /** Largest pulse -> tick rounding met so far, in ticks. */
+  worstRounding = 0;
+
+  constructor(chart: ChartData) {
+    const res = chart.info.resolution && chart.info.resolution > 0 ? chart.info.resolution : 240;
+    this.resolution = res;
+    this.ticks = new TickConverter(res, chart.stopEvents);
+    let headerBpm = chart.info.initBpm && chart.info.initBpm > 0 ? chart.info.initBpm : 120;
+    const bpmAt = new Map<number, number>();
+    const bpmSorted = chart.bpmEvents
+      .map((e, i) => ({ ...e, i }))
+      .filter((e) => e.bpm > 0 && Number.isFinite(e.bpm))
+      .sort((a, b) => a.y - b.y || a.i - b.i);
+    for (const e of bpmSorted) {
+      const tick = this.tick(e.y);
+      if (tick === 0) headerBpm = e.bpm;
+      else bpmAt.set(tick, e.bpm);
+    }
+    this.headerBpm = headerBpm;
+    this.tempoRecords = [...bpmAt]
+      .sort((a, b) => a[0] - b[0])
+      .map(([tick, bpm]) => ({ tick, type: EZ_BPM, bpm: f32(bpm) }));
+    this.tempo = new EngineTempo(
+      headerBpm,
+      this.tempoRecords.map((r) => ({ tick: r.tick, bpm: r.bpm! })),
+    );
+  }
+
+  /** The EZ2 tick of a position. */
+  tick(y: number): number {
+    const r = this.ticks.tick(y);
+    if (r.err > this.worstRounding) this.worstRounding = r.err;
+    return r.tick;
+  }
+
+  /** Song milliseconds at a tick. */
+  msAt(tick: number): number {
+    return this.tempo.msAt(tick);
+  }
+}
+
+/** One note of a channel, as the sound it plays. */
+export interface ChannelEvent {
+  n: NoteRec;
+  tick: number;
+  ms: number;
+  /**
+   * The keysound it plays, as frames of the source at 44.1 kHz: a whole
+   * sample is [0, null); a slice starts `startF` into the sample and ends at
+   * `endF` (null: plays out).
+   */
+  whole: boolean;
+  startF: number;
+  endF: number | null;
+  /** When the sample it plays from would have started (its fresh hit; `ms` for a whole sample). */
+  originMs: number;
+  /** When the slice ends (the channel's next note); null plays out. */
+  untilMs: number | null;
+}
+
+/** The order notes of one channel sound in, and the order the plan lists events in. */
+export const byPosition = (a: NoteRec, b: NoteRec): number => a.y - b.y || a.x - b.x || a.id - b.id;
+
+/**
+ * One channel's notes as sounds (the importer's walk_channels): in position
+ * order, a continuation plays the sample from `t - t(last fresh hit)`, a slice
+ * runs to the channel's next note (at least MIN_SLICE_FRAMES), and a fresh
+ * hit not followed by a continuation plays the whole file. A leading
+ * continuation has nothing to continue and is a fresh hit.
+ */
+export function channelEvents(clock: ChartClock, notes: readonly NoteRec[]): ChannelEvent[] {
+  const sorted = [...notes].sort(byPosition);
+  const ticks = sorted.map((n) => clock.tick(n.y));
+  const ms = ticks.map((t) => clock.msAt(t));
+  const out: ChannelEvent[] = [];
+  let anchor = -1;
+  sorted.forEach((n, i) => {
+    const t = ms[i]!;
+    if (!(n.c && anchor >= 0)) anchor = t;
+    const startF = framesBetween(anchor, t);
+    const last = i + 1 >= sorted.length;
+    const nextCont = !last && sorted[i + 1]!.c;
+    const whole = startF === 0 && !nextCont;
+    const endF =
+      whole || last ? null : Math.max(framesBetween(anchor, ms[i + 1]!), startF + MIN_SLICE_FRAMES);
+    out.push({
+      n,
+      tick: ticks[i]!,
+      ms: t,
+      whole,
+      startF: whole ? 0 : startF,
+      endF,
+      originMs: whole ? t : anchor,
+      untilMs:
+        whole || last ? null : Math.max(ms[i + 1]!, t + (MIN_SLICE_FRAMES * 1000) / OUT_RATE),
+    });
+  });
+  return out;
+}
+
+/** Plan order: by tick, then lane, then note - the order records are written and events fire. */
+export const planOrder = (
+  a: { tick: number; n: NoteRec },
+  b: { tick: number; n: NoteRec },
+): number => a.tick - b.tick || a.n.x - b.n.x || a.n.id - b.n.id;
 
 export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
-  const res = chart.info.resolution && chart.info.resolution > 0 ? chart.info.resolution : 240;
-  const tc = new TickConverter(res, chart.stopEvents);
+  const clock = new ChartClock(chart);
+  const tc = clock.ticks;
   const stats: ChartPlanStats = {
     notes: 0,
     holds: 0,
@@ -117,31 +239,9 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
     chokes: 0,
     worstRounding: 0,
   };
-  const tickOf = (y: number) => {
-    const r = tc.tick(y);
-    stats.worstRounding = Math.max(stats.worstRounding, r.err);
-    return r.tick;
-  };
-
-  // ---- tempo: the header holds the BPM at tick 0; later changes are records.
-  let headerBpm = chart.info.initBpm && chart.info.initBpm > 0 ? chart.info.initBpm : 120;
-  const bpmAt = new Map<number, number>();
-  const bpmSorted = chart.bpmEvents
-    .map((e, i) => ({ ...e, i }))
-    .filter((e) => e.bpm > 0 && Number.isFinite(e.bpm))
-    .sort((a, b) => a.y - b.y || a.i - b.i);
-  for (const e of bpmSorted) {
-    const tick = tickOf(e.y);
-    if (tick === 0) headerBpm = e.bpm;
-    else bpmAt.set(tick, e.bpm); // two at one tick: the later wins
-  }
-  const tempoRecords: EzffRecord[] = [...bpmAt]
-    .sort((a, b) => a[0] - b[0])
-    .map(([tick, bpm]) => ({ tick, type: EZ_BPM, bpm: f32(bpm) }));
-  const tempo = new EngineTempo(
-    headerBpm,
-    tempoRecords.map((r) => ({ tick: r.tick, bpm: r.bpm! })),
-  );
+  const headerBpm = clock.headerBpm;
+  const tempoRecords = clock.tempoRecords;
+  const tempo = clock.tempo;
   const msOf = (tick: number) => tempo.msAt(tick);
 
   // ---- notes -> keysounds and records
@@ -179,47 +279,27 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
     else byChannel.set(n.ch, [n]);
   }
   for (const ch of chart.channels) {
-    const notes = (byChannel.get(ch.id) ?? []).sort(
-      (a, b) => a.y - b.y || a.x - b.x || a.id - b.id,
-    );
-    const ticks = notes.map((n) => tickOf(n.y));
-    const ms = ticks.map(msOf);
-    const framesBetween = (from: number, to: number) => Math.round(((to - from) * OUT_RATE) / 1000);
-    let anchor = -1;
-    notes.forEach((n, i) => {
-      const t = ms[i]!;
-      if (!(n.c && anchor >= 0)) anchor = t;
-      const startF = framesBetween(anchor, t);
-      const nextCont = i + 1 < notes.length && notes[i + 1]!.c;
-      let endF: number | null = null;
-      if (i + 1 < notes.length) {
-        endF = Math.max(framesBetween(anchor, ms[i + 1]!), startF + MIN_SLICE_FRAMES);
-      }
-      const whole = startF === 0 && !nextCont;
-      const ks = whole ? o.keysounds.get(ch.name, 0, null) : o.keysounds.get(ch.name, startF, endF);
-      if (!whole) stats.slices++;
+    for (const e of channelEvents(clock, byChannel.get(ch.id) ?? [])) {
+      const ks = o.keysounds.get(ch.name, e.startF, e.endF);
+      if (!e.whole) stats.slices++;
       const info = o.samples?.(ch.name);
-      const durFrames = whole
+      const durFrames = e.whole
         ? (info?.frames ?? Infinity)
-        : endF === null
-          ? Math.max(0, (info?.frames ?? Infinity) - startF)
-          : endF - startF;
-      const untilMs =
-        whole || endF === null
-          ? null
-          : Math.max(ms[i + 1]!, t + (MIN_SLICE_FRAMES * 1000) / OUT_RATE);
+        : e.endF === null
+          ? Math.max(0, (info?.frames ?? Infinity) - e.startF)
+          : e.endF - e.startF;
       pending.push({
-        n,
-        tick: ticks[i]!,
-        ms: t,
+        n: e.n,
+        tick: e.tick,
+        ms: e.ms,
         ks,
         durMs: (durFrames * 1000) / OUT_RATE,
-        originMs: whole ? t : anchor,
-        untilMs,
+        originMs: e.originMs,
+        untilMs: e.untilMs,
       });
-    });
+    }
   }
-  pending.sort((a, b) => a.tick - b.tick || a.n.x - b.n.x || a.n.id - b.n.id);
+  pending.sort(planOrder);
 
   const tracks: EzffRecord[][] = Array.from({ length: 64 }, () => []);
   tracks[0]!.push(...tempoRecords);
@@ -280,6 +360,7 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
     endMs = Math.max(endMs, end);
   }
   stats.chokes = backing.chokes;
+  stats.worstRounding = clock.worstRounding;
 
   // ---- close the stage after the last sound
   let lastTick = 0;

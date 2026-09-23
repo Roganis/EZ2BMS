@@ -7,12 +7,9 @@
 
 import {
   compileChart,
-  dsLevel,
-  dsPan,
+  engineEvents,
   KeysoundRegistry,
-  MIX_UNITY,
   modeDef,
-  PAN_CENTRE,
   type ChartPlan,
 } from '@ez2bms/chart-core';
 import { SvelteMap } from 'svelte/reactivity';
@@ -126,24 +123,15 @@ export class AudioClient {
     this.timeline = new PlanTimeline(plan.tempo, slot.doc.resolution, d.stopEvents);
     this.planRev = slot.rev;
     this.planSlot = slot;
-    const events: AudioEvent[] = [];
-    for (const e of plan.events) {
-      if (this.muteBgm && !e.lane) continue;
-      if (this.lanesMuted && e.lane) continue;
-      if (this.solo !== null && e.lane && e.x !== this.solo) continue;
-      const def = reg.defs[e.keysound]!;
-      const id = this.loaded.get(def.src)?.id;
-      if (id === null || id === undefined) continue;
-      events.push({
-        ms: e.ms,
-        origin_ms: e.originMs,
-        until_ms: e.untilMs,
-        sample: id,
-        voice: e.keysound,
-        level: dsLevel(MIX_UNITY, MIX_UNITY, MIX_UNITY, e.vel),
-        pan: dsPan(PAN_CENTRE, e.pan),
-      });
-    }
+    const events: AudioEvent[] = engineEvents(
+      plan,
+      reg,
+      (src) => this.loaded.get(src)?.id,
+      (e) =>
+        !(this.muteBgm && !e.lane) &&
+        !(this.lanesMuted && e.lane) &&
+        !(this.solo !== null && e.lane && e.x !== this.solo),
+    );
     await this.backend.audio.setEvents(events);
   }
 
