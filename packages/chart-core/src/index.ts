@@ -44,6 +44,7 @@ export * from './publish/audible';
 export * from './publish/text';
 export * from './publish/package';
 export * from './publish/plate';
+export * from './publish/preview';
 export * from './engine/songini';
 export * from './engine/score';
 export * from './engine/session';

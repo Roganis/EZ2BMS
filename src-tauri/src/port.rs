@@ -6,13 +6,14 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use ez2bms_audio::cut::cut_ssf;
+use ez2bms_audio::cut::{cut_ssf, PUBLISH_RATE};
+use ez2bms_audio::ssf;
 use ez2bms_launch::{
     launch, probe, Caps, LaunchSpec, LogLine, Outcome, Probe, Running, Stream, TempSongs,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::audio::{publish_cache, resolve};
+use crate::audio::{publish_cache, render_preview, resolve, PreviewJob};
 use crate::error::{CmdError, CmdResult};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -38,6 +39,9 @@ pub struct PackageDto {
     pub project_dir: PathBuf,
     pub files: Vec<PackageFile>,
     pub keysounds: Vec<KeysoundJob>,
+    /// `preview.ssf`, rendered here (song.ini names it when present).
+    #[serde(default)]
+    pub preview: Option<PreviewJob>,
 }
 
 /// What the editor saw at the target and decided (chart-core publish/rankings.ts).
@@ -108,6 +112,12 @@ pub fn publish_with(
             Ok(s) => files.push((job.file.clone(), cut_ssf(&s, job.start_frame, job.end_frame)?)),
             Err(e) => missing.push((job.src.clone(), e.to_string())),
         }
+    }
+    if let Some(p) = &pkg.preview {
+        // A preview that cannot be made fails the publish: song.ini names it,
+        // and a missing one is silence on the wheel.
+        let pcm = render_preview(&cache, &pkg.project_dir, p)?;
+        files.push(("preview.ssf".into(), ssf::encode_pcm16(2, PUBLISH_RATE, &pcm)));
     }
     let write = ez2bms_launch::WriteOptions {
         carry: opts.carry.clone(),
@@ -321,6 +331,50 @@ mod tests {
     }
 
     #[test]
+    fn a_preview_is_rendered_into_the_package_from_a_mix_or_a_file() {
+        let d = std::env::temp_dir().join(format!("ez2bms-app preview {}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let pcm: Vec<i16> = (0..2 * 44_100).map(|i| (i * 37 % 20_000) as i16 - 10_000).collect();
+        std::fs::write(d.join("loop.wav"), ez2bms_audio::wav::encode_pcm16(2, 44_100, &pcm))
+            .unwrap();
+        let job = |file: Option<&str>| PreviewJob {
+            sources: vec!["loop.wav".into()],
+            events: serde_json::from_value(serde_json::json!([
+                { "ms": 0.0, "origin_ms": 0.0, "until_ms": null, "sample": 0, "voice": 0,
+                  "level": 0, "pan": 0 }
+            ]))
+            .unwrap(),
+            file: file.map(Into::into),
+            from_ms: 250.0,
+            length_ms: 1000.0,
+            fade_ms: 100.0,
+        };
+        let publish_one = |p: PreviewJob| {
+            let pkg = PackageDto {
+                key: "pv".into(),
+                project_dir: d.clone(),
+                files: vec![],
+                keysounds: vec![],
+                preview: Some(p),
+            };
+            let out = publish(&d.join("songs"), &pkg).unwrap();
+            std::fs::read(out.dir.join("preview.ssf")).unwrap()
+        };
+        for p in [job(None), job(Some("loop.wav"))] {
+            let bytes = publish_one(p);
+            let (h, body) = ez2bms_audio::ssf::parse(&bytes).unwrap();
+            assert_eq!((h.channels, h.rate, h.frames()), (2, 44_100, 44_100));
+            // Past the fade in, the source as it is (quiet: nothing to normalise).
+            let at = |f: usize| i16::from_le_bytes([body[f * 4], body[f * 4 + 1]]);
+            let src = |f: usize| pcm[(f + 11_025) * 2];
+            assert_eq!((at(5000), at(20_000)), (src(5000), src(20_000)));
+            assert_eq!(at(0), 0, "faded in from silence");
+        }
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
     fn publishing_cuts_keysounds_and_reports_what_is_missing() {
         let d = std::env::temp_dir().join(format!("ez2bms-app publish {}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
@@ -359,6 +413,7 @@ mod tests {
                     file: "gone.ssf".into(),
                 },
             ],
+            preview: None,
         };
         let songs = d.join("songs");
         let out = publish(&songs, &pkg).unwrap();

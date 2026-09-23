@@ -8,6 +8,7 @@
 //                     /<keysound>.ssf ...
 //                     /songname.abm (title plate, when given)
 //                     /disc.abm, /eyecatch.abm (song art, when given)
+//                     /preview.ssf (the wheel's loop, when given: the host renders it)
 // Everything is plaintext; EZ2PORT accepts plaintext .ez/.ezi/.ini by content.
 
 import type { ChartData, Tier } from '../model/types';
@@ -43,6 +44,8 @@ export interface SongMeta {
   /** The disc (256x256) and the eyecatch (1024x512), already encoded as .abm. */
   discAbm?: Uint8Array;
   eyecatchAbm?: Uint8Array;
+  /** The package has a preview.ssf (rendered by the host, not in `files`). */
+  preview?: boolean;
   bga?: { file: string; startMs: number };
   /** The song's id (ez2bms.song.json), written to song.ini's [EZ2BMS] section. */
   songId?: string;
@@ -140,7 +143,7 @@ export function compileSong(
   }
   // The names the port's importer gives them (ez2/bmson.c), so a package
   // reads the same whoever made it.
-  const assets: { disc?: string; songname?: string; eyecatch?: string } = {};
+  const assets: { disc?: string; songname?: string; eyecatch?: string; preview?: string } = {};
   if (meta.songnameAbm) {
     files.push({ path: 'songname.abm', bytes: meta.songnameAbm });
     assets.songname = 'songname.abm';
@@ -153,6 +156,7 @@ export function compileSong(
     files.push({ path: 'eyecatch.abm', bytes: meta.eyecatchAbm });
     assets.eyecatch = 'eyecatch.abm';
   }
+  if (meta.preview) assets.preview = 'preview.ssf';
   const songIni = songIniText(
     {
       key: meta.key,

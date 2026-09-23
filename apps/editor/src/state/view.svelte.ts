@@ -38,8 +38,8 @@ export class View {
   workbench = $state(false);
   /** The song manager is open over the playfield. */
   songManager = $state(false);
-  /** Its page: the charts, the title plate, or the disc and eyecatch. */
-  songTab = $state<'charts' | 'plate' | 'art'>('charts');
+  /** Its page: the charts, the title plate, the disc and eyecatch, or the preview. */
+  songTab = $state<'charts' | 'plate' | 'art' | 'preview'>('charts');
   /** Something covers the chart: only app-wide keys act. */
   get covered(): boolean {
     return this.workbench || this.songManager;

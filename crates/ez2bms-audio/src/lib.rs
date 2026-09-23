@@ -25,6 +25,7 @@ pub mod level;
 pub mod mixer;
 pub mod offline;
 pub mod peaks;
+pub mod preview;
 pub mod resample;
 pub mod sample;
 pub mod schedule;

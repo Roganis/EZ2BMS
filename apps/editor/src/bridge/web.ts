@@ -464,6 +464,27 @@ export function webBackend(
         const t = setInterval(() => on(snapshot()), 8);
         return () => clearInterval(t);
       },
+      // No mixer here: a likeness from how many sounds start near each column.
+      previewOverview: async (evs, endMs, width) => {
+        const end = Math.max(1, endMs);
+        const out = new Int16Array(width * 2);
+        for (const e of evs) {
+          if (e.ms >= end) continue;
+          const c = Math.min(width - 1, Math.floor((e.ms / end) * width));
+          out[c * 2 + 1] = Math.min(30000, out[c * 2 + 1]! + 2500);
+        }
+        for (let c = 0; c < width; c++) {
+          const v = Math.max(out[c * 2 + 1]!, c > 0 ? out[c * 2 - 1]! * 0.8 : 0);
+          out[c * 2 + 1] = v;
+          out[c * 2] = -v;
+        }
+        return out;
+      },
+      preview: async (job) => ({
+        sample: 1 << 20,
+        seconds: job.length_ms / 1000,
+        voice: (1 << 16) + 255,
+      }),
     },
     media: {
       art: async (path, job) => {

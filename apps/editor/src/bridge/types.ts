@@ -73,6 +73,26 @@ export interface ClockSnapshot {
   now_ns: number;
 }
 
+/** The song's preview to render (src-tauri audio::PreviewJob). */
+export interface PreviewJob {
+  /** Sample files the events' `sample` indexes (publishing); absent when auditioning (loaded ids). */
+  sources?: string[];
+  events?: AudioEvent[];
+  /** An audio file instead of a mix. */
+  file?: string | null;
+  from_ms: number;
+  length_ms: number;
+  fade_ms: number;
+}
+
+/** A rendered preview, ready to trigger (src-tauri audio::Audition). */
+export interface Audition {
+  sample: number;
+  seconds: number;
+  /** The voice to play it on: a new trigger there cuts the last one, as the wheel restarts it. */
+  voice: number;
+}
+
 export interface AudioBackend {
   info(): Promise<AudioInfo>;
   load(paths: string[]): Promise<Loaded[]>;
@@ -91,6 +111,10 @@ export interface AudioBackend {
   now(): Promise<number>;
   /** A snapshot every ~8 ms until the returned function is called. */
   streamClock(on: (c: ClockSnapshot) => void): () => void;
+  /** The song's first `endMs` of loudness: `width` [min, max] pairs (it is rendered: not instant). */
+  previewOverview(events: AudioEvent[], endMs: number, width: number): Promise<Int16Array>;
+  /** Render the preview (events over loaded samples, or a file) for auditioning. */
+  preview(job: PreviewJob): Promise<Audition>;
 }
 
 export interface PackageFile {
@@ -110,6 +134,8 @@ export interface PackageSpec {
   project_dir: string;
   files: PackageFile[];
   keysounds: KeysoundJob[];
+  /** preview.ssf, rendered by the host. */
+  preview?: PreviewJob;
 }
 
 export interface Published {

@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex, Weak};
 use ez2bms_audio::cache::SampleCache;
 use ez2bms_audio::level::ds_gains;
 use ez2bms_audio::peaks::Peaks;
-use ez2bms_audio::schedule::{frame_at_ms, EventSpec, VoiceKey};
-use ez2bms_audio::{Engine, Sample, Schedule, VoiceStart};
+use ez2bms_audio::schedule::{frame_at_ms, EventSpec, VoiceKey, LANE_VOICE_BASE};
+use ez2bms_audio::{preview, Engine, Sample, Schedule, VoiceStart};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{CmdError, CmdResult};
@@ -67,6 +67,88 @@ pub struct EventDto {
     pub level: i32,
     pub pan: i32,
 }
+
+impl EventDto {
+    fn spec(&self) -> EventSpec {
+        EventSpec {
+            ms: self.ms,
+            origin_ms: self.origin_ms,
+            end_ms: self.until_ms,
+            sample: self.sample,
+            key: self.voice,
+            level: self.level,
+            pan: self.pan,
+        }
+    }
+}
+
+/// The song's preview to render (chart-core publish/preview.ts): the chart's
+/// events over `sources` (the events' `sample` indexes them), or a window of
+/// an audio `file`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PreviewJob {
+    #[serde(default)]
+    pub sources: Vec<String>,
+    #[serde(default)]
+    pub events: Vec<EventDto>,
+    #[serde(default)]
+    pub file: Option<String>,
+    pub from_ms: f64,
+    pub length_ms: f64,
+    pub fade_ms: f64,
+}
+
+/// The longest preview rendered: the port loops whatever it is given, but a
+/// longer one only grows the package (chart-core caps the window at 30 s).
+const PREVIEW_MAX_MS: f64 = 60_000.0;
+
+/// The window in frames at `rate`.
+fn preview_frames(job: &PreviewJob, rate: u32) -> (u64, usize, usize) {
+    let len = job.length_ms.clamp(0.0, PREVIEW_MAX_MS);
+    (
+        frame_at_ms(job.from_ms, rate),
+        frame_at_ms(len, rate) as usize,
+        frame_at_ms(job.fade_ms.clamp(0.0, len / 2.0), rate) as usize,
+    )
+}
+
+/// A preview at the cache's rate (44.1 kHz when publishing), sources found
+/// under `base`. A source that cannot be read is silence, as a missing
+/// keysound is.
+pub fn render_preview(cache: &SampleCache, base: &Path, job: &PreviewJob) -> CmdResult<Vec<i16>> {
+    let rate = cache.rate();
+    let (from, frames, fade) = preview_frames(job, rate);
+    if let Some(file) = &job.file {
+        let s = cache.get(&resolve(base, file))?;
+        return Ok(preview::from_sample(&s, from, frames, fade));
+    }
+    let samples = job
+        .sources
+        .iter()
+        .map(|src| {
+            cache.get(&resolve(base, src)).unwrap_or_else(|_| Arc::new(Sample::silence(rate, 2, 0)))
+        })
+        .collect();
+    let specs: Vec<EventSpec> = job.events.iter().map(EventDto::spec).collect();
+    let schedule = Schedule::from_specs(rate, samples, &specs)?;
+    Ok(preview::render(Arc::new(schedule), from, frames, fade)?)
+}
+
+/// The voice the preview is auditioned on: a lane charts never use, so a
+/// new audition cuts the last one - the wheel's hard restart.
+pub const PREVIEW_VOICE: VoiceKey = LANE_VOICE_BASE + 255;
+
+/// A rendered preview, ready to trigger: its sample id, length, and the
+/// voice to play it on.
+#[derive(Debug, Clone, Serialize)]
+pub struct Audition {
+    pub sample: u32,
+    pub seconds: f64,
+    pub voice: VoiceKey,
+}
+
+/// The bank's key for the auditioned preview (not a file).
+const PREVIEW_KEY: &str = "\0ez2bms-preview";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TriggerDto {
@@ -239,22 +321,60 @@ impl Audio {
     }
 
     pub fn set_events(&self, events: &[EventDto]) -> CmdResult<()> {
-        let samples = self.bank.lock().unwrap().samples.clone();
-        let specs: Vec<EventSpec> = events
-            .iter()
-            .map(|e| EventSpec {
-                ms: e.ms,
-                origin_ms: e.origin_ms,
-                end_ms: e.until_ms,
-                sample: e.sample,
-                key: e.voice,
-                level: e.level,
-                pan: e.pan,
-            })
-            .collect();
-        let schedule = Schedule::from_specs(self.engine.rate(), samples, &specs)?;
-        self.engine.set_schedule(Arc::new(schedule))?;
+        self.engine.set_schedule(Arc::new(self.schedule_of(events)?))?;
         Ok(())
+    }
+
+    /// Events over the loaded samples (their `sample` is a bank id).
+    fn schedule_of(&self, events: &[EventDto]) -> CmdResult<Schedule> {
+        let samples = self.bank.lock().unwrap().samples.clone();
+        let specs: Vec<EventSpec> = events.iter().map(EventDto::spec).collect();
+        Ok(Schedule::from_specs(self.engine.rate(), samples, &specs)?)
+    }
+
+    /// The song's first `end_ms` of loudness, `width` [min, max] i16 pairs
+    /// (little-endian bytes), for picking the preview's window.
+    pub fn preview_overview(
+        &self,
+        events: &[EventDto],
+        end_ms: f64,
+        width: usize,
+    ) -> CmdResult<Vec<u8>> {
+        // Ten minutes at most: a longer render would only stall the picker.
+        let frames = frame_at_ms(end_ms.clamp(0.0, 600_000.0), self.engine.rate()) as usize;
+        let o = preview::overview(Arc::new(self.schedule_of(events)?), frames, width)?;
+        Ok(o.iter().flat_map(|v| v.to_le_bytes()).collect())
+    }
+
+    /// Render the preview at the device rate - `events` over the loaded
+    /// samples, or `file` - and keep it in the bank to be triggered on
+    /// PREVIEW_VOICE.
+    pub fn preview(&self, job: &PreviewJob) -> CmdResult<Audition> {
+        let rate = self.engine.rate();
+        let (from, frames, fade) = preview_frames(job, rate);
+        let pcm = match &job.file {
+            Some(file) => {
+                let s = self.cache.get(Path::new(file))?;
+                preview::from_sample(&s, from, frames, fade)
+            }
+            None => preview::render(Arc::new(self.schedule_of(&job.events)?), from, frames, fade)?,
+        };
+        let s = Arc::new(Sample::from_pcm16(rate, 2, &pcm));
+        let key = PathBuf::from(PREVIEW_KEY);
+        let mut bank = self.bank.lock().unwrap();
+        let id = match bank.ids.get(&key) {
+            Some(&id) => {
+                bank.samples[id as usize] = s.clone();
+                id
+            }
+            None => {
+                let id = bank.samples.len() as u32;
+                bank.samples.push(s.clone());
+                bank.ids.insert(key, id);
+                id
+            }
+        };
+        Ok(Audition { sample: id, seconds: s.seconds(), voice: PREVIEW_VOICE })
     }
 
     pub fn trigger(&self, t: &TriggerDto) -> CmdResult<bool> {

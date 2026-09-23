@@ -44,6 +44,16 @@ export interface LintSong {
   art?: SongArt;
   /** The title plate as last rendered; checked when given. */
   plate?: PlateCheck;
+  /** The preview's window and source; checked when given. */
+  preview?: PreviewCheck;
+}
+
+export interface PreviewCheck {
+  startMs: number;
+  /** The chart's last note (a chart's mix). */
+  lastNoteMs?: number;
+  /** The audio file it is cut from, as named and as found. */
+  file?: { src: string; path: string | undefined };
 }
 
 /** What rendering the title plate found (the host renders it; lint only reads this). */
@@ -314,6 +324,17 @@ export function lintSong(s: LintSong): Finding[] {
         'plate-text',
         'info',
         `The title plate reads "${p.text}"; the song is titled "${p.songTitle}"`,
+      );
+  }
+  if (s.preview) {
+    const p = s.preview;
+    if (p.file && !p.file.path)
+      f('art-missing', 'error', `The preview's audio file ${p.file.src} is not in the song folder`);
+    if (!p.file && p.lastNoteMs !== undefined && p.startMs > p.lastNoteMs)
+      f(
+        'preview-late',
+        'warning',
+        'The preview starts after the last note: the wheel may loop silence',
       );
   }
   const meta = songMeta(s.charts);

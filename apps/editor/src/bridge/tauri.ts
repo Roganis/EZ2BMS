@@ -5,6 +5,7 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
 import type {
   AppInfo,
+  Audition,
   AudioEvent,
   AudioInfo,
   Backend,
@@ -96,6 +97,11 @@ export function tauriBackend(): Backend {
       setMaster: (gain) => invoke('audio_set_master', { gain }),
       clock: () => invoke<ClockSnapshot>('audio_clock'),
       now: () => invoke<number>('audio_now'),
+      previewOverview: async (events, endMs, width) => {
+        const b = bytesOf(await invoke('audio_preview_overview', { events, endMs, width }));
+        return new Int16Array(b.buffer, b.byteOffset, b.byteLength >> 1);
+      },
+      preview: (job) => invoke<Audition>('audio_preview', { job }),
       streamClock: (on) => {
         let live = true;
         const ch = new Channel<ClockSnapshot>();

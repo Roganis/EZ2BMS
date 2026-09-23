@@ -10,7 +10,7 @@ import {
   type SongChart,
 } from '@ez2bms/chart-core';
 import { soundPath } from '../audio/paths';
-import type { PackageSpec } from '../bridge';
+import type { PackageSpec, PreviewJob } from '../bridge';
 import type { App } from '../state/app.svelte';
 import type { PackageArt } from '../state/art.svelte';
 import type { ChartSlot } from '../state/project.svelte';
@@ -30,7 +30,7 @@ export interface Built {
  */
 export function buildPackage(
   app: App,
-  opts: { only?: ChartSlot; key?: string; art?: PackageArt } = {},
+  opts: { only?: ChartSlot; key?: string; art?: PackageArt; preview?: PreviewJob } = {},
 ): Built {
   const p = app.project;
   if (!p) throw new PublishError('no song is open');
@@ -49,6 +49,7 @@ export function buildPackage(
       // Always written: a song without one is CUSTOM (48), which song.ini now says.
       category: effectiveCategory(p.sidecar.category),
       ...opts.art,
+      ...(opts.preview ? { preview: true } : {}),
       ...(p.sidecar.id ? { songId: p.sidecar.id } : {}),
     },
     charts,
@@ -63,6 +64,7 @@ export function buildPackage(
     key,
     project_dir: p.dir,
     files: plan.files.map((f) => ({ path: f.path, bytes: f.bytes })),
+    ...(opts.preview ? { preview: opts.preview } : {}),
     keysounds: plan.keysounds.map((k) => ({
       src: soundPath(p.dir, p.samples, k.src),
       start_frame: k.startFrame,

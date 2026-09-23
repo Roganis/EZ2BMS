@@ -130,7 +130,7 @@ Found and fixed on the way: the rack's hit list was never cleared (M2.8),
 and at 1 280 px the top bar was wider than the window, which made the
 playfield re-bake its textures every frame (see `docs/perf-log.md`).
 
-### Song manager, safe publishing, song art and plates (M3.1-M3.5), 2026-09-23
+### Song manager, safe publishing, song art, plates and preview (M3.1-M3.7), 2026-09-23
 
 The assistant is writing Milestone 3 step by step after the owner's
 decisions (a bundled CJK font for plates, rankings kept only for charts
@@ -148,7 +148,10 @@ owner's own game art):
 - title plates: the port's text renderer transcribed around the same
   stb_truetype, with Roboto Bold (EZ2PORT's copy, Apache-2.0, committed)
   and Noto Sans CJK Bold (OFL-1.1, fetched by a pinned hash and shipped
-  with the app). Font licences are in `fonts/`.
+  with the app). Font licences are in `fonts/`;
+- the song preview: rendered through the real mixer and finished in the
+  port importer's integer arithmetic, picked on the song's loudness and
+  auditioned as the wheel loops it.
 
 The disc and the stretched eyecatch are checked byte for byte against
 EZ2PORT's own importer through the oracle, on random images; plates
@@ -164,41 +167,43 @@ code), and a publish while EZ2PORT has the old package open on Windows.
 
 ## Verification status
 
-| Claim                                                               | Basis                                     | Verified              |
-| ------------------------------------------------------------------- | ----------------------------------------- | --------------------- |
-| Renderer JS cost is ~1 ms/frame at ~10k sprites                     | headless Chromium (software GL)           | Yes, in the container |
-| Renderer frame rate on WebKitGTK / WebView2                         | not yet measured                          | **No** - owner        |
-| Every format EZ2BMS writes reads back in EZ2PORT's core as planned  | oracle (build 1582), synthetic inputs     | Yes, in the container |
-| Play mode judges and scores like EZ2PORT                            | oracle: random scripts, `ez2judge` player | Yes, in the container |
-| `.gds`/`.pvi`/`.abm` readers on real game files                     | not run (no game data here)               | **No** - owner        |
-| A published song shows and plays in EZ2PORT                         | not run                                   | **No** - owner        |
-| Mixer: exact starts, voice cuts, mid-sample resume, gapless slices  | unit tests through the offline renderer   | Yes, in the container |
-| The renderer never allocates                                        | a counting allocator in a test            | Yes, in the container |
-| Published `.ssf` files load in EZ2PORT's parser                     | oracle                                    | Yes, in the container |
-| Sound on a real device (cpal), latency, no glitches                 | not run (no audio device here)            | **No** - owner        |
-| The probe reads build 1582's options and commit                     | run on the owner's `ez2play.exe` locally  | Yes, in the container |
-| F5 plays a chart in EZ2PORT (Windows, path with spaces)             | a fake ez2play on Linux only              | **No** - owner        |
-| The desktop app starts (Linux)                                      | Xvfb, silent-clock fallback               | Yes, in the container |
-| The desktop app starts (Windows, WebView2) and plays sound          | CI builds and tests only                  | **No** - owner        |
-| Editing: place, hold, move, resize, erase, undo, save byte-stable   | Playwright on the real playfield          | Yes, in the container |
-| Playback follows the clock; Play mode judges and shows a result     | Playwright, silent clock                  | Yes, in the container |
-| Test play feels right: latency, key response, sound on press        | not run                                   | **No** - owner        |
-| Lint catches what EZ2PORT would hide, reject or mis-play            | unit tests, rules taken from the port     | Yes, in the container |
-| The release workflow builds the installers                          | not run (needs a tag)                     | **No**                |
-| Game skin: lane boxes, note variants, holds, beams, target bar      | unit + Playwright tests, synthetic panel  | Yes, in the container |
-| The game skin on real panels looks like EZ2PORT's field             | not run (no game data here)               | **No** - owner        |
-| Grouping matches BmsTWO's `SampleGrouping`                          | BmsTWO's own test vectors                 | Yes, in the container |
-| Classic-mode edits never change what autoplay plays (editor)        | exact model, property test, real mixer    | Yes, in the container |
-| ...nor what EZ2PORT plays (per-frame timing, one or two players)    | reasoned from the port's code; see compat | **No** - owner        |
-| Keying in Classic mode sounds right on a real device                | not run (no audio device here)            | **No** - owner        |
-| Workbench: waveforms, filters, rename and replace with undo         | Playwright, browser build                 | Yes, in the container |
-| Import never overwrites; renames never replace another file         | Rust tests (Linux and Windows CI), e2e    | Yes, CI               |
-| Import by dropping files from the OS into the desktop app           | not run (browser build's DOM path only)   | **No** - owner        |
-| Workbench scrolls smoothly on WebKitGTK / WebView2 with 1500 sounds | headless Chromium only                    | **No** - owner        |
-| `song.ini` is read and listed as EZ2PORT does                       | oracle: `ez2_usersongs_merge`, random     | Yes, in the container |
-| Publishing keeps rankings, refuses shipped keys, backs up           | Rust temp-folder tests, e2e               | Yes, CI               |
-| Disc and stretched eyecatch bytes equal the port importer's         | oracle, random images up and down         | Yes, in the container |
-| The disc and eyecatch look right in EZ2PORT (wheel, select exit)    | not run (no game here)                    | **No** - owner        |
-| Publishing while EZ2PORT runs (Windows file locks)                  | not run                                   | **No** - owner        |
-| Title plates equal the port's own renderer's, CJK included          | oracle, random text and plates (Linux)    | Yes, in the container |
-| A plate on the real wheel beside the game's titles (a Korean one)   | not run (no game here)                    | **No** - owner        |
+| Claim                                                                | Basis                                     | Verified              |
+| -------------------------------------------------------------------- | ----------------------------------------- | --------------------- |
+| Renderer JS cost is ~1 ms/frame at ~10k sprites                      | headless Chromium (software GL)           | Yes, in the container |
+| Renderer frame rate on WebKitGTK / WebView2                          | not yet measured                          | **No** - owner        |
+| Every format EZ2BMS writes reads back in EZ2PORT's core as planned   | oracle (build 1582), synthetic inputs     | Yes, in the container |
+| Play mode judges and scores like EZ2PORT                             | oracle: random scripts, `ez2judge` player | Yes, in the container |
+| `.gds`/`.pvi`/`.abm` readers on real game files                      | not run (no game data here)               | **No** - owner        |
+| A published song shows and plays in EZ2PORT                          | not run                                   | **No** - owner        |
+| Mixer: exact starts, voice cuts, mid-sample resume, gapless slices   | unit tests through the offline renderer   | Yes, in the container |
+| The renderer never allocates                                         | a counting allocator in a test            | Yes, in the container |
+| Published `.ssf` files load in EZ2PORT's parser                      | oracle                                    | Yes, in the container |
+| Sound on a real device (cpal), latency, no glitches                  | not run (no audio device here)            | **No** - owner        |
+| The probe reads build 1582's options and commit                      | run on the owner's `ez2play.exe` locally  | Yes, in the container |
+| F5 plays a chart in EZ2PORT (Windows, path with spaces)              | a fake ez2play on Linux only              | **No** - owner        |
+| The desktop app starts (Linux)                                       | Xvfb, silent-clock fallback               | Yes, in the container |
+| The desktop app starts (Windows, WebView2) and plays sound           | CI builds and tests only                  | **No** - owner        |
+| Editing: place, hold, move, resize, erase, undo, save byte-stable    | Playwright on the real playfield          | Yes, in the container |
+| Playback follows the clock; Play mode judges and shows a result      | Playwright, silent clock                  | Yes, in the container |
+| Test play feels right: latency, key response, sound on press         | not run                                   | **No** - owner        |
+| Lint catches what EZ2PORT would hide, reject or mis-play             | unit tests, rules taken from the port     | Yes, in the container |
+| The release workflow builds the installers                           | not run (needs a tag)                     | **No**                |
+| Game skin: lane boxes, note variants, holds, beams, target bar       | unit + Playwright tests, synthetic panel  | Yes, in the container |
+| The game skin on real panels looks like EZ2PORT's field              | not run (no game data here)               | **No** - owner        |
+| Grouping matches BmsTWO's `SampleGrouping`                           | BmsTWO's own test vectors                 | Yes, in the container |
+| Classic-mode edits never change what autoplay plays (editor)         | exact model, property test, real mixer    | Yes, in the container |
+| ...nor what EZ2PORT plays (per-frame timing, one or two players)     | reasoned from the port's code; see compat | **No** - owner        |
+| Keying in Classic mode sounds right on a real device                 | not run (no audio device here)            | **No** - owner        |
+| Workbench: waveforms, filters, rename and replace with undo          | Playwright, browser build                 | Yes, in the container |
+| Import never overwrites; renames never replace another file          | Rust tests (Linux and Windows CI), e2e    | Yes, CI               |
+| Import by dropping files from the OS into the desktop app            | not run (browser build's DOM path only)   | **No** - owner        |
+| Workbench scrolls smoothly on WebKitGTK / WebView2 with 1500 sounds  | headless Chromium only                    | **No** - owner        |
+| `song.ini` is read and listed as EZ2PORT does                        | oracle: `ez2_usersongs_merge`, random     | Yes, in the container |
+| Publishing keeps rankings, refuses shipped keys, backs up            | Rust temp-folder tests, e2e               | Yes, CI               |
+| Disc and stretched eyecatch bytes equal the port importer's          | oracle, random images up and down         | Yes, in the container |
+| The disc and eyecatch look right in EZ2PORT (wheel, select exit)     | not run (no game here)                    | **No** - owner        |
+| Publishing while EZ2PORT runs (Windows file locks)                   | not run                                   | **No** - owner        |
+| Title plates equal the port's own renderer's, CJK included           | oracle, random text and plates (Linux)    | Yes, in the container |
+| A plate on the real wheel beside the game's titles (a Korean one)    | not run (no game here)                    | **No** - owner        |
+| The preview's PCM equals the importer's (window, fades, normalising) | oracle, random songs mixed at unity       | Yes, in the container |
+| The preview loops cleanly on the wheel at a sensible loudness        | not run (no game or sound device here)    | **No** - owner        |

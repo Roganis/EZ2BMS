@@ -1,7 +1,7 @@
 // ez2bms.song.json: what a song folder knows beyond its charts - the key
 // EZ2PORT files it under, its category, whether it is charted in Classic
-// mode, its title plate, disc and eyecatch - and, as later steps add them,
-// its preview and BGA.
+// mode, its title plate, disc, eyecatch and preview - and, as a later step
+// adds it, its BGA.
 //
 // The charts stay complete bmson files; this file only holds what bmson has
 // no place for. Like the charts it is kept byte-stable: known members are
@@ -10,6 +10,7 @@
 // of 0, say) is kept as it is and reported rather than silently changed.
 
 import { readPlateSettings, type PlateSettings } from '../publish/plate';
+import { readPreviewSettings, type PreviewSettings } from '../publish/preview';
 import { readDiscArt, readEyecatchArt, type DiscArt, type EyecatchArt } from './art';
 
 export interface SongFile {
@@ -27,6 +28,8 @@ export interface SongFile {
   disc?: DiscArt | null;
   /** The eyecatch's image and framing (absent: the importer's pick; null: none). */
   eyecatch?: EyecatchArt | null;
+  /** What the preview is cut from and where (absent: the importer's pick from the first chart). */
+  preview?: PreviewSettings;
   /** Where the song was last published (a key change offers to retire that package). */
   published?: { root: string; key: string };
   /** Members EZ2BMS does not know, in file order. */
@@ -41,6 +44,7 @@ const KNOWN = [
   'plate',
   'disc',
   'eyecatch',
+  'preview',
   'published',
 ] as const;
 
@@ -73,6 +77,14 @@ export function parseSongFile(text: string): { song: SongFile; warnings: string[
   if (o.category !== undefined) song.category = o.category;
   if (typeof o.classic === 'boolean') song.classic = o.classic;
   else if (o.classic !== undefined) song.extra.classic = o.classic;
+  if (o.preview !== undefined) {
+    const preview = readPreviewSettings(o.preview);
+    if (preview) song.preview = preview;
+    else {
+      warnings.push('preview is not a preview setting EZ2BMS reads; it was kept as it is');
+      song.extra.preview = o.preview;
+    }
+  }
   if (o.plate !== undefined) {
     const plate = readPlateSettings(o.plate);
     if (plate) song.plate = plate;
@@ -111,6 +123,7 @@ export function serializeSongFile(s: SongFile): string {
   if (s.plate !== undefined) out.plate = s.plate;
   if (s.disc !== undefined) out.disc = s.disc;
   if (s.eyecatch !== undefined) out.eyecatch = s.eyecatch;
+  if (s.preview !== undefined) out.preview = s.preview;
   if (s.published !== undefined) out.published = s.published;
   for (const [k, v] of Object.entries(s.extra)) if (!(k in out)) out[k] = v;
   return JSON.stringify(out, null, 2) + '\n';

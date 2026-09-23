@@ -9,11 +9,13 @@
   import Matrix from './Matrix.svelte';
   import MetaForm from './MetaForm.svelte';
   import PlateDesigner from './PlateDesigner.svelte';
+  import PreviewPicker from './PreviewPicker.svelte';
 
   const TABS = [
     { id: 'charts', label: 'Charts' },
     { id: 'plate', label: 'Title plate' },
     { id: 'art', label: 'Disc & eyecatch' },
+    { id: 'preview', label: 'Preview' },
   ] as const;
 
   let { project }: { project: Project } = $props();
@@ -48,6 +50,8 @@
     {#if app.view.songTab === 'charts'}<MetaForm {project} />{/if}
     {#if app.view.songTab === 'plate'}
       <PlateDesigner {project} />
+    {:else if app.view.songTab === 'preview'}
+      <PreviewPicker {project} />
     {:else if app.view.songTab === 'art'}
       <div class="art">
         <ArtCropper {project} kind="disc" />

@@ -23,10 +23,11 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       # The oracle CLI lets chart-core tests compare against EZ2PORT's own code;
-      # render_specs lets them compare the sound model against the real mixer;
-      # art and plate, our song art and title plates against the port's own.
+      # render_specs lets them compare the sound model against the real mixer,
+      # preview our song preview against the port's importer; art and plate,
+      # our song art and title plates against the port's own.
       - run: cargo build -p ez2port-oracle --release
-      - run: cargo build -p ez2bms-audio --example render_specs --release
+      - run: cargo build -p ez2bms-audio --examples --release
       - run: cargo build -p ez2bms-media --examples --release
       # The CJK font for plates in Korean, Japanese and Chinese (20 MB, pinned).
       - uses: actions/cache@v4

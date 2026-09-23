@@ -18,7 +18,9 @@ use serde::Serialize;
 use tauri::ipc::{Channel, Response};
 use tauri::{AppHandle, Manager, State};
 
-use crate::audio::{Audio, AudioInfo, ClockDto, EventDto, Loaded, TriggerDto};
+use crate::audio::{
+    Audio, AudioInfo, Audition, ClockDto, EventDto, Loaded, PreviewJob, TriggerDto,
+};
 use crate::error::{CmdError, CmdResult};
 use crate::files::{Entry, ImportKind, Imported, ProjectScan};
 use crate::media::Media;
@@ -189,6 +191,32 @@ fn audio_set_events(audio: State<'_, Arc<Audio>>, events: Vec<EventDto>) -> CmdR
     audio.set_events(&events)
 }
 
+/// The whole song's loudness for the preview picker (renders it: off the main thread).
+#[tauri::command]
+async fn audio_preview_overview(
+    audio: State<'_, Arc<Audio>>,
+    events: Vec<EventDto>,
+    end_ms: f64,
+    width: u32,
+) -> CmdResult<Response> {
+    let audio = audio.inner().clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        audio.preview_overview(&events, end_ms, width.clamp(1, 8192) as usize)
+    })
+    .await
+    .map_err(|e| CmdError::Io(e.to_string()))??;
+    Ok(Response::new(bytes))
+}
+
+/// The preview, rendered for auditioning; trigger it on `voice` of the result.
+#[tauri::command]
+async fn audio_preview(audio: State<'_, Arc<Audio>>, job: PreviewJob) -> CmdResult<Audition> {
+    let audio = audio.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || audio.preview(&job))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))?
+}
+
 #[tauri::command]
 fn audio_play(audio: State<'_, Arc<Audio>>, from_ms: f64) {
     audio.engine.play_from(audio.frame_at_ms(from_ms));
@@ -344,6 +372,8 @@ pub fn run() {
             audio_peaks,
             audio_thumbs,
             audio_set_events,
+            audio_preview_overview,
+            audio_preview,
             audio_play,
             audio_seek,
             audio_stop,
