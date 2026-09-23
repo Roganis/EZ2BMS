@@ -75,6 +75,8 @@ export interface FieldState {
   stripsRev: number;
   /** The slice under the pointer: lit in its strip and, when keyed, on its lane. */
   hoverSlice: NoteId | null;
+  /** Where a cut would go, or is being moved to: a line across that strip. */
+  stripGhost: { strip: number; y: number } | null;
 }
 
 /** Background slices alternate between two tints so neighbours read apart. */
@@ -1071,6 +1073,15 @@ export class PlayfieldRenderer {
             alpha: (0.3 + 0.7 * o.strength) * this.extras,
           });
         }
+      }
+      // Where a cut would go.
+      if (s.stripGhost?.strip === i) {
+        const y = vp.yOf(s.stripGhost.y);
+        for (let x = box.left; x < box.left + box.width; x += 6)
+          g.rect(x, y - 1, Math.min(4, box.left + box.width - x), 2).fill({
+            color: NEON,
+            alpha: this.extras,
+          });
       }
       // The header: the file, its length and tempo.
       g.rect(box.left, 0, box.width, header).fill({

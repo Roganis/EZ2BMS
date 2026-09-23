@@ -44,6 +44,13 @@ export function registerNoteCommands(app: App): void {
       run: () => (v.tool = 'select'),
     },
     {
+      id: 'tool.knife',
+      title: 'Knife tool (cut stems)',
+      group: 'Edit',
+      keys: ['C'],
+      run: () => (v.tool = 'knife'),
+    },
+    {
       id: 'edit.stepInput',
       title: 'Step input (place notes with the cabinet keys)',
       group: 'Edit',

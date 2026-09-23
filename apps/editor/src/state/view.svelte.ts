@@ -4,7 +4,8 @@
 import type { ChannelId } from '@ez2bms/chart-core';
 
 export type ViewMode = 'edit' | 'play';
-export type Tool = 'draw' | 'select';
+/** The knife cuts stems (in their strips, or on the lanes for the strip in focus). */
+export type Tool = 'draw' | 'select' | 'knife';
 export type RightDrawer = 'inspector' | 'chart' | 'timing' | 'issues' | 'port';
 
 /** EZ2PORT scrolls 1.6 px per tick at 100 %: 76.8 px per beat in its 480-line design space. */

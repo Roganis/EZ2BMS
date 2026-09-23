@@ -9,6 +9,14 @@
 //   middle button             pan
 //   Alt+click a note          take its sound as the brush
 //
+// In a stem strip, whatever the tool: right-click cuts the stem there (on a
+// cut, heals it); drag a cut to move it; click a slice to select it (Shift
+// adds) and drag it sideways onto a lane to key it there, or from a lane
+// back onto a strip or the rack. Cuts snap to the grid, to the stem's onsets
+// with Shift, anywhere with Alt. The knife tool cuts with a click - in a
+// strip, or on the lanes for the strip in focus. All of it keeps the sound
+// (chart-core slice/ops.ts refuses what would not).
+//
 // In Classic mode (the host passes `classic`) placing keys the sound playing
 // there instead of the brush, the right button un-keys, heals or splits
 // instead of erasing, drags keep notes at their time, and positions snap to
@@ -32,6 +40,7 @@ import {
   type Draft,
   type NoteId,
   type NoteRec,
+  type StemSlice,
 } from '@ez2bms/chart-core';
 import type { PlayfieldRenderer } from '../render/renderer';
 
@@ -40,7 +49,7 @@ export interface ToolHost {
   doc: ChartDoc;
   /** The mode's columns in screen order. */
   columns: readonly Column[];
-  tool: 'draw' | 'select';
+  tool: 'draw' | 'select' | 'knife';
   snap: number;
   brush: ChannelId | null;
   setBrush(ch: ChannelId): void;
@@ -52,6 +61,27 @@ export interface ToolHost {
   audition(ch: ChannelId): void;
   /** Classic mode: what placing, right-clicking, snapping and moving mean instead. */
   classic?: ClassicHooks;
+  /** Stem strips: slicing. */
+  strips?: StripHooks;
+}
+
+export interface StripHooks {
+  /** The strip under a screen x, if any. */
+  at(px: number): number | undefined;
+  /** The strip the knife cuts for on the lanes, if any. */
+  focused(): number | undefined;
+  sliceAt(strip: number, py: number): { slice: StemSlice; part: 'line' | 'body' } | undefined;
+  /** The stem's onset nearest p within `within` pulses (Shift-snapping), if any. */
+  onsetNear(strip: number, p: number, within: number): number | undefined;
+  split(strip: number, y: number): void;
+  heal(id: NoteId): void;
+  move(id: NoteId, y: number): void;
+  key(ids: NoteId[], x: number): void;
+  focus(strip: number): void;
+  /** Where a cut would go (or is being moved to), or none. */
+  ghost(g: { strip: number; y: number } | null): void;
+  /** The knife on a lane or the rack. */
+  knife(y: number): void;
 }
 
 export interface ClassicHooks {
@@ -81,7 +111,9 @@ type Gesture =
   | { kind: 'resize'; note: NoteRec; draft: Draft }
   | { kind: 'marquee'; x0: number; y0: number; base: Set<NoteId> }
   | { kind: 'erase'; ids: Set<NoteId>; draft: Draft }
-  | { kind: 'pan'; lastY: number };
+  | { kind: 'pan'; lastY: number }
+  | { kind: 'cut'; id: NoteId; strip: number; from: number; y: number }
+  | { kind: 'slices'; ids: NoteId[]; y: number; sx: number; sy: number; moved: boolean };
 
 const DRAG_PX = 4;
 
@@ -111,6 +143,56 @@ export class PointerTool {
     return Math.max(0, Math.round(p / s) * s);
   }
 
+  /** Where a cut goes: the grid, the stem's onsets with Shift, anywhere with Alt. */
+  private cutAt(h: ToolHost, strip: number, p: number, e: PointerEvent): number {
+    if (e.shiftKey && !e.altKey) {
+      const on = h.strips?.onsetNear(strip, p, this.step(h) / 2);
+      if (on !== undefined) return on;
+    }
+    return this.snap(h, p, e.altKey);
+  }
+
+  /** A press in a stem strip. */
+  private stripDown(e: PointerEvent, h: ToolHost, s: StripHooks, strip: number): void {
+    const py = e.offsetY;
+    const p = h.renderer.pulseAt(py);
+    s.focus(strip);
+    const hit = s.sliceAt(strip, py);
+    if (e.button === 2) {
+      if (hit?.part === 'line' && !hit.slice.fresh) s.heal(hit.slice.id);
+      else s.split(strip, this.cutAt(h, strip, p, e));
+      return;
+    }
+    if (e.button !== 0) return;
+    if (h.tool === 'knife') {
+      s.split(strip, this.cutAt(h, strip, p, e));
+      return;
+    }
+    if (hit?.part === 'line' && !hit.slice.fresh) {
+      const y = hit.slice.y;
+      this.g = { kind: 'cut', id: hit.slice.id, strip, from: y, y };
+      s.ghost({ strip, y });
+      return;
+    }
+    if (!hit) return;
+    const id = hit.slice.id;
+    const sel = h.doc.selection.ids;
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+    if (additive && sel.has(id)) {
+      h.doc.setSelection([...sel].filter((x) => x !== id));
+      return;
+    }
+    if (!sel.has(id)) h.doc.setSelection(additive ? [...sel, id] : [id], id);
+    this.g = {
+      kind: 'slices',
+      ids: [...h.doc.selection.ids],
+      y: hit.slice.y,
+      sx: e.offsetX,
+      sy: py,
+      moved: false,
+    };
+  }
+
   private colOf(h: ToolHost, px: number): number {
     const lane = h.renderer.laneAt(px);
     return lane ? h.columns.findIndex((c) => c.x === lane.x) : -1;
@@ -123,6 +205,15 @@ export class PointerTool {
     const p = r.pulseAt(py);
     if (e.button === 1) {
       this.g = { kind: 'pan', lastY: py };
+      return;
+    }
+    const strip = h.strips?.at(px);
+    if (strip !== undefined && h.strips) {
+      this.stripDown(e, h, h.strips, strip);
+      return;
+    }
+    if (h.tool === 'knife' && e.button === 0 && h.strips && !e.altKey) {
+      h.strips.knife(this.snap(h, p, false));
       return;
     }
     let hit = r.noteAt(px, py);
@@ -208,11 +299,35 @@ export class PointerTool {
     const g = this.g;
     switch (g.kind) {
       case 'none': {
-        // Hover: where a click would put a note.
+        // Hover: where a click would put a note - or, in a strip, a cut.
+        const strip = h.strips?.at(px);
+        if (strip !== undefined && h.strips) {
+          h.setGhost(null);
+          const on = h.strips.sliceAt(strip, py);
+          h.strips.ghost(on?.part === 'line' ? null : { strip, y: this.cutAt(h, strip, p, e) });
+          return;
+        }
+        const focused = h.tool === 'knife' ? h.strips?.focused() : undefined;
+        h.strips?.ghost(
+          focused === undefined ? null : { strip: focused, y: this.snap(h, p, false) },
+        );
         const lane = r.laneAt(px);
         if (h.tool === 'draw' && lane && !r.noteAt(px, py) && !e.shiftKey) {
           h.setGhost({ x: lane.x, y: this.snap(h, p, e.altKey), l: 0 });
         } else h.setGhost(null);
+        return;
+      }
+      case 'cut': {
+        g.y = this.cutAt(h, g.strip, p, e);
+        h.strips?.ghost({ strip: g.strip, y: g.y });
+        return;
+      }
+      case 'slices': {
+        if (!g.moved && Math.hypot(px - g.sx, py - g.sy) < DRAG_PX) return;
+        g.moved = true;
+        // Keying keeps a slice at its time: the ghost follows sideways only.
+        const lane = r.laneAt(px);
+        h.setGhost(lane ? { x: lane.x, y: g.y, l: 0 } : null);
         return;
       }
       case 'place': {
@@ -262,6 +377,19 @@ export class PointerTool {
     const g = this.g;
     this.g = { kind: 'none' };
     switch (g.kind) {
+      case 'cut':
+        h.strips?.ghost(null);
+        if (g.y !== g.from) h.strips?.move(g.id, g.y);
+        return;
+      case 'slices': {
+        h.setGhost(null);
+        if (!g.moved) return;
+        const lane = h.renderer.laneAt(e.offsetX);
+        if (lane) h.strips?.key(g.ids, lane.x);
+        else if (h.strips?.at(e.offsetX) !== undefined || h.renderer.overRack(e.offsetX))
+          h.strips?.key(g.ids, BGM);
+        return;
+      }
       case 'place': {
         h.setGhost(null);
         if (h.classic) {
@@ -304,6 +432,7 @@ export class PointerTool {
   cancel(h: ToolHost): void {
     const g = this.g;
     this.g = { kind: 'none' };
+    h.strips?.ghost(null);
     if (g.kind === 'move') g.draft?.cancel();
     else if (g.kind === 'resize' || g.kind === 'erase') g.draft.cancel();
     else if (g.kind === 'marquee') {
@@ -331,7 +460,8 @@ export class PointerTool {
     dy: number,
   ): Orig[] | undefined {
     const col = this.colOf(h, px);
-    const toRack = col < 0 && h.renderer.overRack(px);
+    // Over the rack or a stem strip: back to the background.
+    const toRack = col < 0 && (h.renderer.overRack(px) || h.strips?.at(px) !== undefined);
     const anchorBgm = g.anchor.x === BGM;
     const dcol = anchorBgm || g.col0 < 0 || col < 0 ? 0 : col - g.col0;
     const out: Orig[] = [];

@@ -33,6 +33,7 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 | Delete selected notes                               | `Delete` `Backspace`    |         |
 | Draw tool                                           | `D`                     |         |
 | Duplicate after itself                              | `Ctrl+D`                |         |
+| Knife tool (cut stems)                              | `C`                     |         |
 | Paste at the cursor                                 | `Ctrl+V`                |         |
 | Redo                                                | `Ctrl+Shift+Z` `Ctrl+Y` |         |
 | Select all notes                                    | `Ctrl+A`                |         |

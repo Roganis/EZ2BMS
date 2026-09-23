@@ -3,7 +3,7 @@
   import { columnsFor, eraseNotes, modeDef, placeNote } from '@ez2bms/chart-core';
   import { onMount } from 'svelte';
   import { laneForKey } from '../input/lanekeys';
-  import { PointerTool, type ToolHost } from '../input/pointer';
+  import { PointerTool, type StripHooks, type ToolHost } from '../input/pointer';
   import { PlayfieldRenderer } from '../render/renderer';
   import { toast } from '../state/toasts.svelte';
   import { app } from '../state/app.svelte';
@@ -49,6 +49,7 @@
         const name = slot.doc.channel(ch)?.name;
         if (name && !v.playing) void app.audio.audition(name);
       },
+      ...(renderer.currentLayout?.strips.length ? { strips: stripHooks(renderer) } : {}),
       ...(classicOn
         ? {
             classic: {
@@ -64,6 +65,41 @@
             },
           }
         : {}),
+    };
+  }
+
+  /** Slicing in the stem strips (chart-core slice/ops.ts through app.strips). */
+  function stripHooks(r: PlayfieldRenderer): StripHooks {
+    const d = slot.doc;
+    const srcOf = (i: number) => stripSpecs[i]?.src;
+    return {
+      at: (px) => r.stripAt(px),
+      focused: () => {
+        const src = app.strips.focused(d);
+        const i = stripSpecs.findIndex((x) => x.src === src);
+        return i < 0 ? undefined : i;
+      },
+      sliceAt: (i, py) => r.stripSliceAt(i, py),
+      onsetNear: (i, p, within) => {
+        const src = srcOf(i);
+        return src === undefined ? undefined : app.strips.onsetNear(d, src, p, within);
+      },
+      split: (i, y) => {
+        const src = srcOf(i);
+        if (src !== undefined) app.strips.split(d, src, y);
+      },
+      heal: (id) => app.strips.heal(d, id),
+      move: (id, y) => app.strips.move(d, id, y),
+      key: (ids, x) => app.strips.key(d, ids, x),
+      focus: (i) => {
+        const src = srcOf(i);
+        if (src !== undefined) app.strips.focus = src;
+      },
+      ghost: (g) => {
+        const cur = app.strips.ghost;
+        if (g?.strip !== cur?.strip || g?.y !== cur?.y) app.strips.ghost = g;
+      },
+      knife: (y) => app.strips.knife(d, y),
     };
   }
 
@@ -155,6 +191,10 @@
   }
 
   const columns = $derived(columnsFor(modeDef(slot.mode), v.side));
+  const stripSpecs = $derived.by(() => {
+    void slot.rev;
+    return v.mode === 'edit' ? app.strips.specs(slot.doc) : [];
+  });
   const timing = $derived.by(() => {
     void slot.rev;
     return chartTiming(slot.doc);
@@ -231,9 +271,10 @@
       classicHint: classicOn && ghost ? app.classic.hint : null,
       brush: v.brush,
       rackScroll: v.rackScroll,
-      strips: v.mode === 'edit' ? app.strips.specs(slot.doc) : [],
+      strips: stripSpecs,
       stripsRev: app.strips.rev,
       hoverSlice: app.strips.hover,
+      stripGhost: app.strips.ghost,
     });
   });
 
@@ -271,15 +312,15 @@
 
   function onMove(e: PointerEvent) {
     v.hoverLane = renderer?.laneAt(e.offsetX)?.x ?? null;
-    const hov = hoverSlice(e);
-    if (hov !== app.strips.hover) app.strips.hover = hov;
+    app.strips.hoverOn(slot.doc, hoverSlice(e));
     const h = host_();
     if (h) tool.move(e, h);
   }
 
   function onLeave() {
     v.hoverLane = null;
-    app.strips.hover = null;
+    app.strips.hoverOn(slot.doc, null);
+    if (!tool.busy) app.strips.ghost = null;
     if (!tool.busy) ghost = null;
   }
 </script>
@@ -288,6 +329,7 @@
   <div
     class="field"
     class:select={v.tool === 'select'}
+    class:knife={v.tool === 'knife'}
     id="playfield"
     bind:this={host}
     onwheel={onWheel}
@@ -336,6 +378,9 @@
   }
   .field.select {
     cursor: default;
+  }
+  .field.knife {
+    cursor: col-resize;
   }
   .field :global(canvas) {
     display: block;
