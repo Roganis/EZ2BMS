@@ -171,6 +171,11 @@ export class ChartDoc {
     return this.nextChannel++;
   }
 
+  /** The id the next newNoteId() will return, without taking it (for dry runs). */
+  peekNoteId(): NoteId {
+    return this.nextNote;
+  }
+
   channel(id: ChannelId): SoundChannel | undefined {
     return this.data.channels.find((c) => c.id === id);
   }
@@ -369,6 +374,57 @@ export class ChartDoc {
   markSaved(): void {
     this.savedAt = this.undoStack[this.undoStack.length - 1] ?? null;
     this.savedAtLost = false;
+  }
+
+  /** Something that changes whenever the top of the undo history does (compare with ===). */
+  historyMark(): unknown {
+    return this.undoStack[this.undoStack.length - 1] ?? null;
+  }
+
+  /**
+   * A sound file was renamed on disk: rename every reference to it - the
+   * channels, the preview, AND the undo/redo history - without recording an
+   * edit, so undoing can never bring back a name that no longer exists.
+   * `renames` maps names exactly as the chart spells them to their new names.
+   * The chart now differs from its file, so it counts as unsaved.
+   */
+  renameSoundRefs(renames: ReadonlyMap<string, string>): boolean {
+    const cs = emptyChangeSet();
+    const swap = (name: string | undefined) => (name === undefined ? name : renames.get(name));
+    for (const c of this.data.channels) {
+      const to = swap(c.name);
+      if (to !== undefined && to !== c.name) {
+        c.name = to;
+        cs.channels.add(c.id);
+      }
+    }
+    const preview = swap(this.data.info.previewMusic);
+    if (preview !== undefined && preview !== this.data.info.previewMusic) {
+      this.data.info.previewMusic = preview;
+      cs.info = true;
+    }
+    const patch = (p: ChannelPatch | InfoPatch) => {
+      const r = p as { name?: string; previewMusic?: string };
+      const n = swap(r.name);
+      if (n !== undefined) r.name = n;
+      const m = swap(r.previewMusic);
+      if (m !== undefined) r.previewMusic = m;
+    };
+    for (const e of [...this.undoStack, ...this.redoStack]) {
+      for (const op of e.ops) {
+        if (op.t === 'ch+' || op.t === 'ch-') {
+          const n = swap(op.ch.name);
+          if (n !== undefined) op.ch = { ...op.ch, name: n };
+        } else if (op.t === 'ch~' || op.t === 'info') {
+          patch(op.before);
+          patch(op.after);
+        }
+      }
+    }
+    if (!cs.channels.size && !cs.info) return false;
+    this.savedAtLost = true;
+    this.emit(cs);
+    return true;
   }
 
   // ---- applying one operation --------------------------------------------------
