@@ -34,7 +34,8 @@ export function songFindings(app: App): Finding[] {
       : ps.startMs !== undefined && doc && lastY >= 0
         ? { startMs: ps.startMs, lastNoteMs: chartTiming(doc).secondsAt(lastY) * 1000 }
         : undefined;
-  const key = `${p.sidecar.key}|${JSON.stringify(p.sidecar.category)}|${revs.join(',')}|${p.charts.map((c) => c.file + c.tier).join(',')}|${[...missing].join(',')}|${JSON.stringify(art)}|${JSON.stringify(plate)}|${JSON.stringify(preview)}`;
+  const bga = app.bga.check(p);
+  const key = `${p.sidecar.key}|${JSON.stringify(p.sidecar.category)}|${revs.join(',')}|${p.charts.map((c) => c.file + c.tier).join(',')}|${[...missing].join(',')}|${JSON.stringify(art)}|${JSON.stringify(plate)}|${JSON.stringify(preview)}|${JSON.stringify(bga)}`;
   if (memo && memo.project === p && memo.key === key) return memo.findings;
   const findings = lintSong({
     key: p.sidecar.key,
@@ -44,6 +45,7 @@ export function songFindings(app: App): Finding[] {
     art,
     ...(plate ? { plate } : {}),
     ...(preview ? { preview } : {}),
+    ...(bga ? { bga } : {}),
   });
   memo = { key, project: p, findings };
   return findings;

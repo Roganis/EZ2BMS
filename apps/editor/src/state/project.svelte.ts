@@ -21,10 +21,12 @@ import {
   serializeBmson,
   serializeSongFile,
   songArt,
+  songBga,
   type ChartData,
   type ModeId,
   type ParseWarning,
   type SongArt,
+  type SongBga,
   type SongFile,
   type Tier,
 } from '@ez2bms/chart-core';
@@ -78,6 +80,8 @@ export class Project {
   samples = $state<string[]>([]);
   /** Images in the folder (relative, forward slashes), for the disc and eyecatch. */
   images = $state<string[]>([]);
+  /** Movies in the folder, for the BGA. */
+  movies = $state<string[]>([]);
   /** ez2bms.song.json (chart-core song/songfile.ts). */
   sidecar = $state<SongFile>(newSongFile());
   /**
@@ -133,6 +137,20 @@ export class Project {
     );
   }
 
+  /**
+   * The BGA a publish would use: the song file's movie, or the first chart's
+   * (chart-core publish/bga.ts), looked up among the folder's movies - and
+   * its images, since a converted BMS names stills there.
+   */
+  get bga(): SongBga | undefined {
+    const files = [...this.movies, ...this.images];
+    return songBga(
+      this.sidecar.bga,
+      this.charts.map((c) => c.doc.data),
+      (n) => findImage(files, n),
+    );
+  }
+
   /** Unsaved edits, or a name the next save will change. */
   unsaved(slot: ChartSlot): boolean {
     return slot.dirty || this.targetFile(slot) !== slot.file;
@@ -143,6 +161,7 @@ export class Project {
     const scan = await backend.scanProject(dir);
     p.samples = scan.samples;
     p.images = scan.images;
+    p.movies = scan.movies;
     if (scan.sidecar) {
       // A broken song file reads as empty (and is rewritten on the next save).
       const text = await backend.readText(joinPath(dir, SIDECAR)).catch(() => '{}');
@@ -164,6 +183,7 @@ export class Project {
     const scan = await this.backend.scanProject(this.dir);
     this.samples = scan.samples;
     this.images = scan.images;
+    this.movies = scan.movies;
   }
 
   /** Swap a chart for recovered text (it stays unsaved until you save). */

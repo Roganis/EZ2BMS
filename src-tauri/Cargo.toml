@@ -20,6 +20,6 @@ ez2bms-launch = { path = "../crates/ez2bms-launch" }
 ez2bms-media = { path = "../crates/ez2bms-media" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 thiserror = { workspace = true }

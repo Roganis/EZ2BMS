@@ -127,7 +127,7 @@ pnpm tauri dev          # the desktop app
 - [x] M3.6 Plate designer: words, version colours or your own, CJK forms, or your own 256x32 image; missing glyphs linted
 - [x] M3.7 Preview picker: the window on the song's loudness, auditioned as the wheel loops it, rendered as EZ2PORT's importer renders it
 - [x] M3.8 The song on the wheel: disc, swing, rail, preview dwell and eyecatch where EZ2PORT puts them, over your game's own select masks
-- [ ] M3.9 BGA
+- [x] M3.9 BGA: a movie EZ2PORT's build can decode (read from its headers), started on the chart's clock, previewed and published
 - [ ] M3.10 Lint panel with quick fixes
 - [ ] M3.11 Publish dialog
 - [ ] M3.12 Docs, performance, end-to-end

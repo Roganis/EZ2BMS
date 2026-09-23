@@ -1,7 +1,7 @@
 <script lang="ts">
   // Files dragged onto the window: a full-window target while they are over
   // it, an import when they land - images while the song manager shows the
-  // art, sounds everywhere else. The backend says what is being dragged - in
+  // art, movies on its BGA page, sounds everywhere else. The backend says what is being dragged - in
   // the desktop app that is Tauri's own event, which sees OS drops before the
   // page does; in a browser, the DOM's.
   import { app } from '../state/app.svelte';
@@ -13,12 +13,14 @@
   const images = $derived(
     app.view.songManager && (app.view.songTab === 'plate' || app.view.songTab === 'art'),
   );
+  const movies = $derived(app.view.songManager && app.view.songTab === 'bga');
 
   $effect(() =>
     app.backend.onFileDrop((d) => {
       over = d.kind === 'over';
       if (d.kind !== 'drop' || !d.paths.length) return;
       if (images) void app.art.import(d.paths);
+      else if (movies) void app.bga.import(d.paths);
       else void app.sounds.import(d.paths);
     }),
   );
@@ -32,6 +34,9 @@
         {#if images}
           Images (PNG, JPEG, BMP) are copied into <em>{project.name}</em> for the disc and the eyecatch.
           Nothing in the folder is overwritten.
+        {:else if movies}
+          A movie is copied into <em>{project.name}</em> and becomes the BGA. Nothing in the folder is
+          overwritten.
         {:else}
           Sound files, or folders of them, are copied into <em>{project.name}</em>{added}. Nothing
           in the folder is overwritten.

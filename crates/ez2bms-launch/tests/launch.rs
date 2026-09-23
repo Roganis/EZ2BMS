@@ -183,6 +183,7 @@ fn a_publish_keeps_the_tables_it_is_told_to_and_backs_the_old_copy_up() {
         carry: vec!["rank_StreetMix_abc-hd.bin".into(), "rank_gone.bin".into()],
         expect: Some(Some(ini("1"))),
         backup: true,
+        ..Default::default()
     };
     write_package_with(&songs, "abc", &[("song.ini".into(), ini("1"))], &opts).unwrap();
     assert_eq!(names(&dir), ["rank_StreetMix_abc-hd.bin", "song.ini"]);
@@ -191,6 +192,32 @@ fn a_publish_keeps_the_tables_it_is_told_to_and_backs_the_old_copy_up() {
     let backup = songs.join(".ez2bms-backup/abc");
     assert!(backup.join("rank_StreetMix_abc.bin").is_file());
     assert_eq!(names(&songs), [".ez2bms-backup", "abc"]);
+}
+
+#[test]
+fn a_movie_is_copied_in_by_path_and_a_missing_one_leaves_the_old_package() {
+    let songs = scratch("copies");
+    let src = scratch("copies-src");
+    std::fs::write(src.join("My Clip.MP4"), b"frames").unwrap();
+    let copy = |from: &str| WriteOptions {
+        copies: vec![("bga.mp4".into(), src.join(from))],
+        ..Default::default()
+    };
+    let dir =
+        write_package_with(&songs, "abc", &[("song.ini".into(), ini("1"))], &copy("My Clip.MP4"))
+            .unwrap();
+    assert_eq!(names(&dir), ["bga.mp4", "song.ini"]);
+    assert_eq!(std::fs::read(dir.join("bga.mp4")).unwrap(), b"frames");
+    let e = write_package_with(&songs, "abc", &[("song.ini".into(), ini("2"))], &copy("gone.mp4"));
+    assert!(e.is_err());
+    assert_eq!(std::fs::read(dir.join("song.ini")).unwrap(), ini("1"));
+    assert_eq!(names(&songs), ["abc"]);
+    // A name that would leave the package folder is refused.
+    let bad = WriteOptions {
+        copies: vec![("../x.mp4".into(), src.join("My Clip.MP4"))],
+        ..Default::default()
+    };
+    assert!(write_package_with(&songs, "abc", &[], &bad).is_err());
 }
 
 #[test]

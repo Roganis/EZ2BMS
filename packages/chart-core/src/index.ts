@@ -46,6 +46,8 @@ export * from './publish/text';
 export * from './publish/package';
 export * from './publish/plate';
 export * from './publish/preview';
+export * from './publish/bga';
+export * from './media/movie';
 export * from './engine/songini';
 export * from './engine/score';
 export * from './engine/session';

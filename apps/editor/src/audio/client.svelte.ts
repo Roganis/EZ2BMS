@@ -190,6 +190,12 @@ export class AudioClient {
     return this.timeline.msAt(pulse);
   }
 
+  /** The pulse at song milliseconds (the inverse of msAt). */
+  pulseAt(slot: ChartSlot, ms: number): number {
+    if (!this.timeline || this.planSlot !== slot) return 0;
+    return Math.max(0, this.timeline.pulseAt(ms));
+  }
+
   get playing(): boolean {
     return this.view.playing;
   }

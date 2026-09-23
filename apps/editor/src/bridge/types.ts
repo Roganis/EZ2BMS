@@ -19,6 +19,8 @@ export interface ProjectScan {
   /** Relative to the project, forward slashes. */
   samples: string[];
   images: string[];
+  /** Movies (the BGA). */
+  movies: string[];
 }
 
 export interface AppInfo {
@@ -136,6 +138,8 @@ export interface PackageSpec {
   keysounds: KeysoundJob[];
   /** preview.ssf, rendered by the host. */
   preview?: PreviewJob;
+  /** Files the host copies in by path (the BGA movie): `from` relative to the project. */
+  copies?: { from: string; name: string }[];
 }
 
 export interface Published {
@@ -224,7 +228,7 @@ export interface Imported {
 }
 
 /** What an import takes; other files offered with it are refused (src-tauri files::ImportKind). */
-export type ImportKind = 'audio' | 'image';
+export type ImportKind = 'audio' | 'image' | 'movie';
 
 /** Song art cut by the host (src-tauri media_art): RGB, top-down. */
 export interface ArtPixels {
@@ -258,6 +262,14 @@ export interface Backend {
   readonly kind: 'tauri' | 'web';
   appInfo(): Promise<AppInfo>;
   readFile(path: string): Promise<Uint8Array>;
+  /** Up to `length` bytes from `offset`, and the file's size (a movie's headers). */
+  readRange(
+    path: string,
+    offset: number,
+    length: number,
+  ): Promise<{ size: number; bytes: Uint8Array }>;
+  /** A URL the webview can play a song-folder file from (the BGA's <video>). */
+  mediaUrl(path: string): Promise<string>;
   readText(path: string): Promise<string>;
   writeText(path: string, text: string, backup: boolean): Promise<void>;
   writeBytes(path: string, bytes: Uint8Array, backup: boolean): Promise<void>;

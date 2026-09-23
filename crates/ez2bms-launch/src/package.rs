@@ -49,6 +49,10 @@ pub struct WriteOptions {
     pub expect: Option<Option<Vec<u8>>>,
     /// Move the replaced package to `.ez2bms-backup/<key>` instead of deleting it.
     pub backup: bool,
+    /// Files copied in by path, as (name in the package, source): a BGA
+    /// movie can be hundreds of megabytes, so it is streamed from disk to
+    /// disk rather than held in memory like the rest.
+    pub copies: Vec<(String, PathBuf)>,
 }
 
 /// A songs root's view of one key, for deciding whether to publish there.
@@ -136,7 +140,7 @@ pub fn write_package_with(
     for (name, _) in files {
         check_file_name(name)?;
     }
-    for name in &opts.carry {
+    for name in opts.carry.iter().chain(opts.copies.iter().map(|(n, _)| n)) {
         check_file_name(name)?;
     }
     // EZ2PORT finds the folder in any case, so an old copy may be named otherwise.
@@ -164,6 +168,15 @@ pub fn write_package_with(
     for (name, bytes) in files {
         let p = stage.join(name);
         std::fs::write(&p, bytes).map_err(io(&p))?;
+    }
+    for (name, from) in &opts.copies {
+        // A source that cannot be read fails the write before anything moves:
+        // song.ini names the file, and the old package is still in place.
+        if let Err(e) = std::fs::copy(from, stage.join(name)) {
+            let _ = std::fs::remove_dir_all(&stage);
+            let _ = std::fs::remove_dir(&staging_root);
+            return Err(io(from)(e));
+        }
     }
     if let Some(cur) = &current {
         for name in &opts.carry {

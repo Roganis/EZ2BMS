@@ -17,6 +17,7 @@ import { SoundsState } from './sounds.svelte';
 import { SongState } from './song.svelte';
 import { ArtState } from './art.svelte';
 import { PreviewState } from './preview.svelte';
+import { BgaState } from './bga.svelte';
 import { ask, toast } from './toasts.svelte';
 import { View } from './view.svelte';
 
@@ -34,6 +35,7 @@ export class App {
   readonly song: SongState;
   readonly art: ArtState;
   readonly preview: PreviewState;
+  readonly bga: BgaState;
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
@@ -52,6 +54,7 @@ export class App {
     this.song = new SongState(this);
     this.art = new ArtState(this);
     this.preview = new PreviewState(this);
+    this.bga = new BgaState(this);
     this.commands.onError = (e, c) =>
       toast(`${c.title}: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }

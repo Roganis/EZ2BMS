@@ -1,6 +1,6 @@
 // The desktop Backend: Tauri commands (src-tauri/src/lib.rs).
 
-import { Channel, invoke } from '@tauri-apps/api/core';
+import { Channel, convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
 import type {
@@ -38,6 +38,15 @@ export function tauriBackend(): Backend {
     kind: 'tauri',
     appInfo: () => invoke<AppInfo>('app_info'),
     readFile: async (path) => bytesOf(await invoke('fs_read', { path })),
+    readRange: async (path, offset, length) => {
+      const b = bytesOf(await invoke('fs_read_range', { path, offset, length }));
+      const dv = new DataView(b.buffer, b.byteOffset, 8);
+      return { size: Number(dv.getBigUint64(0, true)), bytes: b.subarray(8) };
+    },
+    mediaUrl: async (path) => {
+      await invoke('media_allow', { path });
+      return convertFileSrc(path);
+    },
     readText: (path) => invoke<string>('fs_read_text', { path }),
     writeText: (path, text, backup) => invoke('fs_write_text', { path, text, backup }),
     writeBytes: (path, bytes, backup) =>

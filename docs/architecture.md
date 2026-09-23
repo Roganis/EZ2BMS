@@ -65,6 +65,14 @@ scene (`render/wheel.ts`) rather than a second WebGL context beside the
 playfield's; where the discs and plates sit, and how they move, is
 chart-core's oracle-checked `ez2data/selectwheel.ts`.
 
+## Big files stay on disk
+
+A BGA movie can be hundreds of megabytes, so it never crosses the bridge:
+chart-core's `media/movie.ts` reads its headers through ranged reads
+(`fs_read_range`, a few kilobytes), the package writer copies it by path
+(`WriteOptions.copies`), and the `<video>` preview loads it through Tauri's
+asset protocol, whose scope holds only the files shown.
+
 ## One compiler for playback and publishing
 
 `chart-core/src/publish/plan.ts` turns a chart into exactly what the package

@@ -44,6 +44,8 @@ export function registerPortCommands(app: App): void {
         exe: s.data.exe,
         auto,
         windowed: true,
+        // The song's movie, whatever the operator ini says (it is what is being tested).
+        bga: spec.copies?.length ? true : null,
         start_ms: fromCursor ? app.audio.msAt(slot, app.view.cursor) : null,
         skip_ready: !!port.probe?.skip_ready,
       },

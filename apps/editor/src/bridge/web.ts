@@ -34,6 +34,7 @@ import type {
 
 const AUDIO = /\.(wav|ogg|flac|mp3|ssf|ezw|oga)$/i;
 const IMAGE = /\.(png|jpe?g|bmp)$/i;
+const MOVIE = /\.(mp4|m4v|mov|webm|mkv|wmv|asf|avi|mpe?g)$/i;
 const SETTINGS_KEY = 'ez2bms.settings';
 
 /** A WAV's length from its header, or undefined for anything else. */
@@ -233,6 +234,16 @@ export function webBackend(
       if (!b) throw missing(path);
       return b;
     },
+    readRange: async (path, offset, length) => {
+      const b = files.get(norm(path));
+      if (!b) throw missing(path);
+      return { size: b.length, bytes: b.slice(offset, offset + length) };
+    },
+    mediaUrl: async (path) => {
+      const b = files.get(norm(path));
+      if (!b) throw missing(path);
+      return URL.createObjectURL(new Blob([b as BlobPart]));
+    },
     readText: async (path) => {
       const b = files.get(norm(path));
       if (!b) throw missing(path);
@@ -262,6 +273,9 @@ export function webBackend(
           .sort(),
         images: all
           .filter((p) => IMAGE.test(p) && !p.split('/').some((s) => s.startsWith('.')))
+          .sort(),
+        movies: all
+          .filter((p) => MOVIE.test(p) && !p.split('/').some((s) => s.startsWith('.')))
           .sort(),
       };
     },
@@ -303,7 +317,7 @@ export function webBackend(
       }),
     importFiles: async (dir, paths, kind = 'audio') => {
       const d = norm(dir);
-      const takes = kind === 'image' ? IMAGE : AUDIO;
+      const takes = kind === 'image' ? IMAGE : kind === 'movie' ? MOVIE : AUDIO;
       const out: Imported[] = [];
       const wanted: string[] = [];
       for (const p of paths.map(norm)) {
@@ -326,7 +340,9 @@ export function webBackend(
               error:
                 kind === 'image'
                   ? 'not an image EZ2BMS can read (PNG, JPEG or BMP)'
-                  : 'not an audio file EZ2BMS can play',
+                  : kind === 'movie'
+                    ? 'not a movie (MP4, MOV, WebM, MKV, WMV, AVI or MPEG)'
+                    : 'not an audio file EZ2BMS can play',
             });
           continue;
         }
@@ -532,10 +548,22 @@ export function webBackend(
           const have = now.files.find((n) => n.toLowerCase() === name.toLowerCase());
           if (old && have) kept.set(name, files.get(`${old}/${have}`)!);
         }
+        // A copy's source is checked before anything moves, as the host does.
+        const copies = (pkg.copies ?? []).map((c) => {
+          const from = c.from.startsWith('/') ? norm(c.from) : `${norm(pkg.project_dir)}/${c.from}`;
+          const b = files.get(from);
+          if (!b) throw missing(from);
+          return [c.name, b] as const;
+        });
         if (old) moveTree(old, options.backup ? `${root}/.ez2bms-backup/${pkg.key}` : null);
         for (const f of pkg.files) files.set(`${root}/${pkg.key}/${f.path}`, f.bytes.slice());
         for (const [n, b] of kept) files.set(`${root}/${pkg.key}/${n}`, b);
-        return { dir: `${root}/${pkg.key}`, files: pkg.files.length + kept.size, missing: [] };
+        for (const [n, b] of copies) files.set(`${root}/${pkg.key}/${n}`, b);
+        return {
+          dir: `${root}/${pkg.key}`,
+          files: pkg.files.length + kept.size + copies.length,
+          missing: [],
+        };
       },
       retire: async (songsRoot, key, songIni) => {
         const now = await backend.port.inspect(songsRoot, key, null);

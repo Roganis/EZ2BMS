@@ -12,6 +12,10 @@ use crate::error::{CmdError, CmdResult};
 pub const AUDIO_EXTS: [&str; 7] = ["wav", "ogg", "flac", "mp3", "ssf", "ezw", "oga"];
 /// Images the song art is cut from (what ez2bms-media decodes).
 pub const IMAGE_EXTS: [&str; 4] = ["png", "jpg", "jpeg", "bmp"];
+/// Movies for the BGA: EZ2PORT's importer's list (ez2/bmson.c) and the
+/// other names its ffmpeg reads. Which will play is the editor's probe's call.
+pub const MOVIE_EXTS: [&str; 10] =
+    ["mp4", "m4v", "mov", "webm", "mkv", "wmv", "asf", "avi", "mpg", "mpeg"];
 
 /// What an import is for; other files offered with it are refused.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize)]
@@ -20,6 +24,7 @@ pub enum ImportKind {
     #[default]
     Audio,
     Image,
+    Movie,
 }
 
 impl ImportKind {
@@ -27,6 +32,7 @@ impl ImportKind {
         let exts: &[&str] = match self {
             ImportKind::Audio => &AUDIO_EXTS,
             ImportKind::Image => &IMAGE_EXTS,
+            ImportKind::Movie => &MOVIE_EXTS,
         };
         p.extension()
             .map(|x| x.to_string_lossy().to_ascii_lowercase())
@@ -37,6 +43,7 @@ impl ImportKind {
         match self {
             ImportKind::Audio => "not an audio file EZ2BMS can play",
             ImportKind::Image => "not an image EZ2BMS can read (PNG, JPEG or BMP)",
+            ImportKind::Movie => "not a movie (MP4, MOV, WebM, MKV, WMV, AVI or MPEG)",
         }
     }
 }
@@ -66,6 +73,23 @@ fn entry(path: &Path, name: String) -> CmdResult<Entry> {
 
 pub fn read(path: &Path) -> CmdResult<Vec<u8>> {
     std::fs::read(path).map_err(|e| CmdError::io(path, e))
+}
+
+/// Up to `len` bytes from `offset` (fewer at the end), with the file's size:
+/// movie headers are read this way, never the whole movie.
+pub fn read_range(path: &Path, offset: u64, len: u64) -> CmdResult<(u64, Vec<u8>)> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path).map_err(|e| CmdError::io(path, e))?;
+    let size = f.metadata().map_err(|e| CmdError::io(path, e))?.len();
+    let mut out = Vec::new();
+    if offset < size {
+        f.seek(SeekFrom::Start(offset)).map_err(|e| CmdError::io(path, e))?;
+        // At most 64 MB in one call: a probe asks for headers, not media.
+        f.take(len.min(size - offset).min(64 << 20))
+            .read_to_end(&mut out)
+            .map_err(|e| CmdError::io(path, e))?;
+    }
+    Ok((size, out))
 }
 
 /// Write `bytes` to `path` so that a crash leaves either the old file or the
@@ -123,6 +147,8 @@ pub struct ProjectScan {
     pub samples: Vec<String>,
     /// Images (jackets, BGA stills).
     pub images: Vec<String>,
+    /// Movies (the BGA).
+    pub movies: Vec<String>,
 }
 
 pub const SIDECAR: &str = "ez2bms.song.json";
@@ -135,6 +161,7 @@ pub fn scan_project(dir: &Path) -> CmdResult<ProjectScan> {
         sidecar: None,
         samples: Vec::new(),
         images: Vec::new(),
+        movies: Vec::new(),
     };
     for e in list(dir)? {
         let lower = e.name.to_lowercase();
@@ -169,11 +196,14 @@ pub fn scan_project(dir: &Path) -> CmdResult<ProjectScan> {
                 scan.samples.push(rel);
             } else if IMAGE_EXTS.contains(&ext.as_str()) {
                 scan.images.push(rel);
+            } else if MOVIE_EXTS.contains(&ext.as_str()) {
+                scan.movies.push(rel);
             }
         }
     }
     scan.samples.sort();
     scan.images.sort();
+    scan.movies.sort();
     Ok(scan)
 }
 
@@ -330,6 +360,16 @@ mod tests {
     }
 
     #[test]
+    fn a_range_read_gives_the_bytes_and_the_size() {
+        let d = scratch("range");
+        std::fs::write(d.join("m.mp4"), b"0123456789").unwrap();
+        assert_eq!(read_range(&d.join("m.mp4"), 3, 4).unwrap(), (10, b"3456".to_vec()));
+        assert_eq!(read_range(&d.join("m.mp4"), 8, 100).unwrap(), (10, b"89".to_vec()));
+        assert_eq!(read_range(&d.join("m.mp4"), 50, 4).unwrap(), (10, vec![]));
+        assert!(read_range(&d.join("none.mp4"), 0, 4).is_err());
+    }
+
+    #[test]
     fn a_project_scan_finds_charts_the_sidecar_and_samples_in_subfolders() {
         let d = scratch("scan");
         for f in [
@@ -339,6 +379,7 @@ mod tests {
             "notes.txt",
             "kick.WAV",
             "jacket.png",
+            "Intro Clip.MP4",
         ] {
             std::fs::write(d.join(f), b"").unwrap();
         }
@@ -352,6 +393,7 @@ mod tests {
         assert!(s.sidecar.is_some());
         assert_eq!(s.samples, ["kick.WAV", "stems/drums/snare.ogg"]);
         assert_eq!(s.images, ["jacket.png"]);
+        assert_eq!(s.movies, ["Intro Clip.MP4"]);
     }
 
     #[test]

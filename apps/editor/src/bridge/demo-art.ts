@@ -68,3 +68,37 @@ export function demoBanner(w = 800, h = 400): Uint8Array {
     return [clamp(10 + 245 * line * z), clamp(4 + 60 * line), clamp(30 + 225 * line * z)];
   });
 }
+
+/**
+ * A movie's headers and nothing else: an MP4 whose moov says H.264,
+ * `w` x `h`, `seconds` long (ISO/IEC 14496-12's boxes, written out here).
+ * No frames - the BGA page reads what EZ2PORT's ffmpeg would see from the
+ * headers, and the browser build has no decoder to show one anyway.
+ */
+export function demoMovie(w = 640, h = 480, seconds = 40, tag = 'avc1'): Uint8Array {
+  const u32 = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+  const u16 = (n: number) => [(n >>> 8) & 255, n & 255];
+  const z = (n: number) => new Array<number>(n).fill(0);
+  const text = (s: string) => [...s].map((c) => c.charCodeAt(0));
+  const box = (type: string, ...body: number[][]): number[] => {
+    const b = body.flat();
+    return [...u32(b.length + 8), ...text(type), ...b];
+  };
+  const full = [0, 0, 0, 0];
+  const entry = box(tag, z(6), u16(1), z(16), u16(w), u16(h), z(50), box('avcC', z(8)));
+  const moov = box(
+    'moov',
+    box('mvhd', full, z(8), u32(1000), u32(seconds * 1000), z(80)),
+    box(
+      'trak',
+      box('tkhd', full, z(20), z(16), z(36), u32(w * 65536), u32(h * 65536)),
+      box(
+        'mdia',
+        box('mdhd', full, z(8), u32(1000), u32(seconds * 1000), z(4)),
+        box('hdlr', full, z(4), text('vide'), z(12), [0]),
+        box('minf', box('stbl', box('stsd', full, u32(1), entry))),
+      ),
+    ),
+  );
+  return Uint8Array.from([...box('ftyp', text('isom'), z(4), text('isomavc1')), ...moov]);
+}

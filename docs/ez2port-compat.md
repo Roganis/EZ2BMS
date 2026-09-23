@@ -8,28 +8,29 @@ row is proven by a test against the vendored engine core
 
 ## Exact (oracle-tested)
 
-| Area                                                                                                      | EZ2BMS                      | Test                                                                                                                                                  |
-| --------------------------------------------------------------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| EZFF `.ez` read/write, v5-v8                                                                              | `io/ez/ezff.ts`             | `ezff.oracle.test.ts` - every field, every record                                                                                                     |
-| Tempo map and every record's time (f32 BPM, ms)                                                           | `timing/engine-tempo.ts`    | bit-identical milliseconds                                                                                                                            |
-| `.gds` descriptors                                                                                        | `ez2data/gds.ts`            | `ez2data.oracle.test.ts`                                                                                                                              |
-| `.pvi` skins (tracks, target bar, note art)                                                               | `ez2data/pvi.ts`            | same                                                                                                                                                  |
-| `.abm` decode (all six header variants, 8/16/24/32-bit)                                                   | `ez2data/abm.ts`            | RGBA hash identical                                                                                                                                   |
-| `.abm` encode (Final EX, 24-bit)                                                                          | `ez2data/abm.ts`            | byte-identical to `ez2_abm_write`                                                                                                                     |
-| File cipher                                                                                               | `ez2data/crypt.ts`          | byte-identical for random tables                                                                                                                      |
-| Velocity/pan arithmetic                                                                                   | `ez2data/mixparam.ts`       | same integers                                                                                                                                         |
-| Chart file names (mode, song, tier)                                                                       | `modes/filenames.ts`        | same as `ez2_chart_id_parse`                                                                                                                          |
-| Mode lane sets                                                                                            | `modes/registry.ts`         | same tracks as `ez2/mode.c`                                                                                                                           |
-| Published package (`song.ini`, `.ez`, `.ezi`, `.ini`)                                                     | `publish/package.ts`        | `publish.oracle.test.ts` - the engine reads the plan back                                                                                             |
-| Lane notes and background sounds of a bmson                                                               | `publish/chart-plan.ts`     | same records as the port's own `ez2_bmson_import`                                                                                                     |
-| Judgement, combo, gauge, score and the hold machine                                                       | `engine/score.ts`           | `engine.oracle.test.ts` - random scripts, op for op                                                                                                   |
-| The synthetic player (`tools/ez2judge.c`)                                                                 | `engine/judge-sim.ts`       | same counts, score, gauge and grade                                                                                                                   |
-| Published keysounds (`.ssf`, 16-bit 44.1 kHz stereo)                                                      | `ez2bms-audio` `cut.rs`     | `ez2port-oracle/tests/audio.rs` - header and PCM hash                                                                                                 |
-| `song.ini` as the port reads and lists it                                                                 | `publish/songini-read.ts`   | `songini.oracle.test.ts` - `ez2_usersongs_merge`, random files                                                                                        |
-| Disc (`disc.abm`) and stretched eyecatch (`eyecatch.abm`)                                                 | `ez2bms-media` `art.rs`     | `art.oracle.test.ts` - byte-identical to `write_disc` / `write_eyecatch`, random sizes up and down                                                    |
-| Title plates (`songname.abm`): layout, rasteriser, colour, halo, oblique, CJK faces                       | `ez2bms-media` `text.rs`    | `plate.oracle.test.ts` - byte-identical to `ez2_ttf_render_box` / `ez2_textspec_render`, random text and plates                                       |
-| The song preview (`preview.ssf`): the importer's window, mix, fades, normalising                          | `ez2bms-audio` `preview.rs` | `preview.oracle.test.ts` - PCM identical to `write_preview` for random songs, mixed at unity                                                          |
-| The song select's wheel: every disc and title plate placed, the scroll's chase, the disc's swing per tier | `ez2data/selectwheel.ts`    | `selectwheel.oracle.test.ts` - placements within a thousandth of a pixel of `ez2_select_wheel_place` / `_rail_place`, chase and swing frame for frame |
+| Area                                                                                                                  | EZ2BMS                      | Test                                                                                                                                                  |
+| --------------------------------------------------------------------------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EZFF `.ez` read/write, v5-v8                                                                                          | `io/ez/ezff.ts`             | `ezff.oracle.test.ts` - every field, every record                                                                                                     |
+| Tempo map and every record's time (f32 BPM, ms)                                                                       | `timing/engine-tempo.ts`    | bit-identical milliseconds                                                                                                                            |
+| `.gds` descriptors                                                                                                    | `ez2data/gds.ts`            | `ez2data.oracle.test.ts`                                                                                                                              |
+| `.pvi` skins (tracks, target bar, note art)                                                                           | `ez2data/pvi.ts`            | same                                                                                                                                                  |
+| `.abm` decode (all six header variants, 8/16/24/32-bit)                                                               | `ez2data/abm.ts`            | RGBA hash identical                                                                                                                                   |
+| `.abm` encode (Final EX, 24-bit)                                                                                      | `ez2data/abm.ts`            | byte-identical to `ez2_abm_write`                                                                                                                     |
+| File cipher                                                                                                           | `ez2data/crypt.ts`          | byte-identical for random tables                                                                                                                      |
+| Velocity/pan arithmetic                                                                                               | `ez2data/mixparam.ts`       | same integers                                                                                                                                         |
+| Chart file names (mode, song, tier)                                                                                   | `modes/filenames.ts`        | same as `ez2_chart_id_parse`                                                                                                                          |
+| Mode lane sets                                                                                                        | `modes/registry.ts`         | same tracks as `ez2/mode.c`                                                                                                                           |
+| Published package (`song.ini`, `.ez`, `.ezi`, `.ini`)                                                                 | `publish/package.ts`        | `publish.oracle.test.ts` - the engine reads the plan back                                                                                             |
+| Lane notes and background sounds of a bmson                                                                           | `publish/chart-plan.ts`     | same records as the port's own `ez2_bmson_import`                                                                                                     |
+| Judgement, combo, gauge, score and the hold machine                                                                   | `engine/score.ts`           | `engine.oracle.test.ts` - random scripts, op for op                                                                                                   |
+| The synthetic player (`tools/ez2judge.c`)                                                                             | `engine/judge-sim.ts`       | same counts, score, gauge and grade                                                                                                                   |
+| Published keysounds (`.ssf`, 16-bit 44.1 kHz stereo)                                                                  | `ez2bms-audio` `cut.rs`     | `ez2port-oracle/tests/audio.rs` - header and PCM hash                                                                                                 |
+| `song.ini` as the port reads and lists it                                                                             | `publish/songini-read.ts`   | `songini.oracle.test.ts` - `ez2_usersongs_merge`, random files                                                                                        |
+| Disc (`disc.abm`) and stretched eyecatch (`eyecatch.abm`)                                                             | `ez2bms-media` `art.rs`     | `art.oracle.test.ts` - byte-identical to `write_disc` / `write_eyecatch`, random sizes up and down                                                    |
+| Title plates (`songname.abm`): layout, rasteriser, colour, halo, oblique, CJK faces                                   | `ez2bms-media` `text.rs`    | `plate.oracle.test.ts` - byte-identical to `ez2_ttf_render_box` / `ez2_textspec_render`, random text and plates                                       |
+| The song preview (`preview.ssf`): the importer's window, mix, fades, normalising                                      | `ez2bms-audio` `preview.rs` | `preview.oracle.test.ts` - PCM identical to `write_preview` for random songs, mixed at unity                                                          |
+| The BGA a bmson names (`[Bga] File`, `StartMs`): the earliest event's movie, its time through tempo changes and STOPs | `publish/bga.ts`            | `bga.oracle.test.ts` - equal to `ez2_bmson_import`'s for random charts (to 1 ms with BPMs f32 cannot hold, see below)                                 |
+| The song select's wheel: every disc and title plate placed, the scroll's chase, the disc's swing per tier             | `ez2data/selectwheel.ts`    | `selectwheel.oracle.test.ts` - placements within a thousandth of a pixel of `ez2_select_wheel_place` / `_rail_place`, chase and swing frame for frame |
 
 ## Deliberate differences
 
@@ -56,6 +57,9 @@ row is proven by a test against the vendored engine core
 | Preview mix                | raw samples summed, velocity and pan ignored; only sounds of 20 s or more carried across the window's start | the chart as the engine plays it: velocity, pan, voices cutting, every sound under way picked up                              | the preview sounds like the song                                |
 | Preview window             | 20 s from the first note a quarter of the way in, 1 s fades                                                 | that by default; your own start (on a note, or anywhere), 5-30 s, your fades                                                  | a song's best 20 s are rarely a quarter of the way in           |
 | A preview file of your own | `preview_music`: its first 30 s, as they are, no fades                                                      | your window of it, faded and normalised like a mix                                                                            | the wheel restarts it hard: unfaded, it clicks                  |
+| BGA timing                 | the event's time from the bmson's double BPMs                                                               | the engine's clock (f32 BPMs), which may be 1 ms off the importer's at a rounding edge                                        | the movie keeps time with the notes the engine plays            |
+| BGA movie                  | the first chart's earliest event only; copied under its own name                                            | the first chart naming one, or any movie you choose, started when you say; copied as `bga.<ext>`                              | an ASCII name every build and file system reads                 |
+| A BGA the port cannot play | copied and written; the stage shows nothing                                                                 | refused by lint (AVI, MPEG, Theora, HEVC, AV1...), from the movie's headers                                                   | found before publishing, not on the cabinet                     |
 
 ## Followed from the port's platform code (not in the oracle)
 
@@ -160,9 +164,33 @@ What the check cannot see, and so is not promised:
 - Not ported from BmsTWO: the automatic split at a long note's release, and
   "right-click clears x_stop" (`xStop` is not published).
 
+## The BGA movie (scene/bga.c, media/video.c, not in the oracle)
+
+A package's `[Bga]` movie is played by the port's scene/bga.c through
+ffmpeg, outside the vendored core; EZ2BMS follows that code and checks
+what it can from the movie's headers (chart-core `media/movie.ts`, tested
+on containers built by hand).
+
+- **What plays.** The Windows build's ffmpeg is cut down to the readers
+  `asf`, `mov` (MP4, MOV), `matroska` (MKV, WebM) and `ogg`, and the video
+  decoders for WMV 7-9 / VC-1, the Microsoft MPEG-4 variants, H.264,
+  MPEG-4 part 2, VP8, VP9 and (for images) Motion JPEG
+  (`thirdparty/fetch-ffmpeg.sh`). Anything else is a lint error. The Linux
+  build links the distribution's full ffmpeg and plays more.
+- **How it shows.** Frame 0 at `StartMs` of chart time; nothing before it;
+  every frame converted to RGBA at its own size and stretched to 640x480
+  behind the play field; nothing after the last frame - it never loops; its
+  sound is not played. The BGA page's preview does the same with the
+  webview's own player, which is not the port's decoder: a movie the
+  webview cannot show may still play in EZ2PORT, and the page says so.
+- **Size.** A 1280x960 H.264 movie "drew nothing on the cabinet" (the port's
+  own note in `fetch-ffmpeg.sh`): lint warns above 1024 on either side.
+- **Test in EZ2PORT** passes `--bga`, so the movie shows whatever the
+  operator ini says.
+
 ## The song select as the wheel preview draws it (select.c, not in the oracle)
 
-The Song manager's "On the wheel" page draws the song on EZ2PORT's song
+The Song manager's "Wheel" page draws the song on EZ2PORT's song
 select. Where each disc and plate sits, the chase and the swing are the
 oracle-checked `selectwheel.ts`; the drawing around them follows
 `tools/ez2play/select.c`, outside the vendored core, and is checked with

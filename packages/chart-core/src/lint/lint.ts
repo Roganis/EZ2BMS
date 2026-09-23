@@ -9,6 +9,7 @@ import { modeNames, type ModeId } from '../modes/ids';
 import { chartBaseName, isValidSongKey, parseChartName } from '../modes/filenames';
 import type { SongArt } from '../song/art';
 import { categoryLabel, unreachableIn, validCategory } from '../song/categories';
+import { portCannotPlay, type MovieInfo } from '../media/movie';
 import { songMeta } from '../song/meta';
 import { modeDef } from '../modes/registry';
 import { TickConverter } from '../timing/ticks';
@@ -46,7 +47,25 @@ export interface LintSong {
   plate?: PlateCheck;
   /** The preview's window and source; checked when given. */
   preview?: PreviewCheck;
+  /** The BGA movie and what its headers say; checked when given. */
+  bga?: BgaCheck;
 }
+
+/** The song's BGA as a publish would use it, and its probe (the host reads the headers). */
+export interface BgaCheck {
+  src: string;
+  path: string | undefined;
+  startMs: number;
+  /** A movie by its name (the importer keeps nothing else). */
+  movie: boolean;
+  /** What its headers say; absent until read, or an error when they could not be. */
+  probe?: MovieInfo | { error: string };
+  /** When the song's last sound ends, ms (the movie should last as long). */
+  songEndMs?: number;
+}
+
+/** The largest movie EZ2PORT's cabinet has been seen to draw (see the bga-large rule). */
+export const BGA_MAX_SIDE = 1024;
 
 export interface PreviewCheck {
   startMs: number;
@@ -337,6 +356,7 @@ export function lintSong(s: LintSong): Finding[] {
         'The preview starts after the last note: the wheel may loop silence',
       );
   }
+  if (s.bga) bgaFindings(s.bga, f);
   const meta = songMeta(s.charts);
   for (const field of meta.differs)
     f(
@@ -378,3 +398,40 @@ export function lintSong(s: LintSong): Finding[] {
 }
 
 export const hasErrors = (fs: readonly Finding[]) => fs.some((x) => x.severity === 'error');
+
+function bgaFindings(b: BgaCheck, f: (rule: string, severity: Severity, message: string) => void) {
+  if (!b.movie) {
+    // The importer's own words (bmson.c): an image or a sequence is not a package BGA.
+    f('bga-not-movie', 'warning', `The BGA ${b.src} is not a movie: EZ2PORT shows none for it`);
+    return;
+  }
+  if (!b.path) return f('art-missing', 'error', `The BGA movie ${b.src} is not in the song folder`);
+  const m = b.probe;
+  if (!m) return;
+  if ('error' in m)
+    return f('bga-unreadable', 'error', `The BGA ${b.src} cannot be read: ${m.error}`);
+  const why = portCannotPlay(m);
+  if (why) return f('bga-codec', 'error', `The BGA ${b.src} will not play: ${why}`);
+  const [w, h] = [m.width ?? 0, m.height ?? 0];
+  // "Cat's rule's bga2.mp4 is 1280x960 H.264 and drew nothing on the
+  // cabinet" (thirdparty/fetch-ffmpeg.sh); every frame is converted and
+  // uploaded at its own size, and the screen shows 640x480.
+  if (w > BGA_MAX_SIDE || h > BGA_MAX_SIDE)
+    f(
+      'bga-large',
+      'warning',
+      `The BGA is ${w}x${h}: a 1280x960 movie drew nothing on EZ2PORT's cabinet; 640x480 is all it shows`,
+    );
+  if (w && h && Math.abs(w / h - 4 / 3) > 0.02)
+    f('bga-aspect', 'info', `The BGA is ${w}x${h}: EZ2PORT stretches it to 640x480 (4:3)`);
+  if (
+    m.durationMs !== null &&
+    b.songEndMs !== undefined &&
+    b.startMs + m.durationMs < b.songEndMs - 500
+  )
+    f(
+      'bga-short',
+      'warning',
+      `The BGA ends ${Math.round((b.songEndMs - b.startMs - m.durationMs) / 1000)} s before the song: it does not loop, the screen goes black`,
+    );
+}

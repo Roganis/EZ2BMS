@@ -58,6 +58,22 @@ fn fs_read(path: PathBuf) -> CmdResult<Response> {
     Ok(Response::new(files::read(&path)?))
 }
 
+/// Part of a file, for reading a movie's headers: `[u64 LE size]` + the bytes.
+#[tauri::command]
+fn fs_read_range(path: PathBuf, offset: u64, length: u64) -> CmdResult<Response> {
+    let (size, bytes) = files::read_range(&path, offset, length)?;
+    let mut out = size.to_le_bytes().to_vec();
+    out.extend_from_slice(&bytes);
+    Ok(Response::new(out))
+}
+
+/// Let the webview load one file through the asset protocol (the BGA's
+/// `<video>` preview): the scope starts empty and grows by the files shown.
+#[tauri::command]
+fn media_allow(app: AppHandle, path: PathBuf) -> CmdResult<()> {
+    app.asset_protocol_scope().allow_file(&path).map_err(|e| CmdError::Invalid(e.to_string()))
+}
+
 #[tauri::command]
 fn fs_read_text(path: PathBuf) -> CmdResult<String> {
     String::from_utf8(files::read(&path)?)
@@ -356,6 +372,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_info,
             fs_read,
+            fs_read_range,
+            media_allow,
             fs_read_text,
             fs_write_text,
             fs_write_bytes,

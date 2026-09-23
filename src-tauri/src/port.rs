@@ -42,6 +42,17 @@ pub struct PackageDto {
     /// `preview.ssf`, rendered here (song.ini names it when present).
     #[serde(default)]
     pub preview: Option<PreviewJob>,
+    /// Files copied in as they are (the BGA movie), never through the bridge.
+    #[serde(default)]
+    pub copies: Vec<CopyJob>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CopyJob {
+    /// The source: relative to the project, or absolute.
+    pub from: String,
+    /// Its name in the package.
+    pub name: String,
 }
 
 /// What the editor saw at the target and decided (chart-core publish/rankings.ts).
@@ -123,9 +134,14 @@ pub fn publish_with(
         carry: opts.carry.clone(),
         expect: opts.expect.as_ref().map(|e| e.song_ini.as_ref().map(|s| s.clone().into_bytes())),
         backup: opts.backup,
+        copies: pkg
+            .copies
+            .iter()
+            .map(|c| (c.name.clone(), resolve(&pkg.project_dir, &c.from)))
+            .collect(),
     };
     let dir = ez2bms_launch::write_package_with(songs_root, &pkg.key, &files, &write)?;
-    Ok(Published { dir, files: files.len() + opts.carry.len(), missing })
+    Ok(Published { dir, files: files.len() + opts.carry.len() + pkg.copies.len(), missing })
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -357,6 +373,7 @@ mod tests {
                 files: vec![],
                 keysounds: vec![],
                 preview: Some(p),
+                copies: vec![],
             };
             let out = publish(&d.join("songs"), &pkg).unwrap();
             std::fs::read(out.dir.join("preview.ssf")).unwrap()
@@ -414,11 +431,16 @@ mod tests {
                 },
             ],
             preview: None,
+            // The BGA: copied in by path, under the package's own name.
+            copies: vec![CopyJob { from: "clips/Intro Clip.MP4".into(), name: "bga.mp4".into() }],
         };
+        std::fs::create_dir_all(project.join("clips")).unwrap();
+        std::fs::write(project.join("clips/Intro Clip.MP4"), b"movie").unwrap();
         let songs = d.join("songs");
         let out = publish(&songs, &pkg).unwrap();
         assert_eq!(out.dir, songs.join("abc"));
-        assert_eq!(out.files, 3);
+        assert_eq!(out.files, 4);
+        assert_eq!(std::fs::read(out.dir.join("bga.mp4")).unwrap(), b"movie");
         assert_eq!(out.missing.len(), 1);
         assert_eq!(out.missing[0].0, "gone.ogg");
         let a = std::fs::read(out.dir.join("loop_0_23.ssf")).unwrap();

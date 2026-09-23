@@ -40,6 +40,8 @@ export function buildPackage(
   const meta = songMeta(p.charts.map((c) => ({ data: c.doc.data, tier: c.tier }))).values;
   const title = meta.title || p.name;
   const charts: SongChart[] = slots.map((c) => ({ data: c.doc.data, mode: c.mode, tier: c.tier }));
+  // The movie goes with a test run too: ez2play shows it with --bga.
+  const bga = app.bga.packageJob(p);
   const plan = compileSong(
     {
       key,
@@ -50,6 +52,7 @@ export function buildPackage(
       category: effectiveCategory(p.sidecar.category),
       ...opts.art,
       ...(opts.preview ? { preview: true } : {}),
+      ...(bga ? { bga: bga.ini } : {}),
       ...(p.sidecar.id ? { songId: p.sidecar.id } : {}),
     },
     charts,
@@ -65,6 +68,7 @@ export function buildPackage(
     project_dir: p.dir,
     files: plan.files.map((f) => ({ path: f.path, bytes: f.bytes })),
     ...(opts.preview ? { preview: opts.preview } : {}),
+    ...(bga ? { copies: [bga.copy] } : {}),
     keysounds: plan.keysounds.map((k) => ({
       src: soundPath(p.dir, p.samples, k.src),
       start_frame: k.startFrame,

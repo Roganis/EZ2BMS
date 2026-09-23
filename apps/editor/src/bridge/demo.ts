@@ -20,7 +20,7 @@ import {
   type ModeId,
   type Tier,
 } from '@ez2bms/chart-core';
-import { demoBanner, demoJacket } from './demo-art';
+import { demoBanner, demoJacket, demoMovie } from './demo-art';
 
 export const DEMO_DIR = '/demo/Neon Parade';
 
@@ -152,6 +152,8 @@ export function demoFiles(modes = false, bench = false): Map<string, Uint8Array>
   for (const s of SAMPLES) files.set(`${DEMO_DIR}/${s}`, new Uint8Array(0));
   files.set(`${DEMO_DIR}/jacket.bmp`, demoJacket());
   files.set(`${DEMO_DIR}/banner.bmp`, demoBanner());
+  // A BGA to choose (the charts name none; the BGA page picks it).
+  files.set(`${DEMO_DIR}/Neon Intro.MP4`, demoMovie());
   files.set(
     `${DEMO_DIR}/ez2bms.song.json`,
     // Classic mode off to start with, though the song slices a stem (tests switch it on).

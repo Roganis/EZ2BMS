@@ -130,7 +130,7 @@ Found and fixed on the way: the rack's hit list was never cleared (M2.8),
 and at 1 280 px the top bar was wider than the window, which made the
 playfield re-bake its textures every frame (see `docs/perf-log.md`).
 
-### Song manager, safe publishing, song art, plates, preview and the wheel (M3.1-M3.8), 2026-09-23
+### Song manager, safe publishing, song art, plates, preview, the wheel and the BGA (M3.1-M3.9), 2026-09-23
 
 The assistant is writing Milestone 3 step by step after the owner's
 decisions (a bundled CJK font for plates, rankings kept only for charts
@@ -155,7 +155,11 @@ owner's own game art):
 - the wheel preview: the song select's placement, chase and swing
   arithmetic transcribed from the port (`ez2/selectwheel.c`), and a Canvas
   scene layered as `tools/ez2play/select.c` layers it, over the owner's
-  own select masks read at run time or neon stand-ins.
+  own select masks read at run time or neon stand-ins;
+- the BGA: movie headers read in TypeScript (MP4/MOV, Matroska/WebM, ASF,
+  AVI, MPEG, Ogg) against the codec list of the port's Windows build, the
+  importer's pick of the charts' movie, a copy by path in the package
+  writer, and a `<video>` preview through the asset protocol.
 
 The disc and the stretched eyecatch are checked byte for byte against
 EZ2PORT's own importer through the oracle, on random images; plates
@@ -216,3 +220,7 @@ a made-up game folder, never beside the real select screen.
 | The preview loops cleanly on the wheel at a sensible loudness        | not run (no game or sound device here)    | **No** - owner        |
 | The wheel places discs and plates, chases and swings as EZ2PORT does | oracle, random wheels and tier sequences  | Yes, in the container |
 | The wheel preview looks like the real select screen with its masks   | synthetic masks only (no game here)       | **No** - owner        |
+| `[Bga] StartMs` and the movie picked equal the port importer's       | oracle, random charts (1 ms at f32 edges) | Yes, in the container |
+| Movie headers read right (codec, size, length)                       | containers built by hand from the specs   | Yes, in the container |
+| A published BGA plays in sync in EZ2PORT (H.264, VP9, WMV; Windows)  | not run (no game here)                    | **No** - owner        |
+| The `<video>` preview on WebView2 and WebKitGTK                      | not run (Chromium, a movie of headers)    | **No** - owner        |
