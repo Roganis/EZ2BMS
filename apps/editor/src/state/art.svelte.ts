@@ -7,14 +7,18 @@ import {
   PublishError,
   defaultEyecatch,
   encodeAbm,
+  findImage,
+  plateSpecFor,
+  plateText,
   songMeta,
-  titlePlate,
   type ArtJob,
   type DiscArt,
   type EyecatchArt,
+  type PlateCheck,
+  type PlateSettings,
   type PlateSpec,
 } from '@ez2bms/chart-core';
-import { baseName, joinPath, type ArtPixels } from '../bridge';
+import { baseName, joinPath, type ArtPixels, type PlatePixels } from '../bridge';
 import type { App } from './app.svelte';
 import type { Project } from './project.svelte';
 import { plural } from './songwide';
@@ -46,6 +50,13 @@ export function imageUrl(bytes: Uint8Array): string {
 
 export class ArtState {
   constructor(private readonly app: App) {}
+
+  /**
+   * What the last plate render found (missing glyphs, a font or image it
+   * could not use), for lint - which cannot render - keyed by what was
+   * rendered so a stale report is never shown.
+   */
+  plateCheck = $state<{ key: string; check: PlateCheck } | null>(null);
 
   /** The cut, from the host: RGB at the file's size (256x256 or 1024x512). */
   pixels(p: Project, path: string, job: ArtJob): Promise<ArtPixels> {
@@ -132,13 +143,74 @@ export class ArtState {
     return names;
   }
 
+  /** The song's title and subtitle as every chart shares them. */
+  private songText(p: Project): { title: string; subtitle: string } {
+    const meta = songMeta(p.charts.map((c) => ({ data: c.doc.data, tier: c.tier }))).values;
+    return { title: meta.title || p.name, subtitle: meta.subtitle };
+  }
+
+  plateSettings(p: Project): PlateSettings {
+    return p.sidecar.plate ?? {};
+  }
+
   /**
-   * The song's title plate: the shipped plates' layout (TEXT.md s7) from its
-   * title and subtitle.
+   * The song's title plate as text: the shipped plates' layout (TEXT.md s7)
+   * with the song file's words, tint and CJK forms.
    */
   plateSpec(p: Project): PlateSpec {
-    const meta = songMeta(p.charts.map((c) => ({ data: c.doc.data, tier: c.tier }))).values;
-    return titlePlate(meta.title || p.name, meta.subtitle);
+    return plateSpecFor(this.plateSettings(p), this.songText(p));
+  }
+
+  /** Change the plate setting (undefined members are removed; nothing left, no setting). */
+  async setPlate(patch: Partial<Record<keyof PlateSettings, string | undefined>>): Promise<void> {
+    const p = this.app.project;
+    if (!p) return;
+    const next: Record<string, string> = { ...($state.snapshot(p.sidecar.plate) ?? {}) };
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === undefined) delete next[k];
+      else next[k] = v;
+    }
+    if (Object.keys(next).length) p.sidecar.plate = next as PlateSettings;
+    else delete p.sidecar.plate;
+    await p.saveSidecar();
+  }
+
+  /** What identifies a plate render: its image or its spec. */
+  plateKey(p: Project): string {
+    const img = this.plateSettings(p).image;
+    return img ? `image:${findImage(p.images, img) ?? img}` : JSON.stringify(this.plateSpec(p));
+  }
+
+  /**
+   * The title plate, rendered by the host: your own image fit to 256x32, or
+   * the text. Records what it found for lint.
+   */
+  async renderPlate(p: Project): Promise<PlatePixels> {
+    const key = this.plateKey(p);
+    const s = this.plateSettings(p);
+    const song = this.songText(p);
+    const report = (check: Omit<PlateCheck, 'songTitle'>) => {
+      this.plateCheck = { key, check: { songTitle: song.title, ...check } };
+    };
+    try {
+      if (s.image) {
+        const path = findImage(p.images, s.image);
+        if (!path) {
+          report({ missing: [], image: { src: s.image, path } });
+          throw new PublishError(`The title plate image ${s.image} is not in the song folder`);
+        }
+        const px = await this.pixels(p, path, { kind: 'plate' });
+        report({ missing: [], image: { src: s.image, path } });
+        return { ...px, missing: [] };
+      }
+      const px = await this.app.backend.media.plate(this.plateSpec(p));
+      report({ missing: px.missing, text: plateText(s, song).title });
+      return px;
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      if (!(e instanceof PublishError)) report({ missing: [], error });
+      throw e;
+    }
   }
 
   /**
@@ -147,7 +219,8 @@ export class ArtState {
    */
   async packageArt(p: Project): Promise<PackageArt> {
     const art = p.art;
-    const plate = await this.app.backend.media.plate(this.plateSpec(p)).catch((e: unknown) => {
+    const plate = await this.renderPlate(p).catch((e: unknown) => {
+      if (e instanceof PublishError) throw e;
       throw new PublishError(`The title plate: ${e instanceof Error ? e.message : String(e)}`);
     });
     const out: PackageArt = { songnameAbm: encodeAbm(plate.rgb, plate.w, plate.h) };

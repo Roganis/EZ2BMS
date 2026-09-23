@@ -10,6 +10,9 @@ pub const EYECATCH_H: u32 = 512;
 /// 640x480 of the 1024x512 image.
 pub const VISIBLE_W: u32 = 640;
 pub const VISIBLE_H: u32 = 480;
+/// The title plate (`songname.abm`), when it is your own image rather than text.
+pub const PLATE_W: u32 = 256;
+pub const PLATE_H: u32 = 32;
 
 /// A rectangle of source pixels; it may reach past the image (that part is black).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
@@ -124,9 +127,10 @@ pub fn eyecatch(src: &Rgba, how: Eyecatch) -> Vec<u8> {
     }
 }
 
-/// One cut, as the editor asks for it (ez2bms.song.json's `disc` and
-/// `eyecatch`): `{"kind":"disc","crop":{..}}`, `{"kind":"eyecatch","mode":"stretch"}`,
-/// `{"kind":"eyecatch","mode":"visible","crop":{..}}`.
+/// One cut, as the editor asks for it (ez2bms.song.json's `disc`, `eyecatch`
+/// and `plate.image`): `{"kind":"disc","crop":{..}}`,
+/// `{"kind":"eyecatch","mode":"stretch"}`,
+/// `{"kind":"eyecatch","mode":"visible","crop":{..}}`, `{"kind":"plate"}`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum ArtJob {
@@ -135,6 +139,9 @@ pub enum ArtJob {
         crop: Option<Rect>,
     },
     Eyecatch(Eyecatch),
+    /// A plate image fit to 256x32. Its black stays black: on the wheel that
+    /// is see-through, which is what a plate's background should be.
+    Plate,
 }
 
 /// A crop side larger than this is refused: nothing sensible needs it, and
@@ -146,7 +153,7 @@ pub fn render(src: &Rgba, job: ArtJob) -> crate::Result<(u32, u32, Vec<u8>)> {
     let crop = match job {
         ArtJob::Disc { crop } => crop,
         ArtJob::Eyecatch(Eyecatch::Visible { crop }) => Some(crop),
-        ArtJob::Eyecatch(Eyecatch::Stretch) => None,
+        ArtJob::Eyecatch(Eyecatch::Stretch) | ArtJob::Plate => None,
     };
     if let Some(c) = crop {
         if c.w == 0 || c.h == 0 || c.w > MAX_CROP || c.h > MAX_CROP {
@@ -156,6 +163,7 @@ pub fn render(src: &Rgba, job: ArtJob) -> crate::Result<(u32, u32, Vec<u8>)> {
     Ok(match job {
         ArtJob::Disc { crop } => (DISC, DISC, disc(src, crop)),
         ArtJob::Eyecatch(how) => (EYECATCH_W, EYECATCH_H, eyecatch(src, how)),
+        ArtJob::Plate => (PLATE_W, PLATE_H, resize_rgb(src, PLATE_W, PLATE_H)),
     })
 }
 
@@ -228,6 +236,10 @@ mod tests {
         assert!(render(&src, bad).is_err());
         let (w, h, px) = render(&src, ArtJob::Eyecatch(Eyecatch::Stretch)).unwrap();
         assert_eq!((w, h, px.len()), (1024, 512, 1024 * 512 * 3));
+        assert_eq!(job(r#"{"kind":"plate"}"#), ArtJob::Plate);
+        let (w, h, px) = render(&solid(512, 64, [0, 0, 0, 255]), ArtJob::Plate).unwrap();
+        assert_eq!((w, h), (256, 32));
+        assert!(px.iter().all(|&v| v == 0), "a plate's black is not lifted: it is the key");
     }
 
     #[test]

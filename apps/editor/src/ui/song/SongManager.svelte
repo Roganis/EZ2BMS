@@ -1,16 +1,18 @@
 <script lang="ts">
   // The song manager: everything about the song rather than one chart - its
-  // info and category beside every chart in a mode x tier matrix, or its disc
-  // and eyecatch. It sits over the playfield like the keysound workbench
-  // (one or the other).
+  // info and category beside every chart in a mode x tier matrix, its title
+  // plate, or its disc and eyecatch. It sits over the playfield like the
+  // keysound workbench (one or the other).
   import { app } from '../../state/app.svelte';
   import type { Project } from '../../state/project.svelte';
   import ArtCropper from './ArtCropper.svelte';
   import Matrix from './Matrix.svelte';
   import MetaForm from './MetaForm.svelte';
+  import PlateDesigner from './PlateDesigner.svelte';
 
   const TABS = [
     { id: 'charts', label: 'Charts' },
+    { id: 'plate', label: 'Title plate' },
     { id: 'art', label: 'Disc & eyecatch' },
   ] as const;
 
@@ -42,9 +44,11 @@
     </nav>
     <button class="x" title="Close (Esc)" onclick={() => (app.view.songManager = false)}>×</button>
   </header>
-  <div class="body" class:full={app.view.songTab === 'art'}>
-    {#if app.view.songTab !== 'art'}<MetaForm {project} />{/if}
-    {#if app.view.songTab === 'art'}
+  <div class="body" class:full={app.view.songTab !== 'charts'}>
+    {#if app.view.songTab === 'charts'}<MetaForm {project} />{/if}
+    {#if app.view.songTab === 'plate'}
+      <PlateDesigner {project} />
+    {:else if app.view.songTab === 'art'}
       <div class="art">
         <ArtCropper {project} kind="disc" />
         <ArtCropper {project} kind="eyecatch" />

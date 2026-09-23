@@ -10,7 +10,7 @@
   let { project }: { project: Project } = $props();
   let over = $state(false);
   const added = $derived(app.slot ? ` and added to ${app.slot.label}` : '');
-  const images = $derived(app.view.songManager && app.view.songTab === 'art');
+  const images = $derived(app.view.songManager && app.view.songTab !== 'charts');
 
   $effect(() =>
     app.backend.onFileDrop((d) => {

@@ -124,7 +124,7 @@ pnpm tauri dev          # the desktop app
 - [x] M3.3 Safe publishing: whose package a folder is, shipped keys refused, rankings kept for unchanged charts, backups
 - [x] M3.4 Disc and eyecatch: crop any PNG/JPEG/BMP, cut byte-for-byte as EZ2PORT's importer cuts - [compat](docs/ez2port-compat.md)
 - [x] M3.5 Title plates rendered as EZ2PORT renders them (bundled Roboto and Noto Sans CJK; `node scripts/fetch-fonts.mjs`)
-- [ ] M3.6 Plate designer
+- [x] M3.6 Plate designer: words, version colours or your own, CJK forms, or your own 256x32 image; missing glyphs linted
 - [ ] M3.7 Preview picker
 - [ ] M3.8 Wheel preview
 - [ ] M3.9 BGA

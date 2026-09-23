@@ -27,6 +27,16 @@
     for (const c of project.charts) void c.rev;
     if (project.dirty) app.autosave.schedule(project);
   });
+  // The title plate is rendered again a moment after what it shows changes,
+  // so lint knows of glyphs the fonts lack without the designer open.
+  $effect(() => {
+    for (const c of project.charts) void c.rev;
+    void project.images;
+    const key = app.art.plateKey(project);
+    if (app.art.plateCheck?.key === key) return;
+    const t = setTimeout(() => void app.art.renderPlate(project).catch(() => undefined), 400);
+    return () => clearTimeout(t);
+  });
   // New sounds in the chart get loaded.
   $effect(() => {
     if (!slot) return;

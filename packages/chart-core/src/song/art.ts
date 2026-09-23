@@ -42,7 +42,9 @@ export interface EyecatchArt {
 export type ArtJob =
   | { kind: 'disc'; crop?: ArtCrop }
   | { kind: 'eyecatch'; mode: 'stretch' }
-  | { kind: 'eyecatch'; mode: 'visible'; crop: ArtCrop };
+  | { kind: 'eyecatch'; mode: 'visible'; crop: ArtCrop }
+  /** A title plate image, fit to 256x32 (its black is the see-through key). */
+  | { kind: 'plate' };
 
 /** The disc file: 256x256, keyed black outside a radius-125 circle round (127.5, 127.5). */
 export const DISC_SIZE = 256;

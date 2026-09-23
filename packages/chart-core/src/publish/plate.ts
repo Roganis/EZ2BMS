@@ -112,3 +112,100 @@ export function titlePlate(
     cjk: cjk ?? guessCjkForms(`${title}${subtitle}`),
   };
 }
+
+/**
+ * The song file's `plate`: what the title plate says and how it looks.
+ * Everything is optional - an empty plate setting is the song's own title
+ * (and subtitle) in white.
+ */
+export interface PlateSettings {
+  /** Words other than the song's title (absent: the title). */
+  title?: string;
+  /** Absent: the song's subtitle. Empty: none. */
+  subtitle?: string;
+  /** A PLATE_TINTS id; `custom` takes `ink` and `glow`. Absent: white. */
+  tint?: string;
+  ink?: string;
+  glow?: string;
+  /** Absent: guessed from the words (guessCjkForms). */
+  cjk?: CjkForms;
+  /** An image in the song folder used instead of text: fit to 256x32, black is see-through. */
+  image?: string;
+}
+
+const HEX = /^[0-9a-f]{6}$/;
+const FORMS: readonly CjkForms[] = ['jp', 'kr', 'sc', 'tc', 'hk'];
+
+/** The tint a setting names (a custom one from its colours; white when unknown). */
+export function plateTint(s: PlateSettings): PlateTint {
+  if (s.tint === 'custom' && s.ink && HEX.test(s.ink))
+    return {
+      id: 'custom',
+      label: 'Custom',
+      ink: s.ink,
+      ...(s.glow && HEX.test(s.glow) ? { glow: s.glow } : {}),
+    };
+  return PLATE_TINTS.find((t) => t.id === s.tint) ?? PLATE_TINTS[0]!;
+}
+
+/** The words a plate shows, from its setting and the song's info. */
+export function plateText(
+  s: PlateSettings,
+  song: { title: string; subtitle: string },
+): { title: string; subtitle: string } {
+  return { title: s.title ?? song.title, subtitle: s.subtitle ?? song.subtitle };
+}
+
+/** The spec a text plate renders from (not used when the setting names an image). */
+export function plateSpecFor(
+  s: PlateSettings,
+  song: { title: string; subtitle: string },
+): PlateSpec {
+  const t = plateText(s, song);
+  return titlePlate(t.title, t.subtitle, plateTint(s), s.cjk);
+}
+
+/** A song file's `plate` member, or undefined when it is not one EZ2BMS reads. */
+export function readPlateSettings(v: unknown): PlateSettings | undefined {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const o = v as Record<string, unknown>;
+  const out: PlateSettings = {};
+  for (const k of ['title', 'subtitle', 'tint', 'image'] as const) {
+    if (o[k] === undefined) continue;
+    if (typeof o[k] !== 'string') return undefined;
+    out[k] = o[k];
+  }
+  for (const k of ['ink', 'glow'] as const) {
+    if (o[k] === undefined) continue;
+    if (typeof o[k] !== 'string' || !HEX.test(o[k])) return undefined;
+    out[k] = o[k];
+  }
+  if (o.cjk !== undefined) {
+    if (!FORMS.includes(o.cjk as CjkForms)) return undefined;
+    out.cjk = o.cjk as CjkForms;
+  }
+  // Anything else in it is not ours to drop: the whole member is kept as is.
+  if (Object.keys(o).some((k) => !(k in out))) return undefined;
+  return out;
+}
+
+/**
+ * Words the Latin face does not have - CJK ideographs, kana, hangul, CJK
+ * punctuation, full-width forms - which the renderer sets in the CJK face
+ * (ez2/textspec.c has_cjk, the same ranges).
+ */
+export function hasCjk(text: string): boolean {
+  for (const ch of text) {
+    const c = ch.codePointAt(0)!;
+    if (
+      (c >= 0x1100 && c < 0x1200) ||
+      (c >= 0x2e80 && c < 0xa000) ||
+      (c >= 0xac00 && c < 0xd7b0) ||
+      (c >= 0xf900 && c < 0xfb00) ||
+      (c >= 0xff00 && c < 0xfff0) ||
+      c >= 0x20000
+    )
+      return true;
+  }
+  return false;
+}

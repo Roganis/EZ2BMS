@@ -1,7 +1,7 @@
 // ez2bms.song.json: what a song folder knows beyond its charts - the key
 // EZ2PORT files it under, its category, whether it is charted in Classic
-// mode, its disc and eyecatch - and, as later steps add them, its plate,
-// preview and BGA.
+// mode, its title plate, disc and eyecatch - and, as later steps add them,
+// its preview and BGA.
 //
 // The charts stay complete bmson files; this file only holds what bmson has
 // no place for. Like the charts it is kept byte-stable: known members are
@@ -9,6 +9,7 @@
 // order, after them, and a value that is not what EZ2BMS expects (a category
 // of 0, say) is kept as it is and reported rather than silently changed.
 
+import { readPlateSettings, type PlateSettings } from '../publish/plate';
 import { readDiscArt, readEyecatchArt, type DiscArt, type EyecatchArt } from './art';
 
 export interface SongFile {
@@ -20,6 +21,8 @@ export interface SongFile {
   category?: unknown;
   /** Classic-mode charting (absent: on when a chart already has continuations). */
   classic?: boolean;
+  /** What the title plate says and how it looks (absent: the title in white). */
+  plate?: PlateSettings;
   /** The disc's image and crop (absent: the importer's pick from the charts; null: none). */
   disc?: DiscArt | null;
   /** The eyecatch's image and framing (absent: the importer's pick; null: none). */
@@ -30,7 +33,16 @@ export interface SongFile {
   extra: Record<string, unknown>;
 }
 
-const KNOWN = ['key', 'id', 'category', 'classic', 'disc', 'eyecatch', 'published'] as const;
+const KNOWN = [
+  'key',
+  'id',
+  'category',
+  'classic',
+  'plate',
+  'disc',
+  'eyecatch',
+  'published',
+] as const;
 
 export function newSongFile(key = ''): SongFile {
   return { key, extra: {} };
@@ -61,6 +73,14 @@ export function parseSongFile(text: string): { song: SongFile; warnings: string[
   if (o.category !== undefined) song.category = o.category;
   if (typeof o.classic === 'boolean') song.classic = o.classic;
   else if (o.classic !== undefined) song.extra.classic = o.classic;
+  if (o.plate !== undefined) {
+    const plate = readPlateSettings(o.plate);
+    if (plate) song.plate = plate;
+    else {
+      warnings.push('plate is not a plate setting EZ2BMS reads; it was kept as it is');
+      song.extra.plate = o.plate;
+    }
+  }
   for (const [k, read] of [
     ['disc', readDiscArt],
     ['eyecatch', readEyecatchArt],
@@ -88,6 +108,7 @@ export function serializeSongFile(s: SongFile): string {
   if (s.id !== undefined) out.id = s.id;
   if (s.category !== undefined) out.category = s.category;
   if (s.classic !== undefined) out.classic = s.classic;
+  if (s.plate !== undefined) out.plate = s.plate;
   if (s.disc !== undefined) out.disc = s.disc;
   if (s.eyecatch !== undefined) out.eyecatch = s.eyecatch;
   if (s.published !== undefined) out.published = s.published;

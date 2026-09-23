@@ -50,6 +50,7 @@ row is proven by a test against the vendored engine core
 | Which chart names the art | the first chart's info only                            | the first chart (in mode and tier order) that names an image                                                                  | the same when one chart names it; never empty when another does |
 | Title plate position      | baseline 23, a long title scaled down both ways        | the shipped plates' layout: baseline 22, condensed to 236 px, a subtitle on 27                                                | lines up with the game's own titles on the wheel                |
 | Plate fonts               | the machine's bold sans; a Korean title may get boxes  | Roboto Bold and Noto Sans CJK Bold, shipped                                                                                   | the same plate on every machine                                 |
+| A plate image of your own | none (the importer always renders text)                | fit to 256x32 with the importer's box average, black kept as the see-through key                                              | art made for the wheel goes in as it is                         |
 
 ## Followed from the port's platform code (not in the oracle)
 

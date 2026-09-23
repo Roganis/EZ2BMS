@@ -8,6 +8,8 @@ import {
   DISC_SIZE,
   EYECATCH_H,
   EYECATCH_W,
+  PLATE_H,
+  PLATE_W,
   centreSquare,
   eyecatchExtent,
   type ArtJob,
@@ -59,10 +61,14 @@ export function wavSeconds(b: Uint8Array): number | undefined {
 export async function canvasArt(bytes: Uint8Array, job: ArtJob): Promise<ArtPixels> {
   const img = await createImageBitmap(new Blob([bytes as BlobPart]));
   const disc = job.kind === 'disc';
-  const [w, h] = disc ? [DISC_SIZE, DISC_SIZE] : [EYECATCH_W, EYECATCH_H];
+  const [w, h] = disc
+    ? [DISC_SIZE, DISC_SIZE]
+    : job.kind === 'plate'
+      ? [PLATE_W, PLATE_H]
+      : [EYECATCH_W, EYECATCH_H];
   const from = disc
     ? (job.crop ?? centreSquare(img.width, img.height))
-    : job.mode === 'visible'
+    : job.kind === 'eyecatch' && job.mode === 'visible'
       ? eyecatchExtent(job.crop)
       : { x: 0, y: 0, w: img.width, h: img.height };
   const canvas = new OffscreenCanvas(w, h);
@@ -124,7 +130,14 @@ export function canvasPlate(spec: PlateSpec): PlatePixels {
   const d = g.getImageData(0, 0, spec.w, spec.h).data;
   const rgb = new Uint8Array(spec.w * spec.h * 3);
   for (let i = 0; i < spec.w * spec.h; i++) rgb.set(d.subarray(i * 4, i * 4 + 3), i * 3);
-  return { w: spec.w, h: spec.h, rgb, missing: [] };
+  // What the fonts would lack, as a test double: the private use area, which
+  // Roboto and Noto Sans CJK leave empty too.
+  const missing = [
+    ...new Set(
+      spec.lines.flatMap((l) => [...l.text].filter((c) => /[\u{e000}-\u{f8ff}]/u.test(c))),
+    ),
+  ];
+  return { w: spec.w, h: spec.h, rgb, missing };
 }
 
 /** `defaults` are settings used where the stored ones say nothing (the demo's game folder). */

@@ -18,7 +18,10 @@ export function songFindings(app: App): Finding[] {
       if (app.audio.loadedInfo(ch.name)?.error) missing.add(ch.name);
   }
   const art = p.art;
-  const key = `${p.sidecar.key}|${JSON.stringify(p.sidecar.category)}|${revs.join(',')}|${p.charts.map((c) => c.file + c.tier).join(',')}|${[...missing].join(',')}|${JSON.stringify(art)}`;
+  // The plate's report counts only for the plate as it is now.
+  const pc = app.art.plateCheck;
+  const plate = pc && pc.key === app.art.plateKey(p) ? pc.check : undefined;
+  const key = `${p.sidecar.key}|${JSON.stringify(p.sidecar.category)}|${revs.join(',')}|${p.charts.map((c) => c.file + c.tier).join(',')}|${[...missing].join(',')}|${JSON.stringify(art)}|${JSON.stringify(plate)}`;
   if (memo && memo.project === p && memo.key === key) return memo.findings;
   const findings = lintSong({
     key: p.sidecar.key,
@@ -26,6 +29,7 @@ export function songFindings(app: App): Finding[] {
     charts: p.charts.map((c) => ({ file: c.file, data: c.doc.data, mode: c.mode, tier: c.tier })),
     missingSounds: missing,
     art,
+    ...(plate ? { plate } : {}),
   });
   memo = { key, project: p, findings };
   return findings;

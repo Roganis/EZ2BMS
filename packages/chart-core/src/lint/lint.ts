@@ -42,6 +42,21 @@ export interface LintSong {
   missingSounds?: ReadonlySet<string>;
   /** The art a publish would use (song/art.ts songArt); checked when given. */
   art?: SongArt;
+  /** The title plate as last rendered; checked when given. */
+  plate?: PlateCheck;
+}
+
+/** What rendering the title plate found (the host renders it; lint only reads this). */
+export interface PlateCheck {
+  /** The song's title, and the title the plate shows (text plates). */
+  songTitle: string;
+  text?: string;
+  /** Characters the fonts have no glyph for. */
+  missing: string[];
+  /** Why no plate could be made (no CJK font installed, an unreadable image). */
+  error?: string;
+  /** The plate's own image, as named and as found in the folder. */
+  image?: { src: string; path: string | undefined };
 }
 
 /** EZ2PORT's limits (ez2/chart.h, ez2/ezi.h) and the original's. */
@@ -282,6 +297,24 @@ export function lintSong(s: LintSong): Finding[] {
     // The importer says the same of a bmson with no jacket (ez2/bmson.c).
     if (!s.art.disc)
       f('no-disc', 'warning', 'The song has no disc art: its disc on the wheel will be blank');
+  }
+  if (s.plate) {
+    const p = s.plate;
+    if (p.image && !p.image.path)
+      f('art-missing', 'error', `The title plate image ${p.image.src} is not in the song folder`);
+    else if (p.error) f('plate-failed', 'error', `The title plate cannot be made: ${p.error}`);
+    if (p.missing.length)
+      f(
+        'plate-glyphs',
+        'warning',
+        `The title plate's fonts have no ${p.missing.join(' ')}: they come out as boxes`,
+      );
+    if (p.text !== undefined && p.text !== p.songTitle)
+      f(
+        'plate-text',
+        'info',
+        `The title plate reads "${p.text}"; the song is titled "${p.songTitle}"`,
+      );
   }
   const meta = songMeta(s.charts);
   for (const field of meta.differs)

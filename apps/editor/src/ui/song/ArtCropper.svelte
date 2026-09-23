@@ -71,7 +71,7 @@
     const j = source?.job;
     if (!img || !j) return null;
     if (j.kind === 'disc') return j.crop ?? centreSquare(img.w, img.h);
-    return j.mode === 'visible' ? j.crop : null;
+    return j.kind === 'eyecatch' && j.mode === 'visible' ? j.crop : null;
   });
   const crop = $derived(live ?? stored);
 
