@@ -23,8 +23,16 @@ export const LANE_W: Record<LaneKind, number> = {
 
 const GAP = 2;
 const GUTTER = 70;
-const RACK_COL = 20;
 const OFF_W = 22;
+/**
+ * The background rack's proportions, BmsTWO's Classic BMS view
+ * (SequenceView.cpp: BgmSubLaneWidth 14, BgmGroupGap 8, BgmLabelHeight 16).
+ */
+export const RACK_SUB = 14;
+export const RACK_GAP = 8;
+export const RACK_LABEL = 16;
+/** The rack never takes more than this share of the window; a wider one scrolls sideways. */
+const RACK_SHARE = 0.4;
 /** The judge line, in design units above the bottom edge. */
 const JUDGE_FROM_BOTTOM = 64;
 
@@ -49,14 +57,35 @@ export interface Layout {
   offLanes: LaneGeom[];
   /** Measure numbers and BPM/STOP flags. */
   gutter: { left: number; right: number };
-  /** Background sounds, packed into sub-columns. */
-  rack: { left: number; cols: number; colWidth: number };
+  /** Background sounds: one column per sound group, split into sub-lanes; scrolls sideways. */
+  rack: RackGeom;
   /**
    * With a game skin: the design x drawn at field.left and the skin's judge
    * line, so skin coordinates map to the screen as
    * x = field.left + (dx - x0) * scale, y = judgeY + (dy - skinJudgeY) * scale.
    */
   design: { x0: number; judgeY: number } | null;
+}
+
+export interface RackGroupGeom {
+  key: string;
+  /** Screen x of the group's first sub-lane (after scrolling). */
+  left: number;
+  width: number;
+  subLanes: number;
+}
+
+export interface RackGeom {
+  /** The visible window onto the rack, screen pixels. */
+  left: number;
+  width: number;
+  /** The whole rack's width, and how far it is scrolled (screen pixels). */
+  content: number;
+  scroll: number;
+  /** One sub-lane's width, and the label strip's height. */
+  sub: number;
+  labelH: number;
+  groups: RackGroupGeom[];
 }
 
 /** Lane boxes from the game's skin, design units. */
@@ -73,7 +102,10 @@ export interface LayoutInput {
   columns: readonly Column[];
   /** Lanes that hold notes but are not in the mode. */
   offModeXs: readonly number[];
-  rackCols: number;
+  /** The rack's groups, in order, and their sub-lane counts. */
+  rackGroups: readonly { key: string; subLanes: number }[];
+  /** How far the rack is scrolled, design units (clamped). */
+  rackScroll?: number;
   /** 0..1: how much of the rack and off-mode gutter to show (Play hides them). */
   extras: number;
   /** Lay the lanes out as the game's skin does (every column must have a box). */
@@ -88,7 +120,12 @@ export function computeLayout(i: LayoutInput): Layout {
     ? Math.max(...i.columns.map((c) => boxes.get(c.x)!.x + boxes.get(c.x)!.w)) - x0
     : i.columns.reduce((w, c) => w + LANE_W[c.kind] + GAP, -GAP);
   const offUnits = i.offModeXs.length * (OFF_W + GAP) * i.extras;
-  const rackUnits = (i.rackCols * RACK_COL + (i.rackCols ? 12 : 0)) * i.extras;
+  const groups = i.rackGroups;
+  const contentUnits = groups.length
+    ? groups.reduce((w, g) => w + g.subLanes * RACK_SUB, 0) + RACK_GAP * (groups.length - 1)
+    : 0;
+  const shownUnits = Math.min(contentUnits, (RACK_SHARE * i.width) / scale);
+  const rackUnits = (shownUnits + (groups.length ? 12 : 0)) * i.extras;
   const need = GUTTER + laneUnits + 12 + offUnits + rackUnits + 16;
   // Shrink to fit a narrow window rather than overflow it.
   const s = Math.min(scale, i.width / Math.max(1, need));
@@ -138,7 +175,7 @@ export function computeLayout(i: LayoutInput): Layout {
     lanes,
     offLanes,
     gutter: { left: Math.max(0, fieldLeft - GUTTER * s), right: fieldLeft - 6 * s },
-    rack: { left: x, cols: i.rackCols, colWidth: RACK_COL * s * i.extras },
+    rack: rackGeom(x, s * i.extras, groups, contentUnits, shownUnits, i.rackScroll ?? 0),
     design: boxes ? { x0, judgeY: i.skin!.judgeY } : null,
   };
 }
@@ -179,26 +216,29 @@ export class Viewport {
   }
 }
 
-/**
- * Background sounds into as few side-by-side sub-columns as possible: a sound
- * takes the first sub-column free at its position. `extent` is the minimum
- * height a chip takes, in pulses, so short sounds do not overlap visually.
- */
-export function packRack(
-  notes: readonly { id: number; y: number; l: number }[],
-  extent: number,
-): Map<number, number> {
-  const ends: number[] = [];
-  const col = new Map<number, number>();
-  const sorted = [...notes].sort((a, b) => a.y - b.y || a.id - b.id);
-  for (const n of sorted) {
-    const end = n.y + Math.max(n.l, extent);
-    let c = ends.findIndex((e) => e <= n.y);
-    if (c < 0) {
-      c = ends.length;
-      ends.push(end);
-    } else ends[c] = end;
-    col.set(n.id, c);
-  }
-  return col;
+function rackGeom(
+  left: number,
+  k: number,
+  groups: readonly { key: string; subLanes: number }[],
+  contentUnits: number,
+  shownUnits: number,
+  scrollUnits: number,
+): RackGeom {
+  const width = shownUnits * k;
+  const content = contentUnits * k;
+  const scroll = Math.max(0, Math.min(content - width, scrollUnits * k));
+  let at = left - scroll;
+  return {
+    left,
+    width,
+    content,
+    scroll,
+    sub: RACK_SUB * k,
+    labelH: RACK_LABEL * k,
+    groups: groups.map((g) => {
+      const geom = { key: g.key, left: at, width: g.subLanes * RACK_SUB * k, subLanes: g.subLanes };
+      at += geom.width + RACK_GAP * k;
+      return geom;
+    }),
+  };
 }

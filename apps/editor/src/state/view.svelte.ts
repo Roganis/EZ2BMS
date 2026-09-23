@@ -34,6 +34,8 @@ export class View {
   stepInput = $state(false);
   /** Lane under the pointer (bmson x), for the lane header glow. */
   hoverLane = $state<number | null>(null);
+  /** How far the background rack is scrolled sideways, design units. */
+  rackScroll = $state(0);
 
   /** Pixels per beat in design units, for the current mode. */
   get designPxPerBeat(): number {

@@ -1,6 +1,6 @@
 import { columnsFor, modeDef } from '@ez2bms/chart-core';
 import { describe, expect, it } from 'vitest';
-import { computeLayout, laneAtX, packRack, Viewport } from './geometry';
+import { computeLayout, laneAtX, RACK_GAP, RACK_SUB, Viewport } from './geometry';
 
 const layout = (
   mode: Parameters<typeof modeDef>[0],
@@ -14,7 +14,10 @@ const layout = (
     height: h,
     columns: columnsFor(modeDef(mode), side),
     offModeXs: [],
-    rackCols: 3,
+    rackGroups: [
+      { key: 'drums', subLanes: 2 },
+      { key: 'pad', subLanes: 1 },
+    ],
     extras,
   });
 
@@ -35,7 +38,7 @@ describe('playfield geometry', () => {
             );
           }
           expect(l.gutter.left).toBeGreaterThanOrEqual(0);
-          expect(l.rack.left + l.rack.cols * l.rack.colWidth).toBeLessThanOrEqual(w + 1);
+          expect(l.rack.left + l.rack.width).toBeLessThanOrEqual(w + 1);
           expect(laneAtX(l, l.lanes[0]!.left + 1)?.x).toBe(l.lanes[0]!.x);
         }
       }
@@ -57,16 +60,25 @@ describe('playfield geometry', () => {
     expect(hi).toBeGreaterThan(960);
   });
 
-  it('packs background sounds into the fewest sub-columns', () => {
-    const cols = packRack(
-      [
-        { id: 1, y: 0, l: 0 },
-        { id: 2, y: 0, l: 0 },
-        { id: 3, y: 60, l: 0 },
-        { id: 4, y: 10, l: 200 },
-      ],
-      60,
-    );
-    expect([cols.get(1), cols.get(2), cols.get(4), cols.get(3)]).toEqual([0, 1, 2, 0]);
+  it('lays rack groups side by side and scrolls a rack wider than its share', () => {
+    const groups = Array.from({ length: 40 }, (_, i) => ({ key: `g${i}`, subLanes: 1 + (i % 3) }));
+    const base = {
+      width: 1200,
+      height: 480,
+      columns: columnsFor(modeDef('5k'), 'P1'),
+      offModeXs: [],
+    };
+    const l = computeLayout({ ...base, rackGroups: groups, extras: 1 });
+    const g = l.rack.groups;
+    expect(g[1]!.left).toBeCloseTo(g[0]!.left + (1 * RACK_SUB + RACK_GAP) * l.scale, 9);
+    expect(g[0]!.width).toBeCloseTo(RACK_SUB * l.scale, 9);
+    // Forty groups do not fit in 40% of the window: it shows a part and scrolls.
+    expect(l.rack.width).toBeLessThanOrEqual(0.4 * 1200 + 1);
+    expect(l.rack.content).toBeGreaterThan(l.rack.width);
+    const far = computeLayout({ ...base, rackGroups: groups, rackScroll: 1e9, extras: 1 });
+    expect(far.rack.scroll).toBeCloseTo(far.rack.content - far.rack.width, 6);
+    const last = far.rack.groups.at(-1)!;
+    expect(last.left + last.width).toBeCloseTo(far.rack.left + far.rack.width, 6);
+    expect(computeLayout({ ...base, rackGroups: [], extras: 1 }).rack.width).toBe(0);
   });
 });

@@ -182,12 +182,22 @@
       hidden: app.play.hidden,
       live: v.playing,
       skin: app.skin.current,
+      classic: false,
+      brush: v.brush,
+      rackScroll: v.rackScroll,
     });
   });
 
   function onWheel(e: WheelEvent) {
     e.preventDefault();
     if (!renderer) return;
+    // Shift+wheel over the rack scrolls it sideways (it can be wider than its share).
+    if (e.shiftKey && renderer.overRack(e.offsetX)) {
+      const d = (e.deltaX || e.deltaY) * (e.deltaMode === 1 ? 40 : 1);
+      const scale = renderer.currentLayout?.scale ?? 1;
+      v.rackScroll = Math.max(0, Math.min(renderer.rackMaxScroll, v.rackScroll + d / scale));
+      return;
+    }
     if (e.ctrlKey || e.metaKey) {
       const f = Math.exp(-e.deltaY * 0.0015);
       if (v.mode === 'play')

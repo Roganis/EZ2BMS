@@ -5,10 +5,14 @@
 // and drawn from pooled sprites, so a 50k-note chart costs what is on screen.
 
 import {
+  buildGroups,
+  groupKeyOf,
+  type ChannelId,
   type ChartDoc,
   type Column,
   type NoteId,
   type NoteRec,
+  type SoundGroup,
   type TimingMap,
 } from '@ez2bms/chart-core';
 import { Application, Container, FillGradient, Graphics, type Sprite } from 'pixi.js';
@@ -18,7 +22,6 @@ import { GameSkinTextures } from './gameskin';
 import {
   computeLayout,
   laneAtX,
-  packRack,
   Viewport,
   type LaneGeom,
   type Layout,
@@ -52,6 +55,12 @@ export interface FieldState {
   live: boolean;
   /** The game's own skin for this mode and side; null draws the neon one. */
   skin: GameSkin | null;
+  /** Classic mode: the rack keeps keyed notes too (as outlines), so keying does not reshuffle it. */
+  classic: boolean;
+  /** The picked sound; its group's rack column is lit. */
+  brush: ChannelId | null;
+  /** How far the rack is scrolled sideways, design units. */
+  rackScroll: number;
 }
 
 const HOLD_LABEL: Record<number, string> = {
@@ -82,11 +91,15 @@ export class PlayfieldRenderer {
   private raf = 0;
   private shownPx = 0;
   private extras = 1;
-  private rack: { rev: number; cols: Map<number, number>; n: number } = {
-    rev: -1,
-    cols: new Map(),
-    n: 0,
-  };
+  /** The rack's groups and where each note sits in them, rebuilt when the chart changes. */
+  private rack: {
+    rev: number;
+    classic: boolean;
+    at: number;
+    buildMs: number;
+    groups: SoundGroup[];
+    place: Map<NoteId, { g: number; sub: number }>;
+  } = { rev: -1, classic: false, at: 0, buildMs: 0, groups: [], place: new Map() };
   /** Rack chips as last drawn, for hit testing. */
   private rackHits: { id: NoteId; x: number; y: number; w: number; h: number }[] = [];
   /** How long the last draws took (JS only, ms), for the performance log. */
@@ -114,6 +127,8 @@ export class PlayfieldRenderer {
   private readonly headPool = new SpritePool(this.notes);
   private readonly ringPool = new SpritePool(this.rings);
   private readonly chipPool = new SpritePool(this.chips);
+  private readonly chipMarks = new Container();
+  private readonly crossPool = new SpritePool(this.chipMarks);
   private readonly measurePool = new SpritePool(this.measures);
   private readonly bedPool = new SpritePool(this.bed);
   private readonly beamPool = new SpritePool(this.beams);
@@ -138,6 +153,12 @@ export class PlayfieldRenderer {
     fontFamily: 'sans-serif',
     fontSize: 9,
     fill: 0xffffff,
+  });
+  private readonly groupText = new TextPool(this.text, {
+    fontFamily: 'sans-serif',
+    fontSize: 10,
+    fill: 0xffffff,
+    fontWeight: 'bold',
   });
 
   static async create(host: HTMLElement): Promise<PlayfieldRenderer> {
@@ -164,6 +185,7 @@ export class PlayfieldRenderer {
       r.beams,
       r.holds,
       r.chips,
+      r.chipMarks,
       r.notes,
       r.glow,
       r.rings,
@@ -267,12 +289,14 @@ export class PlayfieldRenderer {
   /** Whether a screen x is over the background rack. */
   overRack(px: number): boolean {
     const l = this.layout;
-    return (
-      !!l &&
-      l.rack.cols > 0 &&
-      px >= l.rack.left - 6 &&
-      px <= l.rack.left + l.rack.cols * l.rack.colWidth + 6
-    );
+    return !!l && l.rack.width > 0 && px >= l.rack.left - 6 && px <= l.rack.left + l.rack.width + 6;
+  }
+
+  /** How far the rack can scroll, design units (0 when it fits). */
+  get rackMaxScroll(): number {
+    const l = this.layout;
+    if (!l || !l.rack.width || !this.extras) return 0;
+    return (l.rack.content - l.rack.width) / (l.scale * this.extras);
   }
 
   /** Notes whose heads fall inside a screen rectangle. */
@@ -335,17 +359,20 @@ export class PlayfieldRenderer {
       .laneKeys()
       .filter((x) => x !== 0 && !inMode.has(x))
       .sort((a, b) => a - b);
-    if (this.rack.rev !== s.rev) {
-      const bgm = doc.index.lane(0);
-      const cols = packRack(bgm, res / 2);
-      this.rack = { rev: s.rev, cols, n: bgm.length ? Math.max(...cols.values()) + 1 : 0 };
+    if (this.rack.rev !== s.rev || this.rack.classic !== s.classic) {
+      // A big chart's rack takes a few ms to regroup; while a drag streams
+      // changes, regroup at most every 150 ms (and once more when it settles).
+      const now = performance.now();
+      if (this.rack.buildMs > 8 && now - this.rack.at < 150) animating = true;
+      else this.buildRack(s, now);
     }
     const l = computeLayout({
       width: W,
       height: H,
       columns: s.columns,
       offModeXs,
-      rackCols: Math.min(this.rack.n, 12),
+      rackGroups: this.rack.groups,
+      rackScroll: s.rackScroll,
       extras: this.extras,
       skin: game?.geom,
     });
@@ -408,12 +435,59 @@ export class PlayfieldRenderer {
     }
     for (const lane of l.offLanes)
       g.rect(lane.left, 0, lane.width, H).fill({ color: 0xffffff, alpha: 0.02 });
-    if (l.rack.cols && this.extras > 0.02) {
-      g.rect(l.rack.left - 4, 0, l.rack.cols * l.rack.colWidth + 8, H).fill({
-        color: 0xffffff,
-        alpha: 0.015 * this.extras,
-      });
+    this.groupText.begin();
+    if (l.rack.width && this.extras > 0.02) {
+      const r = l.rack;
+      const brush = s.brush !== null ? s.doc.channel(s.brush) : undefined;
+      const lit = brush ? groupKeyOf(brush.name) : undefined;
+      g.rect(r.left - 4, 0, r.width + 8, H).fill({ color: 0xffffff, alpha: 0.015 * this.extras });
+      for (const grp of r.groups) {
+        const x0 = Math.max(grp.left, r.left);
+        const x1 = Math.min(grp.left + grp.width, r.left + r.width);
+        if (x1 <= x0) continue;
+        const on = grp.key === lit;
+        g.rect(x0, 0, x1 - x0, H).fill({
+          color: on ? NEON : 0xffffff,
+          alpha: (on ? 0.07 : 0.02) * this.extras,
+        });
+        // Faint lines between sub-lanes; the group label strip on top.
+        for (let k = 1; k < grp.subLanes; k++) {
+          const x = grp.left + k * r.sub;
+          if (x > x0 && x < x1)
+            g.rect(x, r.labelH, 1, H - r.labelH).fill({
+              color: 0xffffff,
+              alpha: 0.04 * this.extras,
+            });
+        }
+        g.rect(x0, 0, x1 - x0, r.labelH).fill({
+          color: on ? NEON : 0x1a2034,
+          alpha: (on ? 0.35 : 0.9) * this.extras,
+        });
+        if (x1 - x0 >= 18) {
+          const t = this.groupText.next(grp.key.slice(grp.key.lastIndexOf('/') + 1));
+          t.scale.set(Math.min(1.2, l.scale * 0.7));
+          t.alpha = this.extras;
+          t.tint = on ? 0xffffff : 0xa9b3d6;
+          // Cut long names to the column rather than let them run over the next.
+          const room = x1 - x0 - 4;
+          if (t.width > room) {
+            const name = t.text;
+            const keep = Math.max(1, Math.floor((name.length * room) / t.width) - 1);
+            t.text = `${name.slice(0, keep)}…`;
+          }
+          t.position.set(x0 + 2, (r.labelH - t.height) / 2);
+        }
+      }
+      if (r.content > r.width) {
+        // A scrollbar under the labels shows where the window onto the rack is.
+        const k = r.width / r.content;
+        g.rect(r.left + r.scroll * k, r.labelH, r.width * k, 2).fill({
+          color: NEON,
+          alpha: 0.6 * this.extras,
+        });
+      }
     }
+    this.groupText.end();
     // Lane labels under the judge line.
     this.laneText.begin();
     for (const lane of [...l.lanes, ...l.offLanes]) {
@@ -443,7 +517,7 @@ export class PlayfieldRenderer {
     const right = Math.max(
       l.field.right + 4,
       ...l.offLanes.map((o) => o.left + o.width),
-      l.rack.left + l.rack.cols * l.rack.colWidth,
+      l.rack.left + l.rack.width,
     );
     const edit = this.extras;
     // Snap lines (Edit only, when they are far enough apart to read).
@@ -786,6 +860,33 @@ export class PlayfieldRenderer {
     }
   }
 
+  /** Group the chart's sounds for the rack (BmsTWO's Classic BMS layout). */
+  private buildRack(s: FieldState, now: number): void {
+    const doc = s.doc;
+    const t0 = performance.now();
+    const notesOf = s.classic
+      ? (ch: ChannelId) => doc.index.channel(ch)
+      : (ch: ChannelId) => doc.index.channel(ch).filter((n) => n.x === 0);
+    // A chip is drawn a few pixels tall: half a beat keeps neighbours apart at
+    // an ordinary zoom (BmsTWO counts a sound as one tick long).
+    const groups = buildGroups(doc.data.channels, notesOf, {
+      minExtent: doc.resolution / 2,
+      keepEmpty: false,
+    });
+    const place = new Map<NoteId, { g: number; sub: number }>();
+    groups.forEach((grp, g) => {
+      for (const p of grp.placements) place.set(p.id, { g, sub: p.sub });
+    });
+    this.rack = {
+      rev: s.rev,
+      classic: s.classic,
+      at: now,
+      buildMs: performance.now() - t0,
+      groups,
+      place,
+    };
+  }
+
   private drawRack(
     s: FieldState,
     l: Layout,
@@ -795,37 +896,54 @@ export class PlayfieldRenderer {
     p1: number,
   ): void {
     this.chipPool.begin();
-    if (l.rack.cols && this.extras > 0.02) {
-      const bgm = s.doc.index.inRange(0, p0, p1);
-      const labels = bgm.length < 400 && vp.pxPerPulse * s.doc.resolution >= 70;
-      for (const n of bgm) {
-        const col = this.rack.cols.get(n.id) ?? 0;
-        if (col >= l.rack.cols) continue;
-        const ch = s.doc.channel(n.ch);
+    this.crossPool.begin();
+    this.rackHits = [];
+    const r = l.rack;
+    if (r.width && this.extras > 0.02) {
+      const notes = s.doc.index.inRange(0, p0, p1);
+      const keyed: NoteRec[] = [];
+      if (s.classic)
+        for (const x of s.doc.index.laneKeys())
+          if (x !== 0) keyed.push(...s.doc.index.inRange(x, p0, p1));
+      const labels = notes.length < 400 && vp.pxPerPulse * s.doc.resolution >= 70;
+      const chipW = Math.max(4, r.sub - 3);
+      const chipH = tex.chip.height - 2 * PAD;
+      const draw = (n: NoteRec, ghost: boolean) => {
+        const at = this.rack.place.get(n.id);
+        const grp = at && r.groups[at.g];
+        if (!grp) return;
+        const x = grp.left + at.sub * r.sub + 1;
+        // Only what is inside the rack's window (it scrolls).
+        if (x < r.left - 0.5 || x + chipW > r.left + r.width + 0.5) return;
         const y = vp.yOf(n.y);
+        if (y < r.labelH) return;
+        const ch = s.doc.channel(n.ch);
         const c = this.chipPool.next(tex.chip);
-        const x = l.rack.left + col * l.rack.colWidth;
-        c.position.set(x - PAD, y - (tex.chip.height - 2 * PAD) / 2 - PAD);
-        c.width = Math.max(4, l.rack.colWidth - 3) + 2 * PAD;
-        const chipH = tex.chip.height - 2 * PAD;
-        this.rackHits.push({
-          id: n.id,
-          x,
-          y: y - chipH / 2,
-          w: Math.max(4, l.rack.colWidth - 3),
-          h: chipH,
-        });
-        c.tint = hsl(channelHue(ch?.name ?? ''), 0.8, 0.62);
-        c.alpha = (s.selection.has(n.id) ? 1 : 0.8) * this.extras;
-        if (s.selection.has(n.id)) c.tint = 0xffffff;
+        c.position.set(x - PAD, y - chipH / 2 - PAD);
+        c.width = chipW + 2 * PAD;
+        const sel = s.selection.has(n.id);
+        c.tint = sel ? 0xffffff : hsl(channelHue(ch?.name ?? ''), 0.8, 0.62);
+        // A keyed note (Classic) stays in its place as a faint outline.
+        c.alpha = (ghost ? 0.22 : sel ? 1 : 0.8) * this.extras;
+        if (ghost) return;
+        this.rackHits.push({ id: n.id, x, y: y - chipH / 2, w: chipW, h: chipH });
+        if (n.c) {
+          const m = this.crossPool.next(tex.cross);
+          const size = tex.cross.height - 2 * PAD;
+          m.position.set(x + chipW - size - PAD, y - size / 2 - PAD);
+          m.alpha = this.extras;
+        }
         if (labels) {
           const t = this.chipText.next((ch?.name ?? '?').replace(/\.[^.]+$/, '').slice(0, 6));
           t.alpha = 0.75 * this.extras;
           t.position.set(x + 1, y - t.height - 3);
         }
-      }
+      };
+      for (const n of keyed) draw(n, true);
+      for (const n of notes) draw(n, false);
     }
     this.chipPool.end();
+    this.crossPool.end();
     this.chipText.end();
   }
 

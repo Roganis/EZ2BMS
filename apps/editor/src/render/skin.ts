@@ -31,6 +31,8 @@ export interface SkinTextures {
   body: Map<string, Texture>;
   ring: Map<string, Texture>;
   chip: Texture;
+  /** A small red cross: a background continuation (BmsTWO marks them the same way). */
+  cross: Texture;
   noteH: number;
 }
 
@@ -61,6 +63,7 @@ export class NeonSkin {
       body: new Map(),
       ring: new Map(),
       chip: this.chip(scale),
+      cross: this.cross(scale),
       noteH,
     };
     for (const l of lanes) {
@@ -145,11 +148,23 @@ export class NeonSkin {
     return this.bake(g, w, h);
   }
 
+  private cross(scale: number): Texture {
+    const g = new Graphics();
+    const r = Math.max(2.5, 3 * scale);
+    g.moveTo(PAD, PAD)
+      .lineTo(PAD + 2 * r, PAD + 2 * r)
+      .moveTo(PAD + 2 * r, PAD)
+      .lineTo(PAD, PAD + 2 * r)
+      .stroke({ width: Math.max(1.5, 1.5 * scale), color: 0xff3b3b, alpha: 1 });
+    return this.bake(g, 2 * r, 2 * r);
+  }
+
   destroy(): void {
     if (!this.cache) return;
     for (const m of [this.cache.head, this.cache.body, this.cache.ring])
       for (const t of m.values()) t.destroy(true);
     this.cache.chip.destroy(true);
+    this.cache.cross.destroy(true);
     this.cache = undefined;
   }
 }
