@@ -9,6 +9,7 @@
   import CommandPalette from './CommandPalette.svelte';
   import Editor from './Editor.svelte';
   import NewChartDialog from './NewChartDialog.svelte';
+  import PublishDialog from './PublishDialog.svelte';
   import StartScreen from './StartScreen.svelte';
   import Toasts from './Toasts.svelte';
 
@@ -22,6 +23,8 @@
     void app.init();
     const onKey = (e: KeyboardEvent) => {
       if (app.view.paletteOpen && e.key !== 'Escape') return;
+      // The Publish dialog takes its own keys.
+      if (app.publish.open) return;
       app.commands.handleKey(e, app.view.covered);
     };
     const onUnload = (e: BeforeUnloadEvent) => {
@@ -43,6 +46,9 @@
 {/if}
 {#if app.project && app.view.newChartOpen}
   <NewChartDialog onclose={() => (app.view.newChartOpen = false)} />
+{/if}
+{#if app.project && app.publish.open}
+  <PublishDialog />
 {/if}
 <CommandPalette />
 <Toasts />

@@ -25,7 +25,11 @@ test('the demo song is ready, and Publish writes a whole EZ2PORT package', async
     (window as unknown as W).__ez2bms.settings.set('songsRoot', '/ez2port/songs'),
   );
   await page.keyboard.press('Control+Shift+P');
-  await expect(page.getByText(/Published neonparade/)).toBeVisible();
+  // The dialog says where it goes and what it writes, before anything is written.
+  await expect(page.getByTestId('publish-owner')).toHaveText('New');
+  await expect(page.getByTestId('publish-charts')).toContainText('streetmix1p-neonparade.ez');
+  await page.getByTestId('publish-go').click();
+  await expect(page.getByTestId('publish-done')).toContainText(/Published neonparade/);
   const files = await page.evaluate(() =>
     (window as unknown as W).__ez2bms.backend.list('/ez2port/songs/neonparade'),
   );
@@ -63,8 +67,21 @@ test('an error blocks Publish and the Issues tab says why', async ({ page }) => 
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the ?e2e hook is the live App */
 const ROOT = '/ez2port/songs';
-async function publish(page: Page) {
+/** Open the Publish dialog and wait for its review (or what stops it). */
+async function review(page: Page) {
   await page.keyboard.press('Control+Shift+P');
+  await expect(page.getByTestId('publish-preparing')).toHaveCount(0);
+}
+
+/** Publish through the dialog; returns what it said, and closes it. */
+async function publish(page: Page): Promise<string> {
+  await review(page);
+  await page.getByTestId('publish-go').click();
+  const done = page.getByTestId('publish-done');
+  await expect(done).toContainText(/Published neonparade/);
+  const text = (await done.textContent()) ?? '';
+  await page.getByTestId('publish-close').click();
+  return text;
 }
 
 const list = (page: Page, dir: string): Promise<string[]> =>
@@ -95,7 +112,6 @@ test('publishing again keeps the scores of unchanged charts and backs up the old
 }) => {
   await withRoot(page);
   await publish(page);
-  await expect(page.getByText(/Published neonparade/)).toBeVisible();
   const ini = await page.evaluate(
     (root) =>
       (window as unknown as { __ez2bms: any }).__ez2bms.backend.readText(
@@ -108,8 +124,12 @@ test('publishing again keeps the scores of unchanged charts and backs up the old
   await put(page, `${ROOT}/neonparade/rank_StreetMix_neonparade.bin`, 'nm scores');
   await put(page, `${ROOT}/neonparade/rank_7StreetMix_neonparade-hd.bin`, 'hd scores');
 
-  await publish(page);
-  await expect(page.getByText(/kept 2 ranking tables/)).toBeVisible();
+  // The dialog says, before writing, which scores stay.
+  await review(page);
+  await expect(page.getByTestId('publish-owner')).toHaveText('Update');
+  await expect(page.getByTestId('publish-charts').locator('[data-scores=kept]')).toHaveCount(2);
+  await page.keyboard.press('Escape');
+  expect(await publish(page)).toMatch(/kept 2 ranking tables/);
   expect(await list(page, `${ROOT}/neonparade`)).toContain('rank_StreetMix_neonparade.bin');
   expect(await list(page, ROOT)).toEqual(['.ez2bms-backup', 'neonparade']);
 
@@ -123,8 +143,12 @@ test('publishing again keeps the scores of unchanged charts and backs up the old
       tx.insertNotes([{ id: 999_999, ch: doc.data.channels[0].id, x: 11, y, l: 0, c: false }]),
     );
   });
-  await publish(page);
-  await expect(page.getByText(/kept 1 ranking table, reset 1 for changed charts/)).toBeVisible();
+  await review(page);
+  await expect(page.getByTestId('publish-charts').locator('[data-scores=reset]')).toContainText(
+    'reset',
+  );
+  await page.keyboard.press('Escape');
+  expect(await publish(page)).toMatch(/kept 1 ranking table, reset 1 for changed charts/);
   const names = await list(page, `${ROOT}/neonparade`);
   expect(names).toContain('rank_7StreetMix_neonparade-hd.bin');
   expect(names).not.toContain('rank_StreetMix_neonparade.bin');
@@ -137,11 +161,14 @@ test("another song's package is only replaced when you say so", async ({ page })
     `${ROOT}/neonparade/song.ini`,
     '[Song]\nKey = neonparade\nConverter = bmson2ez\n',
   );
-  await publish(page);
-  await expect(page.getByText(/is another song's package/)).toBeVisible();
+  await review(page);
+  await expect(page.getByText(/is another song's package/).first()).toBeVisible();
+  // Only its key, typed, replaces it.
+  await expect(page.getByTestId('publish-go')).toBeDisabled();
   expect(await list(page, `${ROOT}/neonparade`)).toEqual(['song.ini']);
-  await page.getByRole('button', { name: 'Replace', exact: true }).click();
-  await expect(page.getByText(/Published neonparade/)).toBeVisible();
+  await page.getByTestId('publish-confirm-key').fill('neonparade');
+  await page.getByTestId('publish-go').click();
+  await expect(page.getByTestId('publish-done')).toContainText(/Published neonparade/);
   expect(await list(page, `${ROOT}/.ez2bms-backup/neonparade`)).toEqual(['song.ini']);
 });
 
@@ -152,21 +179,22 @@ test('the key of a song the game ships is refused', async ({ page }) => {
     a.settings.set('gameRoot', '/game');
   });
   await put(page, '/game/Sound/NEONPARADE/placeholder.txt', 'x');
-  await publish(page);
+  await review(page);
   await expect(page.getByText(/key of a song the game ships/)).toBeVisible();
+  await expect(page.getByTestId('publish-go')).toBeDisabled();
   expect(await list(page, ROOT)).toEqual([]);
 });
 
 test('after a key change, the old package can be taken off the wheel', async ({ page }) => {
   await withRoot(page);
   await publish(page);
-  await expect(page.getByText(/Published neonparade/)).toBeVisible();
   await page.evaluate(() => {
     (window as unknown as { __ez2bms: any }).__ez2bms.project.sidecar.key = 'neonparty';
   });
-  await publish(page);
+  await review(page);
+  await page.getByTestId('publish-go').click();
   await expect(page.getByText(/still in the songs folder as "neonparade"/)).toBeVisible();
-  await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  await page.getByTestId('publish-retire').click();
   await expect(page.getByText(/Removed neonparade/)).toBeVisible();
   expect(await list(page, ROOT)).toEqual(['.ez2bms-backup', 'neonparty']);
 });

@@ -129,7 +129,7 @@ pnpm tauri dev          # the desktop app
 - [x] M3.8 The song on the wheel: disc, swing, rail, preview dwell and eyecatch where EZ2PORT puts them, over your game's own select masks
 - [x] M3.9 BGA: a movie EZ2PORT's build can decode (read from its headers), started on the chart's clock, previewed and published
 - [x] M3.10 Issues grouped and filtered, with quick fixes (one undo step per chart, "Fix all" undone in all); F5 refuses a chart with errors
-- [ ] M3.11 Publish dialog
+- [x] M3.11 Publish dialog: destination and whose folder it is, each chart's scores kept or reset, the art from the very bytes, then written at once
 - [ ] M3.12 Docs, performance, end-to-end
 
 ### Later

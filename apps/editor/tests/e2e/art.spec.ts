@@ -67,7 +67,9 @@ test('a dragged disc crop is saved, and Publish writes both pieces of art', asyn
   );
   await page.keyboard.press('Escape');
   await page.keyboard.press('Control+Shift+P');
-  await expect(page.getByText(/Published neonparade/)).toBeVisible();
+  await page.getByTestId('publish-go').click();
+  await expect(page.getByTestId('publish-done')).toContainText(/Published neonparade/);
+  await page.getByTestId('publish-close').click();
   const out = await page.evaluate(async () => {
     const a = (window as unknown as W).__ez2bms;
     const dir = '/ez2port/songs/neonparade';

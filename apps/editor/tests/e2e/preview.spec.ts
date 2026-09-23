@@ -95,7 +95,9 @@ test('an audio file can be the preview, and Publish renders it', async ({ page }
   );
   await page.keyboard.press('Escape');
   await page.keyboard.press('Control+Shift+P');
-  await expect(page.getByText(/Published neonparade/)).toBeVisible();
+  await page.getByTestId('publish-go').click();
+  await expect(page.getByTestId('publish-done')).toContainText(/Published neonparade/);
+  await page.getByTestId('publish-close').click();
   const out = await page.evaluate(async () => {
     const a = (window as unknown as W).__ez2bms;
     const job = a.preview.packageJob(a.project);

@@ -1,4 +1,5 @@
-// Publish into the real songs folder, safely.
+// Publish into the real songs folder, safely: prepared first, written once
+// confirmed (the Publish dialog shows the preparation).
 //
 // Before writing, the target is inspected: a package with the key of a song
 // the game ships would take that song over in every mode (every resolver in
@@ -9,68 +10,90 @@
 // wrote into the package are kept for every chart that did not change.
 
 import {
+  decodeAbm,
   keptRankings,
+  modeNames,
   packageOwner,
   rankedChartFiles,
   rankingFile,
   readSongIni,
+  type Finding,
+  type ModeId,
+  type PackageOwner,
+  type PackagePlan,
+  type Tier,
 } from '@ez2bms/chart-core';
-import { joinPath, type Inspection } from '../bridge';
+import { joinPath, type Inspection, type PackageSpec } from '../bridge';
 import type { App } from '../state/app.svelte';
-import { ask, toast } from '../state/toasts.svelte';
 import { buildPackage } from './package';
+import { songFindings } from './lint';
 
-const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+const PUBLISH_RATE = 44100;
 
-export async function publishSong(app: App, root: string): Promise<void> {
+export const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+
+/** A package picture, decoded from the very bytes Publish writes. */
+export interface Thumb {
+  w: number;
+  h: number;
+  rgba: Uint8Array;
+}
+
+export interface ChartRow {
+  mode: ModeId;
+  tier: Tier;
+  label: string;
+  level: number;
+  file: string;
+  /** What EZ2PORT's scores for it become: none yet, kept (unchanged), reset (changed). */
+  scores: 'none' | 'kept' | 'reset';
+}
+
+/** Everything a publish would do, worked out before anything is written. */
+export interface Review {
+  root: string;
+  key: string;
+  seen: Inspection;
+  owner: PackageOwner;
+  /** What lint still says (nothing that stops a publish). */
+  warnings: Finding[];
+  spec: PackageSpec;
+  plan: PackagePlan;
+  charts: ChartRow[];
+  /** Ranking tables carried over, and those reset with their changed chart. */
+  carry: string[];
+  reset: string[];
+  art: { plate?: Thumb; disc?: Thumb; eyecatch?: Thumb };
+  preview?: { fromMs: number; lengthMs: number; file?: string };
+  bga?: { file: string; startMs: number; src: string };
+  keysounds: { count: number; bytes: number };
+}
+
+function thumb(abm: Uint8Array | undefined): Thumb | undefined {
+  if (!abm) return undefined;
+  const img = decodeAbm(abm, { colorKey: false });
+  return { w: img.width, h: img.height, rgba: img.rgba };
+}
+
+/**
+ * Work out what publishing to `root` would do: build the package (the art
+ * rendered, the preview's job), inspect the target, decide whose it is and
+ * which scores survive. Nothing is written.
+ */
+export async function preparePublish(app: App, root: string): Promise<Review> {
   const p = app.project!;
   // A song id tells this song's packages from anyone else's (song.ini [EZ2BMS]).
   p.sidecar.id ??= crypto.randomUUID();
-  await p.saveAll();
-  const { spec } = buildPackage(app, {
-    art: await app.art.packageArt(p),
-    preview: app.preview.packageJob(p),
-  });
+  const art = await app.art.packageArt(p);
+  const previewJob = app.preview.packageJob(p);
+  const { spec, plan } = buildPackage(app, { art, preview: previewJob });
   const key = spec.key;
   const seen = await app.backend.port.inspect(root, key, app.settings.data.gameRoot);
-  if (seen.shipped)
-    throw new Error(
-      `"${key}" is the key of a song the game ships: EZ2PORT would play this package in its place everywhere. Choose another key.`,
-    );
   const owner = packageOwner(
     { exists: !!seen.folder, songIni: seen.song_ini ?? undefined },
     p.sidecar.id,
     readSongIni,
   );
-  const go = () =>
-    write(app, root, spec, seen).catch((e: unknown) =>
-      toast(`Publish failed: ${e instanceof Error ? e.message : String(e)}`, 'error'),
-    );
-  if (owner === 'foreign') {
-    ask(
-      `${seen.folder} in the songs folder is another song's package. Replace it? (It is kept in .ez2bms-backup.)`,
-      { label: 'Replace', run: () => void go() },
-    );
-    return;
-  }
-  if (owner === 'legacy') {
-    ask(`${seen.folder} was published by an earlier EZ2BMS. Replace it with this song?`, {
-      label: 'Replace',
-      run: () => void go(),
-    });
-    return;
-  }
-  await write(app, root, spec, seen);
-}
-
-async function write(
-  app: App,
-  root: string,
-  spec: ReturnType<typeof buildPackage>['spec'],
-  seen: Inspection,
-): Promise<void> {
-  const p = app.project!;
-  const key = spec.key;
   // Which scores still mean the same: those of charts whose .ez and .ini are unchanged.
   const dir = seen.folder ? joinPath(root, seen.folder) : '';
   const old = new Map<string, Uint8Array | undefined>();
@@ -83,38 +106,119 @@ async function write(
     files: spec.files,
   });
   const reset = seen.files.filter((n) => rankingFile(n, key) && !carry.includes(n));
-  const r = await app.backend.port.publish(root, spec, {
+  const scoresOf = (mode: ModeId, tier: Tier): ChartRow['scores'] => {
+    const mine = (names: string[]) =>
+      names.some((n) => {
+        const r = rankingFile(n, key);
+        return r && r.mode === mode && r.tier === tier;
+      });
+    return mine(carry) ? 'kept' : mine(reset) ? 'reset' : 'none';
+  };
+  const charts = plan.charts.map((c) => ({
+    mode: c.mode,
+    tier: c.tier,
+    label: `${modeNames(c.mode).label} ${c.tier}`,
+    level: c.level,
+    file: `${c.stem}.ez`,
+    scores: scoresOf(c.mode, c.tier),
+  }));
+  // Keysounds as the host cuts them: 16-bit stereo at 44.1 kHz.
+  let bytes = 0;
+  for (const k of plan.keysounds) {
+    const total = (app.audio.loadedInfo(k.src)?.seconds ?? 0) * PUBLISH_RATE;
+    bytes += 4 * Math.max(0, (k.endFrame ?? total) - k.startFrame) + 44;
+  }
+  const bgaJob = app.bga.packageJob(p);
+  return {
+    root,
+    key,
+    seen,
+    owner,
+    warnings: songFindings(app).filter((f) => f.severity === 'warning'),
+    spec,
+    plan,
+    charts,
     carry,
-    expect: { song_ini: seen.song_ini },
+    reset,
+    art: {
+      plate: thumb(art.songnameAbm),
+      disc: thumb(art.discAbm),
+      eyecatch: thumb(art.eyecatchAbm),
+    },
+    ...(previewJob
+      ? {
+          preview: {
+            fromMs: previewJob.from_ms,
+            lengthMs: previewJob.length_ms,
+            ...('file' in previewJob && previewJob.file ? { file: previewJob.file } : {}),
+          },
+        }
+      : {}),
+    ...(bgaJob ? { bga: { ...bgaJob.ini, src: bgaJob.copy.from } } : {}),
+    keysounds: { count: plan.keysounds.length, bytes },
+  };
+}
+
+/** Lint errors: nothing is packaged, let alone written, while there are any. */
+export function publishErrors(app: App): Finding[] {
+  return songFindings(app).filter((f) => f.severity === 'error');
+}
+
+/** Why this review cannot be written as it stands, or undefined. */
+export function refusal(r: Review): string | undefined {
+  if (r.seen.shipped)
+    return `"${r.key}" is the key of a song the game ships: EZ2PORT would play this package in its place everywhere. Choose another key.`;
+  return undefined;
+}
+
+export interface Written {
+  dir: string;
+  files: number;
+  kept: number;
+  reset: number;
+  missing: [string, string][];
+  /** The song's package under its old key, still on the wheel: offer to take it off. */
+  retire?: { key: string; songIni: string };
+}
+
+/** Write the reviewed package (the charts are saved first). */
+export async function writePublish(app: App, r: Review): Promise<Written> {
+  const p = app.project!;
+  await p.saveAll();
+  const res = await app.backend.port.publish(r.root, r.spec, {
+    carry: r.carry,
+    expect: { song_ini: r.seen.song_ini },
     backup: true,
   });
+  const before = p.sidecar.published;
+  p.sidecar.published = { root: r.root, key: r.key };
+  await p.saveSidecar();
+  const out: Written = {
+    dir: res.dir,
+    files: res.files,
+    kept: r.carry.length,
+    reset: r.reset.length,
+    missing: res.missing,
+  };
+  if (before && before.root === r.root && before.key !== r.key) {
+    const seen = await app.backend.port.inspect(r.root, before.key, null).catch(() => undefined);
+    if (
+      seen?.folder &&
+      seen.song_ini !== null &&
+      packageOwner({ exists: true, songIni: seen.song_ini }, p.sidecar.id!, readSongIni) === 'ours'
+    )
+      out.retire = { key: before.key, songIni: seen.song_ini };
+  }
+  return out;
+}
+
+/** What a finished publish says: files, and what became of the scores. */
+export function writtenText(key: string, w: Written): string {
   const scores = [
-    carry.length ? `kept ${plural(carry.length, 'ranking table')}` : '',
-    reset.length ? `reset ${reset.length} for changed charts` : '',
+    w.kept ? `kept ${plural(w.kept, 'ranking table')}` : '',
+    w.reset ? `reset ${w.reset} for changed charts` : '',
   ]
     .filter(Boolean)
     .join(', ');
-  toast(`Published ${key}: ${r.files} files in ${r.dir}${scores ? ` (${scores})` : ''}`, 'ok');
-  if (r.missing.length) toast(`${r.missing.length} keysound source(s) could not be read`, 'warn');
-  const before = p.sidecar.published;
-  p.sidecar.published = { root, key };
-  await p.saveSidecar();
-  if (before && before.root === root && before.key !== key) void offerRetire(app, root, before.key);
-}
-
-/** The song's package under its old key is still on the wheel: offer to take it off. */
-async function offerRetire(app: App, root: string, oldKey: string): Promise<void> {
-  const p = app.project!;
-  const seen = await app.backend.port.inspect(root, oldKey, null).catch(() => undefined);
-  if (!seen?.folder || seen.song_ini === null) return;
-  if (packageOwner({ exists: true, songIni: seen.song_ini }, p.sidecar.id!, readSongIni) !== 'ours')
-    return;
-  ask(`This song is still in the songs folder as "${oldKey}" too. Remove that copy?`, {
-    label: 'Remove',
-    run: () =>
-      void app.backend.port
-        .retire(root, oldKey, seen.song_ini!)
-        .then(() => toast(`Removed ${oldKey} (kept in .ez2bms-backup)`, 'ok'))
-        .catch((e: unknown) => toast(e instanceof Error ? e.message : String(e), 'error')),
-  });
+  return `Published ${key}: ${w.files} files in ${w.dir}${scores ? ` (${scores})` : ''}`;
 }

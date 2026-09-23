@@ -1,8 +1,7 @@
 // Publish and Test in EZ2PORT.
 
-import { chartBaseName, hasErrors, modeNames } from '@ez2bms/chart-core';
+import { chartBaseName, modeNames } from '@ez2bms/chart-core';
 import { buildPackage } from '../port/package';
-import { publishSong } from '../port/publish';
 import { songFindings } from '../port/lint';
 import type { App } from '../state/app.svelte';
 
@@ -70,20 +69,8 @@ export function registerPortCommands(app: App): void {
       keys: ['Mod+Shift+P'],
       global: true,
       enabled: () => !!app.project,
-      run: async () => {
-        const findings = songFindings(app);
-        if (hasErrors(findings)) {
-          app.view.right = 'issues';
-          const n = findings.filter((f) => f.severity === 'error').length;
-          throw new Error(`${n} problem${n === 1 ? '' : 's'} to fix first (see Issues)`);
-        }
-        const root = s.data.songsRoot;
-        if (!root) {
-          app.view.right = 'port';
-          throw new Error('Choose where EZ2PORT keeps its songs (EZ2PORT tab)');
-        }
-        await publishSong(app, root);
-      },
+      // The dialog shows what would be written, and whether it can be.
+      run: () => app.publish.start(),
     },
     {
       id: 'port.test',
