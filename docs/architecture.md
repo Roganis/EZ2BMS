@@ -179,6 +179,37 @@ which EZ2PORT plays as consecutive cuts of the file ([slicing](slicing.md)).
   slicing actions with their refusals, hover audition, the panel's plans;
   the pointer tool's strip gestures and the knife call into it.
 
+## Importers (M5)
+
+Everything an import reads is chart-core's, pure and synchronous over bytes
+([importing](importing.md)); the editor supplies the bytes and writes the
+result through one host command.
+
+- **The game.** `ez2data/songdb.ts` (the song tables and their cipher),
+  `io/ez/ezi.ts` and `engine/songini.ts` (a chart's keysounds and settings,
+  EZ2PORT's parsers transcribed), `ez2data/songtext.ts` (titles from the
+  port's manifest). `io/ez/game.ts` walks a data folder through a small
+  async file system (`GameFs`), matching names in any case as the port does,
+  and gathers one song's files; `io/ez/import.ts` turns them into bmson,
+  the song file and a list of keysounds to copy.
+- **BMS.** `io/bms/decode.ts` (encoding), `parse.ts` (commands and control
+  flow, the random values chosen by the caller), `convert.ts` (exact
+  positions, lanes by channel map), `song.ts` (a folder as one song, with
+  per-file choices).
+- **bmson.** `io/bmson/v021.ts` upgrades 0.21; `open.ts` is how the editor
+  opens any bmson (upgrade, mode, legacy renumbering) and what it says.
+- **MIDI.** `io/midi/smf.ts` reads note starts and tempo; `slice/midi.ts`
+  plans and makes cuts through the M4 slice operations.
+- **Notes.** What opening or importing says is `OpenNote`s: a chart's go to
+  `LintChart.notes`, a song's to `LintSong.notes`, and an import's are kept
+  in the song file (`source.notes`) so Issues shows them on every open.
+- **Writing.** The host's `import_run` (ez2bms-audio `import.rs`) writes the
+  new folder in a staging folder beside it and renames it into place; an
+  `.ssf` becomes a `.wav` by putting a RIFF header on its unchanged PCM.
+- **The wizard.** `state/importer.svelte.ts` holds what was found and
+  chosen; `ui/import/ImportWizard.svelte` shows it. The browser build stages
+  a made-up game folder (`?game`, chart-core `dev/synthgame.ts`) for tests.
+
 ## The desktop host (`src-tauri`)
 
 The host does what a browser cannot, and nothing else; chart logic never

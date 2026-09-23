@@ -18,6 +18,13 @@ import { soundUsage } from '../src/sound/usage';
 import { planSoundRename } from '../src/sound/rename';
 import { audible, fingerprint } from '../src/publish/audible';
 import { classicCandidates } from '../src/edit/classic';
+import { writeEzff } from '../src/io/ez/ezff';
+import { importEzSong } from '../src/io/ez/import';
+import { convertBms } from '../src/io/bms/convert';
+import { decodeBms } from '../src/io/bms/decode';
+import { parseBms } from '../src/io/bms/parse';
+import { newChart } from '../src/model/defaults';
+import { planMidiCuts } from '../src/slice/midi';
 
 function time<T>(f: () => T): [T, number] {
   const t0 = performance.now();
@@ -133,5 +140,95 @@ describe('50k notes, 1500 grouped sounds: workbench and Classic mode', () => {
     expect(report.renamePlan).toBeLessThan(100);
     expect(report.hoverMedian).toBeLessThan(8);
     expect(report.fingerprintWhole).toBeLessThan(5000);
+  });
+});
+
+// M5: the importers at full size - a 50k-note game chart (published by
+// EZ2BMS itself, read back as an original), a 57 600-note BMS, a 1 MB text's
+// encoding, a 10 000-note MIDI's cuts.
+describe('importers at full size', () => {
+  const report: Record<string, number> = {};
+
+  it('reads, converts and plans within budget', () => {
+    const data = synthChart({ mode: '5k', notes: 50_000, channels: 1500 });
+    const plan = compileChart(data, {
+      columns: modeDef('5k').columns,
+      name: 'bench',
+      keysounds: new KeysoundRegistry(),
+    });
+    const ez = writeEzff(plan.ezff);
+    const ezi = new TextEncoder().encode(
+      plan.keysoundSlots
+        .map((_, i) => `${i + 1} 1 s${String(i).padStart(4, '0')}.wav`)
+        .join('\r\n'),
+    );
+    const [imp, ezTime] = time(() =>
+      importEzSong({
+        dir: 'bench',
+        charts: [{ file: 'streetmix1p-bench.ez', ez, ezi }],
+        locate: () => undefined,
+        shipped: [],
+      }),
+    );
+    report.ezImport50k = ezTime;
+    expect(imp.charts[0]!.data.notes.length).toBe(
+      plan.ezff.tracks.reduce((n, t) => n + t.records.filter((r) => r.type === 1).length, 0),
+    );
+
+    const lines = ['#BPM 150'];
+    for (let i = 1; i < 100; i++)
+      lines.push(`#WAV${i.toString(36).padStart(2, '0').toUpperCase()} s${i}.wav`);
+    for (let m = 0; m < 800; m++)
+      for (const ch of ['11', '12', '13', '14', '15', '01'])
+        lines.push(
+          `#${String(m).padStart(3, '0')}${ch}:${Array.from({ length: 12 }, (_, i) =>
+            (((m * 7 + i) % 99) + 1).toString(36).padStart(2, '0').toUpperCase(),
+          ).join('')}`,
+        );
+    const bytes = new TextEncoder().encode(lines.join('\r\n'));
+    const [conv, bmsTime] = time(() => convertBms(parseBms(decodeBms(bytes).text)));
+    report.bms57600 = bmsTime;
+    expect(conv.data.notes.length).toBe(57_600);
+
+    // A megabyte of Korean text as CP949 would be: KS X 1001 pairs.
+    const kr = new Uint8Array(1 << 20);
+    for (let i = 0; i < kr.length; i += 2) {
+      kr[i] = 0xb0 + ((i >> 1) % 40);
+      kr[i + 1] = 0xa1 + ((i >> 3) % 90);
+    }
+    const [enc, encTime] = time(() => decodeBms(kr));
+    report.encoding1MB = encTime;
+    expect(enc.encoding).toBe('euc-kr');
+
+    // 10 000 MIDI notes cutting a stem.
+    const doc = new ChartDoc(newChart({ mode: '5k', tier: 'NM', bpm: 150 }));
+    doc.transact('stem', (tx) => {
+      tx.insertChannel({ name: 'stem.wav' });
+      tx.insertNotes([{ id: doc.newNoteId(), ch: 1, x: 0, y: 0, l: 0, c: false }]);
+    });
+    const smf = {
+      format: 0 as const,
+      ppq: 480,
+      tracks: [{ name: '', notes: 10_000, channels: [0] }],
+      notes: Array.from({ length: 10_000 }, (_, i) => ({
+        tick: i * 120,
+        track: 0,
+        channel: 0,
+        key: 60,
+        velocity: 100,
+      })),
+      tempos: [{ tick: 0, usPerQuarter: 400_000 }],
+    };
+    const [midiPlan, midiTime] = time(() => planMidiCuts(doc, 'stem.wav', smf, { tempo: 'chart' }));
+    report.midiPlan10k = midiTime;
+    expect('ys' in midiPlan && midiPlan.ys.length).toBe(9_999);
+    console.log(
+      'bench M5 (ms):',
+      Object.fromEntries(Object.entries(report).map(([k, v]) => [k, Math.round(v * 100) / 100])),
+    );
+    expect(report.ezImport50k).toBeLessThan(2000);
+    expect(report.bms57600).toBeLessThan(2000);
+    expect(report.encoding1MB).toBeLessThan(1000);
+    expect(report.midiPlan10k).toBeLessThan(1000);
   });
 });

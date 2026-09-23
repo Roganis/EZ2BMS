@@ -164,3 +164,21 @@ about 0.6 ms of JS (0.3 ms working out its rows, 0.4 ms painting them, from
 0.8 ms before painting in runs of one colour with cached styles); at rest a
 strip is not painted again. Chopping checks every cut against how the stem
 sounds in one pass, so 1 500 cuts cost about what one does.
+
+## M5.9 - importers
+
+Timed by chart-core `test/bench.test.ts` ("importers at full size") in this
+container (Node 22, one core).
+
+| Date       | What                                                                       | Time   |
+| ---------- | -------------------------------------------------------------------------- | ------ |
+| 2026-09-23 | A 50k-note game chart (`.ez` + `.ezi`) into bmson: tempo, lanes, keysounds | 261 ms |
+| 2026-09-23 | A 57 600-note BMS: encoding, commands, exact positions, lanes              | 147 ms |
+| 2026-09-23 | The encoding of a megabyte of CP949 text                                   | 14 ms  |
+| 2026-09-23 | Planning 10 000 cuts from a MIDI file's notes (the chart's tempo)          | 8 ms   |
+
+Reading: an import is dominated by copying the keysounds, which the host
+does (each `.ssf` rewritten as a `.wav` without decoding it); reading and
+converting even the largest charts stays well under a second. The wizard
+converts a BMS folder again on every choice, which these figures leave room
+for.

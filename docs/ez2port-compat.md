@@ -343,3 +343,11 @@ machines round the same way, which the owner's Windows machine can confirm.
   `.gds`, and lint reports turntable/pedal notes in those modes.
 - **Andromeda and Catch** have no bmson convention and EZ2PORT's packages
   cannot carry them yet; EZ2BMS keeps them for cabinet export only.
+- **Legacy `.ezi` note names.** Reading `C#0` as octave x 12 + semitone
+  comes from the charts' own keysound numbers, not from the game's code
+  (which, like EZ2PORT, reads it as 0). The real-install test
+  (`ezi-ini.test.ts`) checks that it never finds fewer of a chart's
+  keysounds than the port's reading; it has not been run on a game yet.
+- **An imported original's category.** Its first version bank in the song
+  tables is a choice, not a rule of the game (a song sits in several banks);
+  CUSTOM when it has none.

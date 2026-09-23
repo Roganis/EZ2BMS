@@ -142,9 +142,20 @@ pnpm tauri dev          # the desktop app
 - [x] M4.6 The strip panel: chop to the grid (silence left whole), cut at onsets, the stem's tempo as the chart's
 - [x] M4.7 [How slicing works](docs/slicing.md), timings in the [perf log](docs/perf-log.md), end-to-end specs
 
+### M5 - Importers
+
+- [x] M5.1 bmson 0.21 and both `beat-10k` numberings open; what opening did shows in Issues (oracle: the port importer's reading)
+- [x] M5.2 The game's keysound lists (`.ezi`) and chart settings (`.ini`), read as EZ2PORT reads them (oracle, random files)
+- [x] M5.3 The game's song tables (`song.bin`) and titles (the port's manifest), read at run time (oracle)
+- [x] M5.4 The game's own charts become songs, every note at the engine's millisecond (oracle, random charts)
+- [x] M5.5 A new song folder written all at once, `.ssf` keysounds as WAVs with the same samples
+- [x] M5.6 BMS/BME/BML: Shift-JIS and EUC-KR, `#RANDOM`/`#SWITCH`, exact timing, EZ2 lanes
+- [x] M5.7 A stem cut at a MIDI file's notes, with its tempo or the chart's
+- [x] M5.8 The import wizard, and the MIDI cut in the strip panel
+- [x] M5.9 [How importing works](docs/importing.md), timings in the [perf log](docs/perf-log.md), end-to-end specs
+
 ### Later
 
-- M5 Importers (`.ez` originals, BMS/BME, BmsTWO, MIDI, circus2bmson)
 - M6 Exporters (cabinet `.ez` v8/v6, BMS/BME)
 - M7 Record mode + cabinet controller
 - M8 EZ2-native extras
