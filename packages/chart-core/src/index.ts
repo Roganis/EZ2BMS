@@ -43,4 +43,7 @@ export * from './engine/score';
 export * from './engine/session';
 export * from './engine/judge-sim';
 export * from './lint/lint';
+export * from './sound/resolve';
+export * from './sound/grouping';
+export * from './sound/usage';
 export { synthChart, synthDoc, type SynthOptions } from './dev/synth';
