@@ -153,10 +153,34 @@ export type RunEvent =
   | { kind: 'line'; stream: 'out' | 'err'; text: string; at_ms: number }
   | { kind: 'exit'; outcome: string; code: number | null };
 
+/** What is at `<songs root>/<key>` (src-tauri port::InspectionDto). */
+export interface Inspection {
+  /** The folder EZ2PORT resolves the key to (any case). */
+  folder: string | null;
+  song_ini: string | null;
+  files: string[];
+  /** The game ships a song with this key (`<game>/sound/<key>`). */
+  shipped: boolean;
+}
+
+/** What the editor decided after inspecting the target (src-tauri port::PublishOptions). */
+export interface PublishOptions {
+  /** Ranking tables of the package in place to keep. */
+  carry?: string[];
+  /** The target as inspected; the publish is refused if it changed since. */
+  expect?: { song_ini: string | null };
+  /** Keep the replaced package in `.ez2bms-backup/<key>`. */
+  backup?: boolean;
+}
+
 export interface PortBackend {
   locate(start: string): Promise<Located>;
   probe(path: string): Promise<Probe>;
-  publish(songsRoot: string, pkg: PackageSpec): Promise<Published>;
+  /** What a publish would replace. `gameRoot` checks the key against the game's own songs. */
+  inspect(songsRoot: string, key: string, gameRoot: string | null): Promise<Inspection>;
+  publish(songsRoot: string, pkg: PackageSpec, options?: PublishOptions): Promise<Published>;
+  /** Move a package (still holding `songIni`) to the backup folder. */
+  retire(songsRoot: string, key: string, songIni: string): Promise<void>;
   test(spec: TestSpec, on: (e: RunEvent) => void): Promise<number>;
   stop(id: number): Promise<void>;
 }

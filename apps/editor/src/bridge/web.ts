@@ -11,6 +11,7 @@ import type {
   Entry,
   FileDrop,
   Imported,
+  Inspection,
   Loaded,
   ProjectScan,
   RunEvent,
@@ -103,7 +104,27 @@ export function webBackend(
   };
   let events: AudioEvent[] = [];
 
-  return {
+  /** `dir/name` in any case, as EZ2PORT resolves it; the name found. */
+  const childCi = (dir: string, name: string): string | null => {
+    const d = dir + '/';
+    for (const p of files.keys()) {
+      if (!p.startsWith(d)) continue;
+      const first = p.slice(d.length).split('/')[0]!;
+      if (first.toLowerCase() === name.toLowerCase()) return first;
+    }
+    return null;
+  };
+  /** Move every file under `from` to `to` (or delete them when `to` is null). */
+  const moveTree = (from: string, to: string | null) => {
+    if (to) for (const k of [...files.keys()]) if (k.startsWith(to + '/')) files.delete(k);
+    for (const k of [...files.keys()]) {
+      if (!k.startsWith(from + '/')) continue;
+      if (to) files.set(to + k.slice(from.length), files.get(k)!);
+      files.delete(k);
+    }
+  };
+
+  const backend: Backend = {
     kind: 'web',
     appInfo: async () => ({ version: '0.1.0', os: 'web', config_dir: null, cache_dir: null }),
     readFile: async (path) => {
@@ -342,10 +363,51 @@ export function webBackend(
       probe: async () => {
         throw new Error('EZ2PORT is only available in the desktop app');
       },
-      publish: async (songsRoot, pkg) => {
-        for (const f of pkg.files)
-          files.set(`${norm(songsRoot)}/${pkg.key}/${f.path}`, f.bytes.slice());
-        return { dir: `${norm(songsRoot)}/${pkg.key}`, files: pkg.files.length, missing: [] };
+      // The same rules as ez2bms-launch's package writer, on the memory files.
+      inspect: async (songsRoot, key, gameRoot): Promise<Inspection> => {
+        const folder = childCi(norm(songsRoot), key);
+        const dir = folder && `${norm(songsRoot)}/${folder}`;
+        const names = dir
+          ? [...files.keys()]
+              .filter((k) => k.startsWith(dir + '/'))
+              .map((k) => k.slice(dir.length + 1))
+              .filter((n) => !n.includes('/'))
+              .sort()
+          : [];
+        const ini = dir && names.find((n) => n.toLowerCase() === 'song.ini');
+        const sound = gameRoot && childCi(norm(gameRoot), 'sound');
+        return {
+          folder,
+          song_ini: ini ? new TextDecoder().decode(files.get(`${dir}/${ini}`)) : null,
+          files: names,
+          shipped: !!sound && !!childCi(`${norm(gameRoot!)}/${sound}`, key),
+        };
+      },
+      publish: async (songsRoot, pkg, options = {}) => {
+        const root = norm(songsRoot);
+        const now = await backend.port.inspect(songsRoot, pkg.key, null);
+        if (options.expect && options.expect.song_ini !== now.song_ini)
+          throw new Error(
+            `${root}/${pkg.key} changed since it was checked; look again before publishing`,
+          );
+        const old = now.folder ? `${root}/${now.folder}` : null;
+        const kept = new Map<string, Uint8Array>();
+        for (const name of options.carry ?? []) {
+          const have = now.files.find((n) => n.toLowerCase() === name.toLowerCase());
+          if (old && have) kept.set(name, files.get(`${old}/${have}`)!);
+        }
+        if (old) moveTree(old, options.backup ? `${root}/.ez2bms-backup/${pkg.key}` : null);
+        for (const f of pkg.files) files.set(`${root}/${pkg.key}/${f.path}`, f.bytes.slice());
+        for (const [n, b] of kept) files.set(`${root}/${pkg.key}/${n}`, b);
+        return { dir: `${root}/${pkg.key}`, files: pkg.files.length + kept.size, missing: [] };
+      },
+      retire: async (songsRoot, key, songIni) => {
+        const now = await backend.port.inspect(songsRoot, key, null);
+        if (!now.folder || now.song_ini !== songIni)
+          throw new Error(
+            `${norm(songsRoot)}/${key} changed since it was checked; leaving it alone`,
+          );
+        moveTree(`${norm(songsRoot)}/${now.folder}`, `${norm(songsRoot)}/.ez2bms-backup/${key}`);
       },
       test: async (_spec: TestSpec, _on: (e: RunEvent) => void) => {
         throw new Error('Test in EZ2PORT needs the desktop app');
@@ -353,4 +415,5 @@ export function webBackend(
       stop: async () => {},
     },
   };
+  return backend;
 }

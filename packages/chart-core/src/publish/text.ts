@@ -53,6 +53,8 @@ export function iniValue(s: string): string {
     .trim();
 }
 
+export const EZ2BMS_SECTION = 'EZ2BMS';
+
 /** The contents of a package's song.ini. */
 export interface SongIniFile {
   key: string;
@@ -65,6 +67,8 @@ export interface SongIniFile {
   charts: { portMode: string; tier: Tier; level: number; stem: string }[];
   assets: { disc?: string; songname?: string; eyecatch?: string; preview?: string };
   bga?: { file: string; startMs: number };
+  /** EZ2BMS's own section (the port reads no section it does not know). */
+  songId?: string;
 }
 
 export function songIniText(s: SongIniFile, eol: Eol = '\n'): string {
@@ -87,6 +91,9 @@ export function songIniText(s: SongIniFile, eol: Eol = '\n'): string {
   if (s.assets.preview) lines.push(`Preview = ${s.assets.preview}`);
   if (s.bga)
     lines.push('', '[Bga]', `File = ${s.bga.file}`, `StartMs = ${Math.round(s.bga.startMs)}`);
+  // Which song this package is, so a later publish knows the folder is its
+  // own and not someone else's that happens to use the key.
+  if (s.songId) lines.push('', `[${EZ2BMS_SECTION}]`, `SongId = ${iniValue(s.songId)}`);
   lines.push('');
   return lines.join(eol);
 }

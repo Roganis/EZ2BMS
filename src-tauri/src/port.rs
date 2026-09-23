@@ -40,6 +40,44 @@ pub struct PackageDto {
     pub keysounds: Vec<KeysoundJob>,
 }
 
+/// What the editor saw at the target and decided (chart-core publish/rankings.ts).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PublishOptions {
+    /// Ranking tables of the package in place to carry into the new one.
+    #[serde(default)]
+    pub carry: Vec<String>,
+    /// The target as inspected; absent: publish without checking.
+    #[serde(default)]
+    pub expect: Option<Expected>,
+    /// Keep the replaced package in `.ez2bms-backup/<key>`.
+    #[serde(default)]
+    pub backup: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Expected {
+    /// The song.ini port_inspect returned (null: there was no package).
+    pub song_ini: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InspectionDto {
+    pub folder: Option<String>,
+    pub song_ini: Option<String>,
+    pub files: Vec<String>,
+    pub shipped: bool,
+}
+
+pub fn inspect(songs_root: &Path, key: &str, game_root: Option<&Path>) -> CmdResult<InspectionDto> {
+    let i = ez2bms_launch::inspect(songs_root, key, game_root)?;
+    Ok(InspectionDto {
+        folder: i.folder,
+        song_ini: i.song_ini.map(|b| String::from_utf8_lossy(&b).into_owned()),
+        files: i.files,
+        shipped: i.shipped,
+    })
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Published {
     pub dir: PathBuf,
@@ -51,6 +89,16 @@ pub struct Published {
 
 /// Cut every keysound and write the package into `songs_root`, all or nothing.
 pub fn publish(songs_root: &Path, pkg: &PackageDto) -> CmdResult<Published> {
+    publish_with(songs_root, pkg, &PublishOptions::default())
+}
+
+/// `publish`, keeping the tables and backup the editor decided on, and only
+/// if the target is still what it inspected.
+pub fn publish_with(
+    songs_root: &Path,
+    pkg: &PackageDto,
+    opts: &PublishOptions,
+) -> CmdResult<Published> {
     let cache = publish_cache();
     let mut files: Vec<(String, Vec<u8>)> =
         pkg.files.iter().map(|f| (f.path.clone(), f.bytes.clone())).collect();
@@ -61,8 +109,13 @@ pub fn publish(songs_root: &Path, pkg: &PackageDto) -> CmdResult<Published> {
             Err(e) => missing.push((job.src.clone(), e.to_string())),
         }
     }
-    let dir = ez2bms_launch::write_package(songs_root, &pkg.key, &files)?;
-    Ok(Published { dir, files: files.len(), missing })
+    let write = ez2bms_launch::WriteOptions {
+        carry: opts.carry.clone(),
+        expect: opts.expect.as_ref().map(|e| e.song_ini.as_ref().map(|s| s.clone().into_bytes())),
+        backup: opts.backup,
+    };
+    let dir = ez2bms_launch::write_package_with(songs_root, &pkg.key, &files, &write)?;
+    Ok(Published { dir, files: files.len() + opts.carry.len(), missing })
 }
 
 #[derive(Debug, Clone, Serialize)]

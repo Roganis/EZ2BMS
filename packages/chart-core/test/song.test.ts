@@ -57,8 +57,17 @@ describe('the song file', () => {
   });
 
   it('writes known members first, in a fixed order', () => {
-    const s = parseSongFile('{"zz":1,"classic":true,"id":"u1","key":"k"}').song;
-    expect(Object.keys(JSON.parse(serializeSongFile(s)))).toEqual(['key', 'id', 'classic', 'zz']);
+    const s = parseSongFile(
+      '{"zz":1,"published":{"root":"/s","key":"k"},"classic":true,"id":"u1","key":"k"}',
+    ).song;
+    expect(s.published).toEqual({ root: '/s', key: 'k' });
+    expect(Object.keys(JSON.parse(serializeSongFile(s)))).toEqual([
+      'key',
+      'id',
+      'classic',
+      'published',
+      'zz',
+    ]);
   });
 
   it('survives a broken file and odd types without losing them', () => {

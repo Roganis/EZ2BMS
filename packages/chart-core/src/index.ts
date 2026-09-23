@@ -35,6 +35,8 @@ export * from './edit/doc';
 export * from './edit/commands';
 export * from './edit/classic';
 export * from './publish/keysounds';
+export * from './publish/songini-read';
+export * from './publish/rankings';
 export * from './publish/tracks';
 export * from './publish/chart-plan';
 export * from './publish/playback';

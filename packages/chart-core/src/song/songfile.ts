@@ -17,11 +17,13 @@ export interface SongFile {
   category?: unknown;
   /** Classic-mode charting (absent: on when a chart already has continuations). */
   classic?: boolean;
+  /** Where the song was last published (a key change offers to retire that package). */
+  published?: { root: string; key: string };
   /** Members EZ2BMS does not know, in file order. */
   extra: Record<string, unknown>;
 }
 
-const KNOWN = ['key', 'id', 'category', 'classic'] as const;
+const KNOWN = ['key', 'id', 'category', 'classic', 'published'] as const;
 
 export function newSongFile(key = ''): SongFile {
   return { key, extra: {} };
@@ -52,6 +54,10 @@ export function parseSongFile(text: string): { song: SongFile; warnings: string[
   if (o.category !== undefined) song.category = o.category;
   if (typeof o.classic === 'boolean') song.classic = o.classic;
   else if (o.classic !== undefined) song.extra.classic = o.classic;
+  const pub = o.published as { root?: unknown; key?: unknown } | undefined;
+  if (pub && typeof pub.root === 'string' && typeof pub.key === 'string')
+    song.published = { root: pub.root, key: pub.key };
+  else if (o.published !== undefined) song.extra.published = o.published;
   for (const [k, v] of Object.entries(o))
     if (!(KNOWN as readonly string[]).includes(k)) song.extra[k] = v;
   return { song, warnings };
@@ -63,6 +69,7 @@ export function serializeSongFile(s: SongFile): string {
   if (s.id !== undefined) out.id = s.id;
   if (s.category !== undefined) out.category = s.category;
   if (s.classic !== undefined) out.classic = s.classic;
+  if (s.published !== undefined) out.published = s.published;
   for (const [k, v] of Object.entries(s.extra)) if (!(k in out)) out[k] = v;
   return JSON.stringify(out, null, 2) + '\n';
 }

@@ -13,6 +13,9 @@ pub mod probe;
 pub mod spawn;
 
 pub use error::{LaunchError, Result};
-pub use package::{is_valid_song_key, write_package, TempSongs};
+pub use package::{
+    inspect, is_valid_song_key, retire_package, write_package, write_package_with, Inspection,
+    TempSongs, WriteOptions,
+};
 pub use probe::{probe, Caps, Probe};
 pub use spawn::{launch, LaunchSpec, LogLine, Outcome, Running, Stream};

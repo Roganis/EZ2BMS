@@ -20,7 +20,10 @@ use tauri::{AppHandle, Manager, State};
 use crate::audio::{Audio, AudioInfo, ClockDto, EventDto, Loaded, TriggerDto};
 use crate::error::{CmdError, CmdResult};
 use crate::files::{Entry, Imported, ProjectScan};
-use crate::port::{Located, PackageDto, ProbeDto, Published, RunEvent, Runs, TestDto};
+use crate::port::{
+    InspectionDto, Located, PackageDto, ProbeDto, PublishOptions, Published, RunEvent, Runs,
+    TestDto,
+};
 
 /// Which clock stream is current; older ones stop (a reloaded page opens a new one).
 static CLOCK_STREAM: AtomicU64 = AtomicU64::new(0);
@@ -216,10 +219,31 @@ fn port_locate(start: PathBuf) -> Located {
 }
 
 #[tauri::command]
-async fn port_publish(songs_root: PathBuf, package: PackageDto) -> CmdResult<Published> {
-    tauri::async_runtime::spawn_blocking(move || port::publish(&songs_root, &package))
-        .await
-        .map_err(|e| CmdError::Io(e.to_string()))?
+async fn port_publish(
+    songs_root: PathBuf,
+    package: PackageDto,
+    options: Option<PublishOptions>,
+) -> CmdResult<Published> {
+    let options = options.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || {
+        port::publish_with(&songs_root, &package, &options)
+    })
+    .await
+    .map_err(|e| CmdError::Io(e.to_string()))?
+}
+
+#[tauri::command]
+fn port_inspect(
+    songs_root: PathBuf,
+    key: String,
+    game_root: Option<PathBuf>,
+) -> CmdResult<InspectionDto> {
+    port::inspect(&songs_root, &key, game_root.as_deref())
+}
+
+#[tauri::command]
+fn port_retire(songs_root: PathBuf, key: String, song_ini: String) -> CmdResult<()> {
+    Ok(ez2bms_launch::retire_package(&songs_root, &key, song_ini.as_bytes())?)
 }
 
 #[tauri::command]
@@ -280,6 +304,8 @@ pub fn run() {
             port_probe,
             port_locate,
             port_publish,
+            port_inspect,
+            port_retire,
             port_test,
             port_stop,
         ])

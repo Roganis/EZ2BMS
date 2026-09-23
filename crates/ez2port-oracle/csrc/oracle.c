@@ -46,9 +46,13 @@
 #include "ez2/mixparam.h"
 #include "ez2/mode.h"
 #include "ez2/pvi.h"
+#include "ez2/ranking.h"
 #include "ez2/score.h"
+#include "ez2/songdb.h"
 #include "ez2/songini.h"
 #include "ez2/ssf.h"
+#include "ez2/usersongs.h"
+#include "ez2/util.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -812,6 +816,113 @@ static int cmd_bmson_import(const char *folder, const char *game_root,
     return 0;
 }
 
+
+/* ---- usersongs ------------------------------------------------------------ */
+
+/* A songs root as the port lists it for one mode: every package the merge
+ * adds (key, title, the four tier levels), the category bank it lands in and
+ * whether the bank view keeps it (NM level above 0), the assets and movie it
+ * resolves, and where its ranking tables go. `shipped` is a comma list of
+ * keys to pretend song.bin already has (the merge must skip them). Paths are
+ * printed relative to ROOT. */
+static void jrel(const char *root, const char *path)
+{
+    size_t n = strlen(root);
+    if (strncmp(path, root, n) == 0 && (path[n] == '/' || path[n] == '\\'))
+        jstr(path + n + 1);
+    else
+        jstr(path);
+}
+
+static int cmd_usersongs(const char *root, const char *mode, const char *shipped)
+{
+    static const char *const kinds[4] = { "Disc", "Songname", "Eyecatch", "Preview" };
+    ez2_songdb db;
+    int added, i, g, t, a;
+
+    memset(&db, 0, sizeof db);
+    if (shipped && shipped[0]) {
+        const char *p = shipped;
+        while (*p) {
+            const char *end = strchr(p, ',');
+            size_t len = end ? (size_t)(end - p) : strlen(p);
+            ez2_song_entry *e = (ez2_song_entry *)realloc(
+                db.entries, (size_t)(db.count + 1) * sizeof *e);
+            if (!e)
+                return 1;
+            db.entries = e;
+            e = &db.entries[db.count++];
+            memset(e, 0, sizeof *e);
+            snprintf(e->key, sizeof e->key, "%.*s", (int)len, p);
+            e->steps[0].level = 1;
+            p = end ? end + 1 : p + len;
+        }
+    }
+    ez2_usersongs_set_root(root);
+    added = ez2_usersongs_merge(&db, mode);
+    printf("{\"added\":%d,\"entries\":[", added);
+    for (i = 0; i < db.count; i++) {
+        const ez2_song_entry *e = &db.entries[i];
+        char path[2048];
+        int start_ms = 0, first = 1, view[4096], nview;
+
+        printf("%s{\"key\":", i ? "," : "");
+        jstr(e->key);
+        printf(",\"name\":");
+        jstr(e->name);
+        printf(",\"levels\":[%d,%d,%d,%d],\"groups\":[", e->steps[0].level,
+               e->steps[1].level, e->steps[2].level, e->steps[3].level);
+        for (g = 0; g < EZ2_SONGDB_GROUPS; g++) {
+            int k;
+            for (k = 0; k < db.groups[g].count; k++)
+                if (ez2_ci_equal(db.groups[g].keys[k], e->key)) {
+                    printf("%s%d", first ? "" : ",", g + 1);
+                    first = 0;
+                }
+        }
+        printf("],\"listed\":[");
+        first = 1;
+        for (g = 0; g < EZ2_SONGDB_GROUPS; g++) {
+            int k;
+            nview = ez2_songdb_category_view(&db, g, view, 4096);
+            for (k = 0; k < nview; k++)
+                if (view[k] == i) {
+                    printf("%s%d", first ? "" : ",", g + 1);
+                    first = 0;
+                }
+        }
+        printf("],\"assets\":{");
+        for (a = 0; a < 4; a++) {
+            printf("%s\"%s\":", a ? "," : "", kinds[a]);
+            if (ez2_usersongs_asset(e->key, kinds[a], path, sizeof path))
+                jrel(root, path);
+            else
+                printf("null");
+        }
+        printf("},\"bga\":");
+        if (ez2_usersongs_bga(e->key, path, sizeof path, &start_ms)) {
+            printf("{\"file\":");
+            jrel(root, path);
+            printf(",\"start_ms\":%d}", start_ms);
+        } else {
+            printf("null");
+        }
+        printf(",\"rank\":[");
+        for (t = 0; t < 4; t++) {
+            if (t)
+                printf(",");
+            if (ez2_ranking_path(root, mode, e->key, t, path, sizeof path))
+                jrel(root, path);
+            else
+                printf("null");
+        }
+        printf("]}");
+    }
+    printf("]}\n");
+    ez2_songdb_free(&db);
+    return 0;
+}
+
 /* ---- main ---------------------------------------------------------------- */
 
 int ez2bms_oracle_main(int argc, char **argv)
@@ -836,6 +947,8 @@ int ez2bms_oracle_main(int argc, char **argv)
     if (!strcmp(c, "judge-sim") && argc == 8)
         return cmd_judge_sim(argv[2], argv[3], argv[4], atof(argv[5]), atof(argv[6]),
                              (unsigned)strtoul(argv[7], 0, 10));
+    if (!strcmp(c, "usersongs") && (argc == 4 || argc == 5))
+        return cmd_usersongs(argv[2], argv[3], argc == 5 ? argv[4] : 0);
     if (!strcmp(c, "bmson-import") && (argc == 5 || argc == 6))
         return cmd_bmson_import(argv[2], argv[3], argv[4], argc == 6 ? argv[5] : 0);
 
@@ -846,6 +959,7 @@ int ez2bms_oracle_main(int argc, char **argv)
             "       ez2port-oracle crypt enc|dec TABLE IN OUT\n"
             "       ez2port-oracle mixparam|score   (script on stdin)\n"
             "       ez2port-oracle judge-sim EZ INI MODE OFFSET JITTER SEED\n"
-            "       ez2port-oracle bmson-import FOLDER GAME_ROOT OUT_ROOT [KEY]\n");
+            "       ez2port-oracle bmson-import FOLDER GAME_ROOT OUT_ROOT [KEY]\n"
+            "       ez2port-oracle usersongs ROOT MODE [SHIPPED,KEYS]\n");
     return 2;
 }

@@ -40,6 +40,8 @@ export interface SongMeta {
   /** Title plate, already encoded as .abm (the app renders it). */
   songnameAbm?: Uint8Array;
   bga?: { file: string; startMs: number };
+  /** The song's id (ez2bms.song.json), written to song.ini's [EZ2BMS] section. */
+  songId?: string;
 }
 
 export interface PlannedChart {
@@ -154,6 +156,7 @@ export function compileSong(
       })),
       assets,
       ...(meta.bga ? { bga: meta.bga } : {}),
+      ...(meta.songId ? { songId: meta.songId } : {}),
     },
     eol,
   );

@@ -2,9 +2,9 @@
 
 import { chartBaseName, hasErrors, modeNames } from '@ez2bms/chart-core';
 import { buildPackage } from '../port/package';
+import { publishSong } from '../port/publish';
 import { songFindings } from '../port/lint';
 import type { App } from '../state/app.svelte';
-import { toast } from '../state/toasts.svelte';
 
 export function registerPortCommands(app: App): void {
   const port = app.port;
@@ -71,12 +71,7 @@ export function registerPortCommands(app: App): void {
           app.view.right = 'port';
           throw new Error('Choose where EZ2PORT keeps its songs (EZ2PORT tab)');
         }
-        await app.project!.saveAll();
-        const { spec } = buildPackage(app);
-        const r = await app.backend.port.publish(root, spec);
-        toast(`Published ${spec.key}: ${r.files} files in ${r.dir}`, 'ok');
-        if (r.missing.length)
-          toast(`${r.missing.length} keysound source(s) could not be read`, 'warn');
+        await publishSong(app, root);
       },
     },
     {

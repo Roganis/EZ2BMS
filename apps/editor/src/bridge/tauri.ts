@@ -11,6 +11,7 @@ import type {
   ClockSnapshot,
   Entry,
   Imported,
+  Inspection,
   Loaded,
   Located,
   PackageSpec,
@@ -109,8 +110,15 @@ export function tauriBackend(): Backend {
     port: {
       locate: (start) => invoke<Located>('port_locate', { start }),
       probe: (path) => invoke<Probe>('port_probe', { path }),
-      publish: (songsRoot, pkg) =>
-        invoke<Published>('port_publish', { songsRoot, package: wirePackage(pkg) }),
+      inspect: (songsRoot, key, gameRoot) =>
+        invoke<Inspection>('port_inspect', { songsRoot, key, gameRoot }),
+      publish: (songsRoot, pkg, options) =>
+        invoke<Published>('port_publish', {
+          songsRoot,
+          package: wirePackage(pkg),
+          options: options ?? null,
+        }),
+      retire: (songsRoot, key, songIni) => invoke('port_retire', { songsRoot, key, songIni }),
       test: (spec: TestSpec, on: (e: RunEvent) => void) => {
         const ch = new Channel<RunEvent>();
         ch.onmessage = on;

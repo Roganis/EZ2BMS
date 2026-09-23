@@ -32,9 +32,104 @@ fn check_file_name(name: &str) -> Result<()> {
     }
 }
 
+/// Where a publish keeps the package it replaced (one copy per key). EZ2PORT
+/// skips dot-folders (ez2/vfs.c), so it never lists these.
+pub const BACKUP: &str = ".ez2bms-backup";
+
+/// What a publish may assume about the songs root, and what it keeps.
+#[derive(Debug, Clone, Default)]
+pub struct WriteOptions {
+    /// Files of the package now in place to copy into the new one: EZ2PORT
+    /// keeps a song's ranking tables in its package folder (ez2/ranking.c),
+    /// and the caller decides which are still valid.
+    pub carry: Vec<String>,
+    /// The song.ini the caller saw when it decided to write (`Some(None)`:
+    /// there was no package). If the folder holds something else by now,
+    /// nothing is written - the check the caller made would be stale.
+    pub expect: Option<Option<Vec<u8>>>,
+    /// Move the replaced package to `.ez2bms-backup/<key>` instead of deleting it.
+    pub backup: bool,
+}
+
+/// A songs root's view of one key, for deciding whether to publish there.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Inspection {
+    /// The folder EZ2PORT resolves the key to (any case), when there is one.
+    pub folder: Option<String>,
+    /// Its song.ini, when it has one.
+    pub song_ini: Option<Vec<u8>>,
+    /// The files in it.
+    pub files: Vec<String>,
+    /// The game ships a song with this key (`<game>/sound/<key>`): a package
+    /// with it would take that song over everywhere.
+    pub shipped: bool,
+}
+
+/// `dir/name`, matched as EZ2PORT does (ez2/vfs.c ez2_vfs_child): the exact
+/// name first, then any case.
+fn child_ci(dir: &Path, name: &str) -> Option<PathBuf> {
+    let exact = dir.join(name);
+    if exact.exists() {
+        return Some(exact);
+    }
+    let want = name.to_ascii_lowercase();
+    std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .find(|e| e.file_name().to_string_lossy().to_ascii_lowercase() == want)
+        .map(|e| e.path())
+}
+
+/// song.ini compared as the text the caller was shown (it crossed the bridge
+/// as a string), so a stray invalid byte does not make it "changed".
+fn same_text(a: Option<&[u8]>, b: Option<&[u8]>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => String::from_utf8_lossy(a) == String::from_utf8_lossy(b),
+        _ => false,
+    }
+}
+
+fn read_song_ini(folder: &Path) -> Option<Vec<u8>> {
+    child_ci(folder, "song.ini").and_then(|p| std::fs::read(p).ok())
+}
+
+/// What is at `<songs_root>/<key>` now, and whether the key is a shipped song's.
+pub fn inspect(songs_root: &Path, key: &str, game_root: Option<&Path>) -> Result<Inspection> {
+    let mut out = Inspection::default();
+    if let Some(dir) = child_ci(songs_root, key).filter(|p| p.is_dir()) {
+        out.folder = dir.file_name().map(|n| n.to_string_lossy().into_owned());
+        out.song_ini = read_song_ini(&dir);
+        let mut files: Vec<String> = std::fs::read_dir(&dir)
+            .map_err(io(&dir))?
+            .flatten()
+            .filter(|e| e.path().is_file())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        files.sort();
+        out.files = files;
+    }
+    if let Some(game) = game_root {
+        out.shipped =
+            child_ci(game, "sound").and_then(|s| child_ci(&s, key)).is_some_and(|p| p.is_dir());
+    }
+    Ok(out)
+}
+
 /// Write `<songs_root>/<key>/` with exactly these files, replacing any older
 /// copy. Returns the package folder.
 pub fn write_package(songs_root: &Path, key: &str, files: &[(String, Vec<u8>)]) -> Result<PathBuf> {
+    write_package_with(songs_root, key, files, &WriteOptions::default())
+}
+
+/// `write_package`, keeping what `opts` says to keep and refusing when the
+/// folder is no longer what the caller inspected.
+pub fn write_package_with(
+    songs_root: &Path,
+    key: &str,
+    files: &[(String, Vec<u8>)],
+    opts: &WriteOptions,
+) -> Result<PathBuf> {
     if !is_valid_song_key(key) {
         return Err(LaunchError::Invalid(format!(
             "song key {key:?} must be 1-15 lowercase letters or digits"
@@ -42,6 +137,20 @@ pub fn write_package(songs_root: &Path, key: &str, files: &[(String, Vec<u8>)]) 
     }
     for (name, _) in files {
         check_file_name(name)?;
+    }
+    for name in &opts.carry {
+        check_file_name(name)?;
+    }
+    // EZ2PORT finds the folder in any case, so an old copy may be named otherwise.
+    let current = child_ci(songs_root, key).filter(|p| p.is_dir());
+    if let Some(expect) = &opts.expect {
+        let now = current.as_deref().and_then(read_song_ini);
+        if !same_text(now.as_deref(), expect.as_deref()) {
+            return Err(LaunchError::Invalid(format!(
+                "{} changed since it was checked; look again before publishing",
+                songs_root.join(key).display()
+            )));
+        }
     }
     let staging_root = songs_root.join(STAGING);
     let stage = staging_root.join(key);
@@ -58,17 +167,59 @@ pub fn write_package(songs_root: &Path, key: &str, files: &[(String, Vec<u8>)]) 
         let p = stage.join(name);
         std::fs::write(&p, bytes).map_err(io(&p))?;
     }
-    if dest.exists() {
-        std::fs::rename(&dest, &old).map_err(io(&dest))?;
+    if let Some(cur) = &current {
+        for name in &opts.carry {
+            // A table the old package lost since is simply not carried.
+            if let Some(src) = child_ci(cur, name).filter(|p| p.is_file()) {
+                let to = stage.join(name);
+                if !to.exists() {
+                    std::fs::copy(&src, &to).map_err(io(&src))?;
+                }
+            }
+        }
+        std::fs::rename(cur, &old).map_err(io(cur))?;
     }
     if let Err(e) = std::fs::rename(&stage, &dest) {
         // Put the old copy back rather than leave no song at all.
-        let _ = std::fs::rename(&old, &dest);
+        if let Some(cur) = &current {
+            let _ = std::fs::rename(&old, cur);
+        }
         return Err(io(&dest)(e));
     }
-    let _ = std::fs::remove_dir_all(&old);
+    if current.is_some() {
+        if opts.backup {
+            keep_backup(songs_root, key, &old)?;
+        } else {
+            let _ = std::fs::remove_dir_all(&old);
+        }
+    }
     let _ = std::fs::remove_dir(&staging_root);
     Ok(dest)
+}
+
+fn keep_backup(songs_root: &Path, key: &str, from: &Path) -> Result<()> {
+    let backups = songs_root.join(BACKUP);
+    let to = backups.join(key);
+    std::fs::create_dir_all(&backups).map_err(io(&backups))?;
+    if to.exists() {
+        std::fs::remove_dir_all(&to).map_err(io(&to))?;
+    }
+    std::fs::rename(from, &to).map_err(io(from))
+}
+
+/// Take a package out of the song wheel (a song whose key changed): it moves
+/// to the backup folder, if it still holds the song.ini the caller saw.
+pub fn retire_package(songs_root: &Path, key: &str, expect: &[u8]) -> Result<()> {
+    let dir = child_ci(songs_root, key)
+        .filter(|p| p.is_dir())
+        .ok_or_else(|| LaunchError::Invalid(format!("no package {key:?} to remove")))?;
+    if !same_text(read_song_ini(&dir).as_deref(), Some(expect)) {
+        return Err(LaunchError::Invalid(format!(
+            "{} changed since it was checked; leaving it alone",
+            dir.display()
+        )));
+    }
+    keep_backup(songs_root, key, &dir)
 }
 
 /// A songs root of its own for one test run, so testing never touches the

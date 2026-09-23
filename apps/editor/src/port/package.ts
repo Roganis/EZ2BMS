@@ -42,6 +42,7 @@ export function buildPackage(app: App, opts: { only?: ChartSlot; key?: string } 
       // Always written: a song without one is CUSTOM (48), which song.ini now says.
       category: effectiveCategory(p.sidecar.category),
       ...(plate ? { songnameAbm: plate } : {}),
+      ...(p.sidecar.id ? { songId: p.sidecar.id } : {}),
     },
     charts,
     {

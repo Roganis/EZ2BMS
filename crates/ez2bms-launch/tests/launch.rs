@@ -1,7 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use ez2bms_launch::probe::probe_bytes;
-use ez2bms_launch::{probe, write_package, Caps, LaunchError, LaunchSpec, TempSongs};
+use ez2bms_launch::{
+    inspect, probe, retire_package, write_package, write_package_with, Caps, Inspection,
+    LaunchError, LaunchSpec, TempSongs, WriteOptions,
+};
 
 fn scratch(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("ez2bms-launch {name} {}", std::process::id()));
@@ -155,6 +158,95 @@ fn packages_are_written_whole_and_replace_the_old_copy() {
     }
 }
 
+fn ini(tag: &str) -> Vec<u8> {
+    format!("[Song]\nKey = abc\n[EZ2BMS]\nSongId = {tag}\n").into_bytes()
+}
+
+fn names(dir: &std::path::Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    v.sort();
+    v
+}
+
+#[test]
+fn a_publish_keeps_the_tables_it_is_told_to_and_backs_the_old_copy_up() {
+    let songs = scratch("keep");
+    let dir = write_package(&songs, "abc", &[("song.ini".into(), ini("1"))]).unwrap();
+    // EZ2PORT wrote scores into the package.
+    std::fs::write(dir.join("rank_StreetMix_abc.bin"), b"scores nm").unwrap();
+    std::fs::write(dir.join("RANK_StreetMix_abc-hd.bin"), b"scores hd").unwrap();
+    let opts = WriteOptions {
+        carry: vec!["rank_StreetMix_abc-hd.bin".into(), "rank_gone.bin".into()],
+        expect: Some(Some(ini("1"))),
+        backup: true,
+    };
+    write_package_with(&songs, "abc", &[("song.ini".into(), ini("1"))], &opts).unwrap();
+    assert_eq!(names(&dir), ["rank_StreetMix_abc-hd.bin", "song.ini"]);
+    assert_eq!(std::fs::read(dir.join("rank_StreetMix_abc-hd.bin")).unwrap(), b"scores hd");
+    // The replaced copy is kept, where EZ2PORT does not look (a dot-folder).
+    let backup = songs.join(".ez2bms-backup/abc");
+    assert!(backup.join("rank_StreetMix_abc.bin").is_file());
+    assert_eq!(names(&songs), [".ez2bms-backup", "abc"]);
+}
+
+#[test]
+fn a_publish_refuses_a_folder_that_changed_since_it_was_checked() {
+    let songs = scratch("expect");
+    write_package(&songs, "abc", &[("song.ini".into(), ini("theirs"))]).unwrap();
+    let stale = WriteOptions { expect: Some(None), ..Default::default() };
+    let e = write_package_with(&songs, "abc", &[("song.ini".into(), ini("me"))], &stale);
+    assert!(matches!(e, Err(LaunchError::Invalid(ref m)) if m.contains("changed since")));
+    assert_eq!(std::fs::read(songs.join("abc/song.ini")).unwrap(), ini("theirs"));
+    // Once the caller has seen it, it may replace it.
+    let seen = WriteOptions { expect: Some(Some(ini("theirs"))), ..Default::default() };
+    write_package_with(&songs, "abc", &[("song.ini".into(), ini("me"))], &seen).unwrap();
+    assert_eq!(std::fs::read(songs.join("abc/song.ini")).unwrap(), ini("me"));
+}
+
+#[test]
+fn an_old_copy_in_another_case_is_found_and_replaced() {
+    let songs = scratch("case");
+    std::fs::create_dir_all(songs.join("ABC")).unwrap();
+    std::fs::write(songs.join("ABC/Song.INI"), ini("old")).unwrap();
+    let seen = inspect(&songs, "abc", None).unwrap();
+    assert_eq!(seen.folder.as_deref(), Some("ABC"));
+    assert_eq!(seen.song_ini, Some(ini("old")));
+    let opts = WriteOptions { expect: Some(seen.song_ini.clone()), ..Default::default() };
+    write_package_with(&songs, "abc", &[("song.ini".into(), ini("new"))], &opts).unwrap();
+    assert_eq!(names(&songs), ["abc"]);
+}
+
+#[test]
+fn inspect_reports_the_package_and_a_shipped_key() {
+    let songs = scratch("inspect");
+    let game = scratch("inspect-game");
+    std::fs::create_dir_all(game.join("Sound/ABC")).unwrap();
+    assert_eq!(
+        inspect(&songs, "abc", Some(&game)).unwrap(),
+        Inspection { shipped: true, ..Default::default() }
+    );
+    write_package(&songs, "abc", &[("song.ini".into(), ini("1")), ("x.ez".into(), vec![1])])
+        .unwrap();
+    let got = inspect(&songs, "abc", None).unwrap();
+    assert_eq!(got.files, ["song.ini", "x.ez"]);
+    assert!(!got.shipped);
+}
+
+#[test]
+fn a_retired_package_goes_to_the_backup_folder_only_if_unchanged() {
+    let songs = scratch("retire");
+    write_package(&songs, "old", &[("song.ini".into(), ini("1"))]).unwrap();
+    assert!(retire_package(&songs, "old", &ini("2")).is_err());
+    assert!(songs.join("old").is_dir());
+    retire_package(&songs, "old", &ini("1")).unwrap();
+    assert!(!songs.join("old").exists());
+    assert!(songs.join(".ez2bms-backup/old/song.ini").is_file());
+}
+
 #[test]
 fn a_test_songs_root_is_private_and_cleans_up() {
     let base = scratch("temp");
@@ -173,6 +265,16 @@ mod process {
     use super::*;
     use ez2bms_launch::{launch, Outcome, Stream};
     use std::os::unix::fs::PermissionsExt;
+    use std::sync::Mutex;
+
+    /// One process test at a time. A test writing its fake ez2play while
+    /// another forks leaves the script's write handle open in that child for
+    /// a moment, and exec then fails with ETXTBSY ("Text file busy").
+    static SPAWN: Mutex<()> = Mutex::new(());
+
+    fn one_at_a_time() -> std::sync::MutexGuard<'static, ()> {
+        SPAWN.lock().unwrap_or_else(|e| e.into_inner())
+    }
 
     /// A fake ez2play: prints its arguments, one line to stderr, exits as told.
     fn fake(dir: &Path, body: &str) -> PathBuf {
@@ -196,6 +298,7 @@ mod process {
 
     #[test]
     fn arguments_with_spaces_arrive_intact_and_the_log_is_captured() {
+        let _serial = one_at_a_time();
         let dir = scratch("spawn ok");
         fake(
             &dir,
@@ -215,6 +318,7 @@ mod process {
 
     #[test]
     fn exit_codes_say_how_it_ended() {
+        let _serial = one_at_a_time();
         for (code, want) in [
             (1, Outcome::Failed),
             (2, Outcome::Usage),
@@ -231,6 +335,7 @@ mod process {
 
     #[test]
     fn a_running_game_can_be_stopped() {
+        let _serial = one_at_a_time();
         let dir = scratch("spawn kill");
         fake(&dir, "echo started\nexec sleep 30");
         let mut r = launch(&spec(&dir), &caps()).unwrap();
