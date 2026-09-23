@@ -90,6 +90,35 @@ pub fn encode_pcm16(channels: u16, rate: u32, pcm: &[i16]) -> Vec<u8> {
     out
 }
 
+/// An `.ssf` around PCM exactly as it is: the inverse of the import's
+/// `wav::wrap_pcm`, so a keysound that came from the game goes back to it with
+/// the same samples, rate and channels - a cabinet export rewraps a 16-bit
+/// WAV rather than decoding and resampling it (export.rs).
+pub fn wrap_pcm(bits: u16, channels: u16, rate: u32, pcm: &[u8]) -> Vec<u8> {
+    let block = channels as u32 * (bits as u32 / 8);
+    let mut out = Vec::with_capacity(SSF_HEADER + pcm.len());
+    out.extend_from_slice(&channels.to_le_bytes());
+    out.extend_from_slice(&rate.to_le_bytes());
+    out.extend_from_slice(&(rate * block).to_le_bytes());
+    out.extend_from_slice(&(block as u16).to_le_bytes());
+    out.extend_from_slice(&bits.to_le_bytes());
+    out.extend_from_slice(&(pcm.len() as u32).to_le_bytes());
+    out.extend_from_slice(pcm);
+    out
+}
+
+/// Whether two `.ssf` files hold the same audio: the same format and the same
+/// PCM, whatever follows the declared data (the game's files sometimes carry
+/// a tail the header does not count).
+pub fn same_audio(a: &[u8], b: &[u8]) -> bool {
+    match (parse(a), parse(b)) {
+        (Ok((ha, pa)), Ok((hb, pb))) => {
+            ha.channels == hb.channels && ha.rate == hb.rate && ha.bits == hb.bits && pa == pb
+        }
+        _ => false,
+    }
+}
+
 /// Decode a `.ssf`/`.ezw` into a Sample (8-bit is unsigned, as in WAV; wider
 /// than stereo keeps the first two channels).
 pub fn decode(bytes: &[u8]) -> Result<Sample> {

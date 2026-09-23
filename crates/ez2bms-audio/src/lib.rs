@@ -12,7 +12,9 @@
 //! - [`cut`] and [`ssf`] write published keysounds: 16-bit 44.1 kHz stereo,
 //!   sliced sample-exactly.
 //! - [`import`] writes an imported song's folder, the game's `.ssf`
-//!   keysounds becoming `.wav` with their PCM untouched.
+//!   keysounds becoming `.wav` with their PCM untouched; [`export`] makes a
+//!   cabinet's `.ssf` and a BMS folder's `.wav` - rewrapped the other way
+//!   where it can, cut as a publish cuts where it must.
 //!
 //! Timing and voice assignment come from chart-core (TypeScript), which
 //! compiles the chart exactly as it will be published; this crate only plays
@@ -27,6 +29,7 @@ pub mod decode;
 pub mod disk;
 pub mod engine;
 pub mod error;
+pub mod export;
 pub mod import;
 pub mod level;
 pub mod mixer;

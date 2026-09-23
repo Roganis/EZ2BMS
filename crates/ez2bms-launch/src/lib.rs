@@ -2,11 +2,15 @@
 //! supports without running it, write the song into a songs folder of its own,
 //! and run the chart with the log captured.
 //!
+//! A cabinet export writes into the game folder itself: [`gamepatch`] does
+//! that all or nothing, with a backup and a restore.
+//!
 //! Package bytes come from chart-core (the same compiler as the editor's
 //! playback) and keysounds from ez2bms-audio; this crate only puts files in
 //! place and starts the process.
 
 pub mod error;
+pub mod gamepatch;
 pub mod locate;
 pub mod package;
 pub mod probe;

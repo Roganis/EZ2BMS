@@ -73,7 +73,7 @@ pub struct Inspection {
 /// name first, then any case. The folder is listed rather than probed: on a
 /// case-insensitive disk (Windows) a probe for "abc" also finds "ABC", and
 /// the name reported - which the caller shows and compares - would be wrong.
-fn child_ci(dir: &Path, name: &str) -> Option<PathBuf> {
+pub(crate) fn child_ci(dir: &Path, name: &str) -> Option<PathBuf> {
     let names: Vec<_> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.file_name()).collect();
     let hit = names
         .iter()
