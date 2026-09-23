@@ -29,6 +29,7 @@ export * from './ez2data/abm';
 export * from './ez2data/crypt';
 export * from './ez2data/keytable';
 export * from './ez2data/mixparam';
+export * from './ez2data/selectwheel';
 export { decodeCp949 } from './ez2data/initext';
 export * from './edit/note-index';
 export * from './edit/doc';

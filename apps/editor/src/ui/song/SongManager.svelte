@@ -1,7 +1,8 @@
 <script lang="ts">
   // The song manager: everything about the song rather than one chart - its
   // info and category beside every chart in a mode x tier matrix, its title
-  // plate, or its disc and eyecatch. It sits over the playfield like the
+  // plate, its disc and eyecatch, its preview, and all of them on the song
+  // select as the game will show them. It sits over the playfield like the
   // keysound workbench (one or the other).
   import { app } from '../../state/app.svelte';
   import type { Project } from '../../state/project.svelte';
@@ -10,12 +11,14 @@
   import MetaForm from './MetaForm.svelte';
   import PlateDesigner from './PlateDesigner.svelte';
   import PreviewPicker from './PreviewPicker.svelte';
+  import WheelPreview from './WheelPreview.svelte';
 
   const TABS = [
     { id: 'charts', label: 'Charts' },
     { id: 'plate', label: 'Title plate' },
     { id: 'art', label: 'Disc & eyecatch' },
     { id: 'preview', label: 'Preview' },
+    { id: 'wheel', label: 'On the wheel' },
   ] as const;
 
   let { project }: { project: Project } = $props();
@@ -52,6 +55,8 @@
       <PlateDesigner {project} />
     {:else if app.view.songTab === 'preview'}
       <PreviewPicker {project} />
+    {:else if app.view.songTab === 'wheel'}
+      <WheelPreview {project} />
     {:else if app.view.songTab === 'art'}
       <div class="art">
         <ArtCropper {project} kind="disc" />

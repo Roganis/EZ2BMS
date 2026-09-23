@@ -130,7 +130,7 @@ Found and fixed on the way: the rack's hit list was never cleared (M2.8),
 and at 1 280 px the top bar was wider than the window, which made the
 playfield re-bake its textures every frame (see `docs/perf-log.md`).
 
-### Song manager, safe publishing, song art, plates and preview (M3.1-M3.7), 2026-09-23
+### Song manager, safe publishing, song art, plates, preview and the wheel (M3.1-M3.8), 2026-09-23
 
 The assistant is writing Milestone 3 step by step after the owner's
 decisions (a bundled CJK font for plates, rankings kept only for charts
@@ -152,6 +152,10 @@ owner's own game art):
 - the song preview: rendered through the real mixer and finished in the
   port importer's integer arithmetic, picked on the song's loudness and
   auditioned as the wheel loops it.
+- the wheel preview: the song select's placement, chase and swing
+  arithmetic transcribed from the port (`ez2/selectwheel.c`), and a Canvas
+  scene layered as `tools/ez2play/select.c` layers it, over the owner's
+  own select masks read at run time or neon stand-ins.
 
 The disc and the stretched eyecatch are checked byte for byte against
 EZ2PORT's own importer through the oracle, on random images; plates
@@ -162,6 +166,9 @@ temp-folder tests and end to end. What has not been seen: a published disc
 spinning on the real wheel, what the eyecatch shows on the owner's screens
 (the `visible` framing assumes the top-left 640x480, read from the port's
 code), and a publish while EZ2PORT has the old package open on Windows.
+The wheel's placements are checked against the port's own to a thousandth of
+a pixel, its chase and swing frame for frame; the drawing is checked only on
+a made-up game folder, never beside the real select screen.
 
 ---
 
@@ -207,3 +214,5 @@ code), and a publish while EZ2PORT has the old package open on Windows.
 | A plate on the real wheel beside the game's titles (a Korean one)    | not run (no game here)                    | **No** - owner        |
 | The preview's PCM equals the importer's (window, fades, normalising) | oracle, random songs mixed at unity       | Yes, in the container |
 | The preview loops cleanly on the wheel at a sensible loudness        | not run (no game or sound device here)    | **No** - owner        |
+| The wheel places discs and plates, chases and swings as EZ2PORT does | oracle, random wheels and tier sequences  | Yes, in the container |
+| The wheel preview looks like the real select screen with its masks   | synthetic masks only (no game here)       | **No** - owner        |

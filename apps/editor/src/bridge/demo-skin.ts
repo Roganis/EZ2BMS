@@ -6,7 +6,8 @@
 // It deliberately exercises what real folders do: file names in a different
 // case from the .pvi's references, `.bmp` references to `.abm` files, a note
 // series of six colour variants, a target bar that cycles, a .gds whose name
-// does not match its folder's casing.
+// does not match its folder's casing. The song select's masks and the exit
+// eyecatch's mask and stage plate are here too, for the wheel preview.
 
 import { encodeAbm, modeDef, type LaneKind, type ModeId } from '@ez2bms/chart-core';
 
@@ -47,6 +48,12 @@ class Raster {
         this.rgb[o + 1] = c[1];
         this.rgb[o + 2] = c[2];
       }
+    return this;
+  }
+  /** Every pixel from its centre's position. */
+  paint(at: (x: number, y: number) => Rgb): this {
+    for (let y = 0; y < this.h; y++)
+      for (let x = 0; x < this.w; x++) this.rgb.set(at(x + 0.5, y + 0.5), (y * this.w + x) * 3);
     return this;
   }
   abm(): Uint8Array {
@@ -231,6 +238,67 @@ function gds(mode: ModeId): Uint8Array {
   return new TextEncoder().encode(lines.join('\r\n') + '\r\n');
 }
 
+const KEY: Rgb = [0, 0, 0];
+
+/**
+ * The disc's base, multiplied under the art (twice) and turning with it: near
+ * black, so the backdrop goes dark behind the disc, with a lighter notch at
+ * the rim so the turn shows. Exact black round it is the key.
+ */
+function discMask(): Uint8Array {
+  const n = 128;
+  return new Raster(n, n)
+    .paint((x, y) => {
+      const [dx, dy] = [x - n / 2, y - n / 2];
+      const r = Math.hypot(dx, dy);
+      if (r >= n / 2 - 1) return KEY;
+      const notch = r > n / 2 - 12 && Math.abs(dx) < 4 && dy < 0;
+      return notch ? [70, 80, 120] : [10, 12, 22];
+    })
+    .abm();
+}
+
+/** The ring over the disc, still: clear inside, a tinted rim, the spindle hole. */
+function shapeMask(): Uint8Array {
+  const n = 128;
+  return new Raster(n, n)
+    .paint((x, y) => {
+      const r = Math.hypot(x - n / 2, y - n / 2);
+      if (r >= n / 2 - 1) return KEY;
+      if (r < 6) return [24, 24, 34];
+      if (r < 12) return [170, 175, 190];
+      if (r > n / 2 - 5) return [120, 210, 255];
+      return [255, 255, 255];
+    })
+    .abm();
+}
+
+/** The strip behind the title rail, stretched 490 tall: dark at the left, clear at the right. */
+function railStrip(): Uint8Array {
+  const w = 280;
+  return new Raster(w, 16)
+    .paint((x) => toward([40, 46, 78], [255, 255, 255], (x / w) ** 1.5))
+    .abm();
+}
+
+/** The exit eyecatch's mask: the picture clear, darkened into bands at the top and bottom. */
+function stageMask(): Uint8Array {
+  return new Raster(640, 480)
+    .paint((_x, y) => (y < 36 || y > 404 ? [60, 64, 90] : [255, 255, 255]))
+    .abm();
+}
+
+/** The stage plate, added over it: a neon bar with a blocky 1. */
+function stagePlate(): Uint8Array {
+  const r = new Raster(640, 480);
+  for (let y = 0; y < 40; y++) r.fill(392, 420 + y, 220, 1, mix([88, 225, 255], 0.9 - y / 60));
+  r.fill(392, 420, 220, 2, [230, 250, 255]);
+  // The 1: a stem, a flag and a foot, dark on the bar.
+  r.fill(496, 426, 8, 28, [8, 30, 40]).fill(488, 426, 8, 6, [8, 30, 40]);
+  r.fill(486, 450, 26, 4, [8, 30, 40]);
+  return r.abm();
+}
+
 /** The demo game folder: StreetMix and 7StreetMix panels for both players. */
 export function demoSkinFiles(): Map<string, Uint8Array> {
   const out = new Map<string, Uint8Array>();
@@ -240,5 +308,10 @@ export function demoSkinFiles(): Map<string, Uint8Array> {
     const name = modeDef(mode).portName;
     out.set(`${DEMO_GAME}/system/${name}/${name.toLowerCase()}.GDS`, gds(mode));
   }
+  out.set(`${DEMO_GAME}/system/disc/Disc-Mask.abm`, discMask());
+  out.set(`${DEMO_GAME}/system/disc/SHAPE_MASK.abm`, shapeMask());
+  out.set(`${DEMO_GAME}/system/SongSelect/vf/b_mask_2.abm`, railStrip());
+  out.set(`${DEMO_GAME}/system/channel_eyecatch/Common/Stage_Mask.abm`, stageMask());
+  out.set(`${DEMO_GAME}/system/channel_eyecatch/Common/stage_1.abm`, stagePlate());
   return out;
 }

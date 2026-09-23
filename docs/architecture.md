@@ -58,6 +58,13 @@ only changes the lane boxes, the judge line and how things look; scrolling,
 hit testing and the tools are the same code. What is reproduced from the
 port's `scene/skin.c`, and what is not, is in `ez2port-compat.md`.
 
+Both skins read the game folder through `skin/vfs.ts`, the port's
+any-case, `.abm`-first resolver. The song manager's wheel preview reads the
+song select's masks through it too (`skin/select.ts`) and draws a Canvas 2D
+scene (`render/wheel.ts`) rather than a second WebGL context beside the
+playfield's; where the discs and plates sit, and how they move, is
+chart-core's oracle-checked `ez2data/selectwheel.ts`.
+
 ## One compiler for playback and publishing
 
 `chart-core/src/publish/plan.ts` turns a chart into exactly what the package

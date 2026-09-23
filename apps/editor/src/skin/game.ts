@@ -27,20 +27,9 @@ import {
   type PviColor,
   type Side,
 } from '@ez2bms/chart-core';
-import type { Entry } from '../bridge/types';
+import { abmName, Vfs, type SkinFs, type SkinImage } from './vfs';
 
-/** The part of the Backend the loader needs. */
-export interface SkinFs {
-  list(dir: string): Promise<Entry[]>;
-  readFile(path: string): Promise<Uint8Array>;
-}
-
-export interface SkinImage {
-  width: number;
-  height: number;
-  /** Top-down, straight (not premultiplied) RGBA. */
-  rgba: Uint8Array;
-}
+export type { SkinFs, SkinImage } from './vfs';
 
 /** How the game blends a quad; its D3D blend pairs reduced to what a canvas can do. */
 export type SkinBlend = 'normal' | 'add';
@@ -85,60 +74,6 @@ export interface GameSkin {
 }
 
 export class SkinNotFound extends Error {}
-
-/** Directory listings, cached for one load (a skin names dozens of files in a few folders). */
-class Vfs {
-  private readonly lists = new Map<string, Promise<Entry[] | null>>();
-
-  constructor(private readonly fs: SkinFs) {}
-
-  private list(dir: string): Promise<Entry[] | null> {
-    let p = this.lists.get(dir);
-    if (!p) {
-      p = this.fs.list(dir).catch(() => null);
-      this.lists.set(dir, p);
-    }
-    return p;
-  }
-
-  /** ez2_vfs_resolve: `ref` under `dir`, one component at a time, any case. */
-  async resolve(dir: string, ref: string): Promise<string | null> {
-    let cur = dir.replace(/[\\/]+$/, '');
-    for (const comp of ref.split(/[\\/]+/)) {
-      if (!comp || comp === '.') continue;
-      if (comp === '..') {
-        cur = cur.slice(0, Math.max(0, cur.lastIndexOf('/')));
-        continue;
-      }
-      const entries = await this.list(cur);
-      const want = comp.toLowerCase();
-      const hit =
-        entries?.find((e) => e.name === comp) ??
-        entries?.find((e) => !e.name.startsWith('.') && e.name.toLowerCase() === want);
-      if (!hit) return null;
-      cur = `${cur}/${hit.name}`;
-    }
-    return cur;
-  }
-
-  read(path: string): Promise<Uint8Array> {
-    return this.fs.readFile(path);
-  }
-
-  /** ez2_vfs_child_ext: the first file in `dir` with this extension, any case. */
-  async withExt(dir: string, ext: string): Promise<string | null> {
-    const hit = (await this.list(dir))?.find(
-      (e) => !e.is_dir && !e.name.startsWith('.') && e.name.toLowerCase().endsWith(ext),
-    );
-    return hit ? `${dir}/${hit.name}` : null;
-  }
-}
-
-/** The .abm spelling of a reference: the stem up to the first dot, plus .abm. */
-function abmName(ref: string): string {
-  const dot = ref.indexOf('.');
-  return (dot < 0 ? ref : ref.slice(0, dot)) + '.abm';
-}
 
 /** SrcBlend/DestBlend pairs (D3D numbering) to the two blends the renderer has. */
 function blendOf(src: number, dst: number): SkinBlend {

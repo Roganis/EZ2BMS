@@ -48,6 +48,7 @@
 #include "ez2/pvi.h"
 #include "ez2/ranking.h"
 #include "ez2/score.h"
+#include "ez2/selectwheel.h"
 #include "ez2/songdb.h"
 #include "ez2/songini.h"
 #include "ez2/ssf.h"
@@ -932,6 +933,75 @@ static int cmd_textspec(const char *dir, const char *rel, int scale, const char 
     return 0;
 }
 
+/* The select screen's arithmetic (ez2/selectwheel.c). Floats print with
+ * %.9g, which round-trips a float exactly. */
+static int cmd_select_wheel(int count, float scroll)
+{
+    ez2_select_wheel w;
+    int i, first = 1, slots;
+
+    ez2_select_wheel_init(&w, count, 0);
+    w.scroll = scroll;
+    printf("{\"place\":[");
+    for (i = 0; i < w.count; i++) {
+        ez2_select_place p;
+        if (!ez2_select_wheel_place(&w, i, &p))
+            continue;
+        printf("%s[%d,%.9g,%.9g,%.9g,%d]", first ? "" : ",", i, p.x, p.y, p.size, p.bright);
+        first = 0;
+    }
+    printf("],\"rail\":[");
+    first = 1;
+    slots = ez2_select_rail_slots(&w);
+    for (i = 0; i < slots; i++) {
+        ez2_select_rail r;
+        if (!ez2_select_rail_place(&w, i, &r))
+            continue;
+        printf("%s[%d,%d,%.9g,%.9g,%d]", first ? "" : ",", i, r.entry, r.x, r.y, r.bright);
+        first = 0;
+    }
+    printf("]}\n");
+    return 0;
+}
+
+/* The scroll, frame by frame, after the cursor moves FROM -> TO. */
+static int cmd_select_chase(int count, int from, int to, int ticks)
+{
+    ez2_select_wheel w;
+    int t;
+
+    ez2_select_wheel_init(&w, count, from);
+    w.cursor = ((to % w.count) + w.count) % w.count;
+    printf("[");
+    for (t = 0; t < ticks; t++) {
+        ez2_select_wheel_chase(&w);
+        printf("%s%.9g", t ? "," : "", w.scroll);
+    }
+    printf("]\n");
+    return 0;
+}
+
+/* The focused disc's swing, frame by frame, from a latch (angle 0, step
+ * -30), each character of DIFFS the tier index that frame. */
+static int cmd_select_swing(const char *diffs)
+{
+    float angle = 0.0f, step = -30.0f;
+    int cur = 0, t;
+
+    printf("[");
+    for (t = 0; diffs[t]; t++) {
+        int di = diffs[t] - '0';
+        if (di != cur) {
+            step = 0.0f - step;
+            cur = di;
+        }
+        ez2_select_swing_tick(cur, &angle, &step);
+        printf("%s[%.9g,%.9g]", t ? "," : "", angle, step);
+    }
+    printf("]\n");
+    return 0;
+}
+
 static int cmd_usersongs(const char *root, const char *mode, const char *shipped)
 {
     static const char *const kinds[4] = { "Disc", "Songname", "Eyecatch", "Preview" };
@@ -1051,6 +1121,12 @@ int ez2bms_oracle_main(int argc, char **argv)
                        argv[11]);
     if (!strcmp(c, "textspec") && argc == 6)
         return cmd_textspec(argv[2], argv[3], atoi(argv[4]), argv[5]);
+    if (!strcmp(c, "select-wheel") && argc == 4)
+        return cmd_select_wheel(atoi(argv[2]), (float)atof(argv[3]));
+    if (!strcmp(c, "select-chase") && argc == 6)
+        return cmd_select_chase(atoi(argv[2]), atoi(argv[3]), atoi(argv[4]), atoi(argv[5]));
+    if (!strcmp(c, "select-swing") && argc == 3)
+        return cmd_select_swing(argv[2]);
     if (!strcmp(c, "usersongs") && (argc == 4 || argc == 5))
         return cmd_usersongs(argv[2], argv[3], argc == 5 ? argv[4] : 0);
     if (!strcmp(c, "bmson-import") && argc >= 5 && argc <= 7) {
@@ -1071,6 +1147,9 @@ int ez2bms_oracle_main(int argc, char **argv)
             "       ez2port-oracle bmson-import FOLDER GAME_ROOT OUT_ROOT [KEY] [--rgba]\n"
             "       ez2port-oracle usersongs ROOT MODE [SHIPPED,KEYS]\n"
             "       ez2port-oracle ttf FONT TEXTFILE W H X BASELINE CAP ALIGN MAXW OUT\n"
-            "       ez2port-oracle textspec DIR REL SCALE OUT\n");
+            "       ez2port-oracle textspec DIR REL SCALE OUT\n"
+            "       ez2port-oracle select-wheel COUNT SCROLL\n"
+            "       ez2port-oracle select-chase COUNT FROM TO TICKS\n"
+            "       ez2port-oracle select-swing DIFFS\n");
     return 2;
 }

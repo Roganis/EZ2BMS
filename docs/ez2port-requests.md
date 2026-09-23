@@ -144,6 +144,22 @@ and the lane sets their `.gds` use, following the pattern of the other modes.
 build's `docs/BMSON.md`. Until then it offers these modes for cabinet export
 only.
 
+## 7. A package's disc on the arc
+
+**What it's for.** On the song select, a disc flying along the arc (every
+disc but the focus) is drawn from `system\discsmall\<key>.bmp`
+(`select_disc_path`, the original's format string at `0x48cfd0`). The big
+disc at the focus already asks the package first (`ez2_usersongs_asset(key,
+"Disc")`), but this path never does, so a package's disc is a bare mask
+while the wheel turns and pops in only at rest.
+
+**What to add.** Ask `ez2_usersongs_asset(key, "Disc")` before the
+`system\discsmall` path, drawing the package's 256x256 `disc.abm` at the
+thumb's size, as the result screen already does.
+
+**Detection:** none needed; EZ2BMS's wheel preview shows the bare mask until
+the build's `select.c` says otherwise.
+
 ## For information: scores that can't reach 100%
 
 This is not a bug in the port: it reproduces the original. EZ2BMS's lint warns
