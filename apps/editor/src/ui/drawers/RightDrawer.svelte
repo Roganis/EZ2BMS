@@ -45,14 +45,19 @@
 <style>
   .tabs {
     display: flex;
-    gap: 2px;
+    gap: 1px;
+    /* Five tabs and the close button in 320 px: the tabs give way, never the ×. */
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
   .tabs button {
     all: unset;
     cursor: pointer;
-    padding: 6px 7px;
+    flex: none;
+    padding: 6px 5px;
     font-size: 10.5px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--ink-faint);
     border-bottom: 2px solid transparent;

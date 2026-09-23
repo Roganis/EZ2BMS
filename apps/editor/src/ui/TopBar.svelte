@@ -107,6 +107,11 @@
     border-bottom: 1px solid rgba(88, 225, 255, 0.18);
     box-shadow: 0 1px 18px rgba(88, 225, 255, 0.08);
     white-space: nowrap;
+    /* Never wider than the window: the chart pills scroll instead. A bar that
+       overflowed made the page's width follow the readouts' digits, and the
+       playfield resized - re-baking every note texture - on each frame. */
+    min-width: 0;
+    overflow: hidden;
   }
   .brand {
     font-weight: 800;
@@ -180,6 +185,10 @@
   }
   .ro.wide {
     min-width: 92px;
+  }
+  /* A fixed width for the readouts that change while playing. */
+  .ro.wide b {
+    width: 9ch;
   }
   .ro span {
     font-size: 9px;

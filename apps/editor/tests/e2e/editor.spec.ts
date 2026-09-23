@@ -34,6 +34,35 @@ test('opens the demo song and shows both charts', async ({ page }) => {
   expect(await inkRatio(page)).toBeGreaterThan(0.01);
 });
 
+test('the editor fits the window and holds still while the cursor moves', async ({ page }) => {
+  // A bar wider than the window once made the page's width follow the
+  // readouts' digits: the playfield resized, and re-baked its textures, on
+  // every frame of playback.
+  await openDemo(page);
+  const sizes = await page.evaluate(async () => {
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any -- the ?e2e hook */
+    const a = (window as any).__ez2bms;
+    const pf = document.querySelector<HTMLElement>('[data-testid=playfield]')!;
+    const out = new Set<string>();
+    for (let i = 0; i < 12; i++) {
+      a.view.cursor = i * 1237;
+      await new Promise((r) => requestAnimationFrame(r));
+      out.add(`${pf.clientWidth}x${pf.clientHeight}`);
+    }
+    return { sizes: [...out], over: document.documentElement.scrollWidth - innerWidth };
+  });
+  expect(sizes.sizes).toHaveLength(1);
+  expect(sizes.over).toBeLessThanOrEqual(0);
+  const edge = await page.evaluate(() =>
+    Math.max(
+      ...[...document.querySelectorAll('[data-testid=editor] button')].map(
+        (b) => b.getBoundingClientRect().right,
+      ),
+    ),
+  );
+  expect(edge).toBeLessThanOrEqual(1280);
+});
+
 test('the palette runs commands with arguments', async ({ page }) => {
   await openDemo(page);
   await page.keyboard.press('Control+k');

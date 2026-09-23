@@ -69,6 +69,8 @@
     height: 100%;
     display: grid;
     grid-template-rows: auto 1fr auto;
+    /* The window's width, whatever a bar's content would like. */
+    grid-template-columns: minmax(0, 1fr);
     background: var(--bg-0);
   }
   .body {
