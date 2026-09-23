@@ -22,8 +22,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      # The oracle CLI lets chart-core tests compare against EZ2PORT's own code.
+      # The oracle CLI lets chart-core tests compare against EZ2PORT's own code;
+      # render_specs lets them compare the sound model against the real mixer.
       - run: cargo build -p ez2port-oracle --release
+      - run: cargo build -p ez2bms-audio --example render_specs --release
       - run: pnpm test
         env:
           EZ2PORT_ORACLE: ${{ github.workspace }}/target/release/ez2port-oracle

@@ -19,3 +19,8 @@ rubato = "0.16"
 symphonia = { version = "0.5", default-features = false, features = ["wav", "pcm", "adpcm", "ogg", "vorbis", "flac", "mp3"] }
 thiserror.workspace = true
 cpal = { version = "0.16", optional = true }
+
+[dev-dependencies]
+# examples/render_specs.rs reads and writes JSON (chart-core's render cross-check).
+serde.workspace = true
+serde_json.workspace = true
