@@ -14,6 +14,10 @@ GL), so its frame rate says nothing about a real GPU.
 | Frame rate, WebView2 (Windows)                 | up to the display (144 fps target) |
 | Open + index a 50k-note / 1500-channel project | < 50 ms (excluding sample decode)  |
 
+M2 adds two: working out what a note would key in Classic mode (every
+hover) takes < 2 ms at the median, and a workbench scroll step fits in a
+frame with 1 500 sounds.
+
 ## M1.0 renderer gate - `apps/editor/perf.html`
 
 Pooled Pixi v8 sprites (WebGL2), one generated texture per lane kind, full
@@ -60,3 +64,47 @@ spikes are garbage collection and the software GL's texture uploads, to be
 re-measured on real webviews. The compile runs after edits settle (160 ms
 debounce), so at this size a recompile while playing is noticeable; making
 it incremental (per channel) is the plan's next step for the audio sync.
+
+## M2.12 - the keysound workbench, the grouped rack and Classic mode
+
+The same 50k-note chart with its 1 500 sounds named in 60 kits of ~25
+(`synthChart({ names: 'grouped' })`, e.g. `kick-a_01.wav`), and in the
+browser build 1 500 matching files in the song folder (`?bench`). Same
+container and browser as above; each figure is one run of
+`packages/chart-core/test/bench.test.ts` or `apps/editor/tests/e2e/perf.spec.ts`.
+
+| Date       | What                                                              | Time         |
+| ---------- | ----------------------------------------------------------------- | ------------ |
+| 2026-09-23 | Group the background into the rack (BmsTWO's grouping, 60 groups) | 10.7 ms      |
+| 2026-09-23 | Song-wide sound usage (1 chart, 1 500 files)                      | 9.5 ms       |
+| 2026-09-23 | Plan a file rename (every reference, every chart)                 | 2.9 ms       |
+| 2026-09-23 | How one sound sounds (`audible`, one source)                      | 8.4 ms       |
+| 2026-09-23 | How the whole chart sounds (`fingerprint`)                        | 109 ms       |
+| 2026-09-23 | Classic: what a note would key, first hover (builds the cache)    | 31 ms        |
+| 2026-09-23 | Classic: what a note would key, later hovers (median / p95)       | 1.8 / 4.5 ms |
+| 2026-09-23 | Playfield draw, JS only, Edit zoom (median / p95)                 | 2.2 / 10 ms  |
+| 2026-09-23 | Playfield draw, JS only, zoomed right out (median / p95)          | 2.7 / 5.4 ms |
+| 2026-09-23 | Playfield draw while the rack scrolls sideways (median)           | 1.7 ms       |
+| 2026-09-23 | Workbench: open over 1 512 sounds to the first cards              | 35 ms        |
+| 2026-09-23 | Workbench: one scroll step, event to patched DOM (median / p95)   | 4.4 / 6.8 ms |
+
+Reading: a hover in Classic mode stays under 2 ms at the median because
+the check only re-analyses the sounds a candidate touches, against a cached
+analysis of the rest; the first hover after an edit pays for the cache. A
+whole-chart fingerprint (109 ms) is only for tests. The workbench keeps at
+most 26 cards in the DOM while scrolling all 1 512, and 40 scroll steps
+asked the engine for waveforms in 16 batches.
+
+The rack's regrouping takes more than the 8 ms threshold at this size, so
+while a drag streams edits it regroups at most every 150 ms.
+
+A regression found on the way: at 1 280 px with both drawers open the top
+bar (with M2.9's CLASSIC button) was wider than the window, so the page's
+width followed the digits of the position readout and the playfield
+resized - re-baking every note texture - on every frame. The draw median
+had gone from 2.0 to 3.9 ms. Fixed in the layout; `editor.spec.ts` now
+checks that the playfield keeps its size while the cursor moves.
+
+Each frame in this headless browser also costs ~50 ms of wall time outside
+the page (the software compositor reads the WebGL canvas back), which is
+why the perf spec samples 60 frames per zoom rather than 240.

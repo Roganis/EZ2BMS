@@ -6,7 +6,8 @@ judgement of the game, not a spreadsheet of channels - hit Tab to play what you
 just wrote the way the engine will play it, and publish a song package the
 engine loads as-is.
 
-> Work in progress. Milestone 1 ("chart & play core") is written; the
+> Work in progress. Milestones 1 ("chart & play core") and 2 ("keysound
+> workbench + Classic-mode charting") are written; the
 > checklist below is the source of truth for what exists, and
 > [AI-DISCLOSURE.md](AI-DISCLOSURE.md) says what has and has not been checked
 > on real machines.
@@ -101,9 +102,23 @@ pnpm tauri dev          # the desktop app
 - [x] M1.17 New chart (mode wheel, named like EZ2PORT's charts), new song, autosave and crash recovery
 - [x] M1.18 Hardening: test songs per mode (`pnpm fixtures`), 50k-note benchmarks ([perf log](docs/perf-log.md)), generated [key reference](docs/keybindings.md), release workflow
 
+### M2 - Keysound workbench + Classic-mode charting
+
+- [x] M2.1 Sound names and groups (a chart's `kick.wav` finds `kick.ogg`; BmsTWO's `SampleGrouping`, ported with its test vectors)
+- [x] M2.2 Where every sound is used, song-wide (unused files, missing names, unused channels)
+- [x] M2.3 One per-channel compile shared by playback, publishing and the checks below (no change in output)
+- [x] M2.4 What a chart sounds like, exactly (`publish/audible.ts`) - [compat](docs/ez2port-compat.md)
+- [x] M2.5 The M2.4 model checked against the real mixer at 44.1 and 48 kHz
+- [x] M2.6 Classic-mode edits (key, un-key, split, heal, reset) that are refused if the music would change
+- [x] M2.7 Host: waveform thumbnails in batches, importing (never overwriting) and renaming files, OS drops
+- [x] M2.8 The background rack grouped like BmsTWO's, scrolling sideways
+- [x] M2.9 Classic mode in the editor, saved per song
+- [x] M2.10 The keysound workbench (Ctrl+Shift+B): waveforms, filters, draw, rename and replace across charts
+- [x] M2.11 Import by file chooser or by dropping files and folders on the window; reload edited sounds
+- [x] M2.12 Benchmarks with 1 500 grouped sounds ([perf log](docs/perf-log.md)) and these docs
+
 ### Later
 
-- M2 Keysound workbench + Classic-mode charting
 - M3 Song manager + full publish (title plate designer, disc, preview, BGA)
 - M4 Stem slicing
 - M5 Importers (`.ez` originals, BMS/BME, BmsTWO, MIDI, circus2bmson)

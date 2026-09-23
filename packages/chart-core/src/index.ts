@@ -50,4 +50,4 @@ export * from './sound/resolve';
 export * from './sound/grouping';
 export * from './sound/usage';
 export * from './sound/rename';
-export { synthChart, synthDoc, type SynthOptions } from './dev/synth';
+export { synthChart, synthDoc, synthSoundName, type SynthOptions } from './dev/synth';

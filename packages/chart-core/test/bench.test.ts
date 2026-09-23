@@ -12,7 +12,12 @@ import { lintSong } from '../src/lint/lint';
 import { modeDef } from '../src/modes/registry';
 import { compileChart } from '../src/publish/chart-plan';
 import { KeysoundRegistry } from '../src/publish/keysounds';
-import { synthChart } from '../src/dev/synth';
+import { synthChart, synthSoundName } from '../src/dev/synth';
+import { buildGroups } from '../src/sound/grouping';
+import { soundUsage } from '../src/sound/usage';
+import { planSoundRename } from '../src/sound/rename';
+import { audible, fingerprint } from '../src/publish/audible';
+import { classicCandidates } from '../src/edit/classic';
 
 function time<T>(f: () => T): [T, number] {
   const t0 = performance.now();
@@ -72,5 +77,61 @@ describe('50k notes, 1500 sounds', () => {
     expect(report.parse).toBeLessThan(3000);
     expect(report.compile).toBeLessThan(5000);
     expect(report.lint).toBeLessThan(1500);
+  });
+});
+
+// M2: the keysound workbench and Classic mode on the same chart, with sounds
+// named in kits so there are groups (60 of ~25).
+describe('50k notes, 1500 grouped sounds: workbench and Classic mode', () => {
+  const data = synthChart({ mode: '14k', notes: 50_000, channels: 1500, names: 'grouped' });
+  const folder = Array.from({ length: 1500 }, (_, i) => synthSoundName(i, 'grouped'));
+  const report: Record<string, number> = {};
+
+  it('groups, counts usage, fingerprints and finds what to key within budget', () => {
+    const doc = new ChartDoc(data);
+    const res = doc.resolution;
+    const [groups, group] = time(() =>
+      buildGroups(doc.data.channels, (ch) => doc.index.channel(ch).filter((n) => n.x === 0), {
+        minExtent: res / 2,
+        keepEmpty: false,
+      }),
+    );
+    report.rackGroups = group;
+    expect(groups.length).toBe(60);
+    const [usage, count] = time(() => soundUsage([{ file: 'a.bmson', data: doc.data }], folder));
+    report.soundUsage = count;
+    expect(usage.unusedFiles).toEqual([]);
+    const [plan, rename] = time(() =>
+      planSoundRename([{ file: 'a.bmson', data: doc.data }], folder, folder[7]!, 'renamed.wav'),
+    );
+    report.renamePlan = rename;
+    expect(plan.ok).toBe(true);
+    // Every sound one second long: Classic can see what is ringing.
+    const samples = () => ({ frames: 44100 });
+    const [, one] = time(() => audible(doc.data, { srcs: new Set([folder[3]!]), samples }));
+    report.audibleOneSound = one;
+    const [, all] = time(() => fingerprint(doc.data, samples));
+    report.fingerprintWhole = all;
+    // Hovering: the first call builds Classic's cached analysis, the rest reuse it.
+    const env = { samples, brush: 1 };
+    const [, first] = time(() => classicCandidates(doc, 11, res * 64 + res / 8, 0, env));
+    report.hoverFirst = first;
+    const hovers: number[] = [];
+    for (let i = 0; i < 60; i++) {
+      const y = res * (80 + i * 37) + ((i * 13) % 8) * (res / 8);
+      hovers.push(time(() => classicCandidates(doc, 11 + (i % 5), y, 0, env))[1]);
+    }
+    hovers.sort((a, b) => a - b);
+    report.hoverMedian = hovers[hovers.length >> 1]!;
+    report.hoverP95 = hovers[Math.floor(hovers.length * 0.95)]!;
+    console.log(
+      'bench M2 (ms):',
+      Object.fromEntries(Object.entries(report).map(([k, v]) => [k, Math.round(v * 100) / 100])),
+    );
+    expect(report.rackGroups).toBeLessThan(500);
+    expect(report.soundUsage).toBeLessThan(500);
+    expect(report.renamePlan).toBeLessThan(100);
+    expect(report.hoverMedian).toBeLessThan(8);
+    expect(report.fingerprintWhole).toBeLessThan(5000);
   });
 });

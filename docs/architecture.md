@@ -33,7 +33,9 @@ packages/chart-core/src/
   io/bmson/   parse / serialize / mode resolution / legacy renumbering
   edit/       ops + inverses, transactions, history, selection, clipboard, commands
   engine/     EZ2PORT emulation: voices, judge, holds, gauge, score, sessions
-  publish/    the compiled plan and the package writers (EZFF, ezi, ini, song.ini, plate)
+  publish/    the compiled plan and the package writers (EZFF, ezi, ini, song.ini, plate);
+              audible.ts: what a chart sounds like, for Classic mode's checks
+  sound/      chart names -> folder files, BmsTWO's grouping, song-wide usage, renames
   lint/       rules, grouped by severity
 apps/editor/src/
   bridge/ state/ commands/ input/ render/ skin/ audio/ port/ ui/ theme/
@@ -101,19 +103,48 @@ voice decisions of its own.
 - **Publish.** Keysounds are cut from 44.1 kHz audio into 16-bit stereo `.ssf`,
   the port's own format; consecutive cuts join exactly into the uncut sample.
 
+## Sounds across the song (M2)
+
+Each chart has its own channel list and undo history; what the charts of a
+song share is the folder of sound files. The keysound workbench
+(`apps/editor/src/ui/workbench`) shows that folder: every file and every
+missing name as a card, grouped by chart-core's port of BmsTWO's
+`SampleGrouping` (the same groups as the background rack), with where each
+is used (`sound/usage.ts`). Only the cards on screen are built, and their
+waveforms come from the host in batches (`audio/thumbs.ts`).
+
+Two song-wide changes behave differently on purpose:
+
+- **Replace** points channels at another file. The notes now play
+  something else, so it is an edit: one undo step in each chart it touches,
+  and the toast undoes them all.
+- **Rename** renames the file on disk and every reference to it, in every
+  chart, including their undo and redo history (`ChartDoc.renameSoundRefs`),
+  so no undo can bring back a name that no longer exists. It is not an edit:
+  charts without unsaved changes are saved at once, and the toast's Undo
+  renames the file back. `sound/rename.ts` refuses a name another reference
+  would start to mean.
+
+**Classic mode** (`edit/classic.ts`, on per song in `ez2bms.song.json`)
+charts over music already complete in the background: placing keys the
+sound playing there, deleting un-keys it. Every such edit is dry-run
+through `publish/audible.ts` - only for the sound files it touches, against
+a cached analysis of the chart - and refused if the music would change.
+What that promise covers, and what it cannot, is in `ez2port-compat.md`.
+
 ## The desktop host (`src-tauri`)
 
 The host does what a browser cannot, and nothing else; chart logic never
 crosses the bridge. Its commands, each mirrored by the web mock in
 `apps/editor/src/bridge/`:
 
-| Group    | Commands                                                                                                                           |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Files    | `fs_read` (raw bytes), `fs_read_text`, `fs_write_text` / `fs_write_bytes` (atomic, optional `.bak`), `fs_list`, `project_scan`     |
-| Settings | `settings_load`, `settings_save` (a JSON object the front end owns, in the app's config folder)                                    |
-| Audio    | `audio_info`, `audio_load`, `audio_peaks`, `audio_set_events`, `audio_play` / `seek` / `stop`, `audio_trigger`, `audio_set_master` |
-| Clock    | `audio_clock`, `audio_now` (for offset pings), `audio_clock_stream` (a snapshot every 8 ms over a Tauri channel)                   |
-| EZ2PORT  | `port_locate`, `port_probe`, `port_publish` (cuts keysounds, writes the package whole), `port_test` / `port_stop`                  |
+| Group    | Commands                                                                                                                                                                                  |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Files    | `fs_read` (raw bytes), `fs_read_text`, `fs_write_text` / `fs_write_bytes` (atomic, optional `.bak`), `fs_list`, `project_scan`, `fs_copy_into` (import: never overwrites), `fs_rename`    |
+| Settings | `settings_load`, `settings_save` (a JSON object the front end owns, in the app's config folder)                                                                                           |
+| Audio    | `audio_info`, `audio_load`, `audio_peaks`, `audio_thumbs` (a screenful of waveforms in one call), `audio_set_events`, `audio_play` / `seek` / `stop`, `audio_trigger`, `audio_set_master` |
+| Clock    | `audio_clock`, `audio_now` (for offset pings), `audio_clock_stream` (a snapshot every 8 ms over a Tauri channel)                                                                          |
+| EZ2PORT  | `port_locate`, `port_probe`, `port_publish` (cuts keysounds, writes the package whole), `port_test` / `port_stop`                                                                         |
 
 Without an output device the audio engine falls back to a silent real-time
 clock, so Play mode still runs. `port_test` publishes into a private songs

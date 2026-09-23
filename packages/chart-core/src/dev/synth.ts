@@ -16,6 +16,21 @@ export interface SynthOptions {
   channels: number;
   seed?: number;
   resolution?: number;
+  /**
+   * Sound names: "s0001.wav" (one name group, the default), or "grouped" -
+   * 60 kits of ~25 numbered sounds ("kick-a_01.wav"), as a keysounded song
+   * names them, so the rack and the workbench have groups to draw.
+   */
+  names?: 'numbered' | 'grouped';
+}
+
+const KITS = ['kick', 'snare', 'hat', 'clap', 'tom', 'bass', 'lead', 'pad', 'vox', 'fx'];
+
+/** The i-th sound's name in a synthetic chart. */
+export function synthSoundName(i: number, names: SynthOptions['names'] = 'numbered'): string {
+  if (names !== 'grouped') return `s${String(i).padStart(4, '0')}.wav`;
+  const kit = `${KITS[i % KITS.length]}-${'abcdef'[Math.floor(i / KITS.length) % 6]}`;
+  return `${kit}_${String(Math.floor(i / 60) + 1).padStart(2, '0')}.wav`;
 }
 
 function lcg(seed: number) {
@@ -40,7 +55,7 @@ export function synthChart(o: SynthOptions): ChartData {
   data.info.resolution = res;
   data.channels = Array.from({ length: o.channels }, (_, i) => ({
     id: i + 1,
-    name: `s${String(i).padStart(4, '0')}.wav`,
+    name: synthSoundName(i, o.names),
   }));
   const cols = modeDef(o.mode).columns.map((c) => c.x);
   const notes: NoteRec[] = [];

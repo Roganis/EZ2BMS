@@ -93,6 +93,57 @@ is transcribed and checked with unit and Playwright tests on a synthetic panel
   port measured the original doing so), and the editor follows the panel. The
   neon skin still mirrors 2P, as BmsTWO's P2 skins do.
 
+## Classic mode: keying never changes the music (not in the oracle)
+
+Classic mode (BmsTWO's Classic BMS Mode) charts over a song that is already
+complete in the background: placing a note keys the sound playing there,
+deleting sends it back. Its promise is that **what autoplay plays does not
+change**, and it is kept by checking, not by construction: every Classic
+edit - key, un-key, a lane move, split, heal, reset all - is dry-run first
+and refused, with the reason, if anything audible would differ.
+
+What "audible" means is chart-core's `publish/audible.ts`, built from the
+same per-channel code as the publisher (`ChartClock`, `channelEvents`). For
+each sound file, every event becomes a segment: when it starts, which part
+of the sample (the published frame cut, 22-frame minimum included), until
+when, at what velocity and pan. An event plays on the voice of its keysound
+identity (file, first frame, last frame), and the next event on that voice
+cuts it - the editor's engine and EZ2PORT agree here because the port's
+voice is the keysound's `.ezi` slot, and the publisher gives each identity
+exactly one slot. Contiguous pieces are merged (only when both the time and
+the sample frames meet), so a slice chain and the whole sound it was cut
+from compare equal. A sample of unknown length keeps a symbolic end, valid
+whatever the length turns out to be.
+
+Tested by `audible.test.ts` (one test per rule: cuts, merges, a sound
+ringing past a chain, STOPs, same-tick ties), a model-based run over random
+songs and random Classic edits with undo and redo (`classic.test.ts`: the
+whole chart's fingerprint never moves), the real mixer
+(`audible.render.test.ts` renders both sides of 120 random cases at 44.1
+and 48 kHz: equal fingerprints render within 1e-5 - float summation order -
+and the check has teeth: most different ones differ audibly), and
+`classic.spec.ts` in the editor.
+
+What the check cannot see, and so is not promised:
+
+- **Frame timing in the port.** EZ2PORT fires sounds per video frame, the
+  background before the lanes within a frame; the editor orders a tick's
+  events by lane. Moving a sound between the background and a lane changes
+  that order only for two events on one voice in one frame, and such ties
+  are refused - but two different voices starting in one frame may start a
+  frame apart in the port either way.
+- **Two players.** With both sides seated the port pans lane sounds to the
+  player's side; the promise is for one player (and for autoplay).
+- **Misses.** In test play a missed note is silent, as in the game, so a
+  keyed sound is only heard when it is hit. That is what keying means.
+- **The original cabinet.** The original executable has one voice per
+  track, not per keysound: on a lane a keyed sound is cut by the lane's next
+  note. The promise is for EZ2PORT; cabinet export (M6) will lint it.
+- **Unknown lengths.** A sound that has not loaded is never taken to be
+  sounding, so Classic offers less (and refuses more) until it loads.
+- Not ported from BmsTWO: the automatic split at a long note's release, and
+  "right-click clears x_stop" (`xStop` is not published).
+
 ## Port behaviour worth knowing
 
 - **Some hold kinds make 100% unreachable, or pass it.** The maximum score

@@ -65,6 +65,12 @@ convention (`streetmix1p-<key>-hd.bmson`) so the two agree.
 `x_vel`, `x_pan` and `x_kind` are the names EZ2PORT's `BMSTWO-EZ2.md` proposes,
 so BmsTWO and the port can adopt them as they are.
 
+The keysound workbench and Classic mode (M2) add nothing to the file.
+Classic mode's splits are ordinary background notes with `c: true`, keyed
+notes are ordinary notes, and whether the song is charted in Classic mode
+is kept beside the charts, as `classic` in `ez2bms.song.json`. Renaming a
+sound in the workbench renames the file and rewrites each channel's `name`.
+
 ## Lossless reading
 
 - Members EZ2BMS does not know are kept on the object they belong to and
