@@ -16,6 +16,7 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "e2e": "pnpm --filter @ez2bms/editor e2e",
+    "manual:shots": "MANUAL_SHOTS=1 pnpm --filter @ez2bms/editor e2e manual-screenshots",
     "tauri": "tauri",
     "fixtures": "tsx scripts/gen-fixtures.ts"
   },
