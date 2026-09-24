@@ -236,3 +236,33 @@ Reading:
 - Keeping a take is instant for the brush. A Classic take pays for the
   sound check each keying makes, about 1 ms a press on a dense stem, once,
   when Keep is pressed.
+
+## M8.6 - hold previews and scroll changes
+
+The TypeScript figures are chart-core `test/bench.test.ts` ("hold previews
+and scroll changes at full size"); the drawing figures are
+`apps/editor/tests/e2e/perf.spec.ts` (JS only, headless Chromium with
+SwiftShader). This container (Node 22, one core); three runs each.
+
+| Date       | What                                                                                     | Time                 |
+| ---------- | ---------------------------------------------------------------------------------------- | -------------------- |
+| 2026-09-24 | Previewing every hold of the 50k-note chart (36 121 holds, kinds 0-12)                   | 46-55 ms             |
+| 2026-09-24 | Placing 4 096 scroll changes (EZ2PORT's most) on the tick axis                           | 2.5-4.6 ms           |
+| 2026-09-24 | The multiplier at the cursor, once a frame (binary search over 4 096)                    | 35-40 ns             |
+| 2026-09-24 | Saving / loading the 50k-note chart with 4 096 scroll changes                            | 190-230 / 69-76 ms   |
+| 2026-09-24 | Compiling it (the changes add no measurable time)                                        | 187-207 ms           |
+| 2026-09-24 | Play field draw on the 50k-note chart as it plays: without / with 4 096 changes (median) | 0.9-1.2 / 1.3-1.5 ms |
+| 2026-09-24 | Edit field draw on the 50k-note chart at zoom 56 (median): without / with the hold ticks | 4.8-5.1 / 5.4 ms     |
+
+Reading:
+
+- A hold's preview is computed once per chart version and kept (the
+  renderer asks for the holds on screen, the Inspector for the selected
+  ones), so the whole chart's cost above is paid only by a select-all.
+- The multiplier walk is a binary search, cheap enough to do every frame;
+  the points behind it are rebuilt once per chart version.
+- Scroll changes cost the Play field a few tenths of a millisecond, most of
+  it the flags. The hold ticks cost Edit about as much.
+- The Edit figure is well above M1.18's 1.4 ms: the extras drawn since (the
+  grouped rack, strips' columns, markers) and a busier synthetic chart, not
+  M8, as the "without" column shows. It stays inside a 60 Hz frame.

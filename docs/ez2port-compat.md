@@ -443,6 +443,9 @@ so these follow its code:
   1/60 s elapsed rather than per frame, so it eases as fast at 144 Hz as
   the port does at 60. F5 passes the Play view's speed (`--speed`), so a
   test in EZ2PORT scrolls as the editor shows it.
+- **Volume records** (type 2) from a game chart are kept and written back
+  to the cabinet, which mixes the track at them; EZ2PORT plays every track
+  at full level and ignores them. EZ2BMS shows them and authors none.
 - **The port's bmson importer does not read `x_scroll_events`**: a raw bmson
   dropped in the songs folder plays without them. EZ2BMS writes packages,
   so its own charts are not affected (a request in `ez2port-requests.md`).
@@ -459,7 +462,8 @@ so these follow its code:
   but pay a single instalment, so a perfect play falls short. Kinds 9-12
   are not counted, yet their head still scores. Play mode reproduces both
   (a synthetic 7K chart scores 121 of 156 under autoplay, as the port's own
-  tool does); lint will flag these kinds on holds.
+  tool does); lint flags these kinds on holds, and the Inspector says what
+  the selected holds are judged and counted as.
 
 ## Plates: how the renderer matches
 

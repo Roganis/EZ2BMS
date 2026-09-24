@@ -187,9 +187,20 @@ deferred.
 - [x] M7.12 Clicks, the sound and picture latency tests, the picture offset on the cursor
 - [x] M7.13 [Recording, controllers and calibration](docs/recording.md), timings in the [perf log](docs/perf-log.md), end-to-end specs
 
+### M8 - EZ2-native extras
+
+- [x] M8.1 What a hold kind pays: a tick on the hold at each instalment, the count on its label, and in the Inspector what the selected holds are judged and counted as (checked against the oracle-tested play session)
+- [x] M8.2 Scroll-speed changes in the chart (`x_scroll_events`), imported from the game with their track, written back to the cabinet as they were (oracle, random game charts)
+- [x] M8.3 The field's scroll arithmetic, bit for bit (oracle), and scroll changes published to EZ2PORT
+- [x] M8.4 Scroll changes in the editor: the Play view scrolls as EZ2PORT does, flags in the gutter, the Timing panel, `scroll 1.5`, F5 at your speed
+- [x] M8.5 The game chart's other records (volume, marks...) shown, read-only, and moved with a change of resolution
+- [x] M8.6 These docs, timings in the [perf log](docs/perf-log.md), end-to-end specs
+
+Test from the cursor waits for the port (build 1582 has no `--start`), and
+sprite BGA for the port's writers.
+
 ### Later
 
-- M8 EZ2-native extras
 - M9 Polish and distribution
 
 ## Verification

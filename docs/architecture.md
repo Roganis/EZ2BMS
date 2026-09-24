@@ -91,7 +91,8 @@ EZ2PORT scrolls by ticks, not seconds: `1.6 px per tick x speed%`, so the space
 between two beats never changes when the BPM does. The editor's Edit mode uses
 the same pulse axis; Play mode only swaps who drives the position (the audio
 clock instead of the user) and the zoom. Flipping between them is an animation,
-not a different renderer.
+not a different renderer. A chart's scroll changes (M8) rescale Play's zoom
+as a whole, as EZ2PORT's live rate does; the axis stays linear.
 
 ## Audio
 
@@ -277,6 +278,28 @@ Song time for a press is `AudioClient.songMsAtHost(hostMs)` - the same
 clock arithmetic as the cursor - less the input offset. The metronome's
 clicks are made in the host (`ez2bms-audio` `click.rs`) and scheduled as
 engine events beside the chart's.
+
+## EZ2-native extras (M8)
+
+- **Hold kinds.** `engine/holdpreview.ts` says, for a hold, where each
+  instalment falls due, how many a clean play is paid and what the note
+  counter counts, from the same `holdStep`/`holdInstalments`/`noteCounted`
+  the play session judges with; its test runs the session in autoplay and
+  finds the instalments where the preview put them. The renderer draws a
+  tick at each (cached per chart version) and the Inspector the counts.
+- **Scroll changes.** `ChartData.scrollEvents` (bmson `x_scroll_events`),
+  edited by `setScrollAt` in one transaction. `timing/scroll.ts` holds both
+  halves of what EZ2PORT does: `ez2/scroll.c`'s arithmetic (oracle-checked
+  bit for bit) and the play loop's walk of the records (`scrollPoints`,
+  `multiplierAt`, from `reference/play.c`). `scrollEventsOf` adds the
+  records charts imported before M8 kept, so they play and publish too.
+  - Packages get them as type-6 records on track 0, the cabinet on their
+    own tracks with their own second word.
+  - The renderer multiplies Play's pixels per beat by the multiplier at the
+    cursor, and while playing eases to it a tenth of the gap per 1/60 s.
+- **Kept records.** `io/ez/kept.ts` describes what an imported game chart
+  kept in `x_ez_records`; the renderer tags them in the gutter and the
+  Timing panel lists them. A change of resolution moves them with the notes.
 
 ## The desktop host (`src-tauri`)
 

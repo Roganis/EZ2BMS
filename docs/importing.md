@@ -43,10 +43,16 @@ replace that song on the wheel, so the key comes from the title with a
 digit added until no `sound/` folder has it. The original key is kept in
 the song file, for a cabinet export to write the song back.
 
+Scroll-speed changes become the chart's own (`x_scroll_events`): the Play
+view scrolls with them, the Timing panel edits them, and they publish. Each
+keeps the track and second word it had, so a cabinet export writes the same
+record back.
+
 Nothing is dropped, and Issues says what will not publish:
 
-- scroll-speed changes, track volumes, beats-per-measure, marks and the
-  stops the engine ignores (kept in `x_ez_records`);
+- track volumes, beats-per-measure, marks and the stops the engine ignores
+  (kept in `x_ez_records`, shown as grey tags in the gutter and in the
+  Timing panel, read-only);
 - a background note's length (publishing writes background notes as taps,
   as the engine plays them);
 - two `.ezi` slots naming one file, which become one voice;

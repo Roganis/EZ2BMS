@@ -51,8 +51,9 @@ changed it (proven against EZ2PORT's reader, `cabinet.oracle.test.ts`):
 
 - background notes stay on their track;
 - raw lengths, velocity, pan and hold kind are kept;
-- the records bmson has no place for are kept: scroll, volume, beats,
-  marks, stops and unknown kinds;
+- scroll changes go back on the track, and with the second word, each had;
+- the records bmson has no place for are kept: volume, beats, marks, stops
+  and unknown kinds;
 - the header: names, the second BPM, the track count, and the end of the
   stage;
 - the tempo map.
@@ -109,7 +110,7 @@ Below come the keysounds (new, already there, missing, converted), the
 | `cabinet-song-hidden`      | warning         | a mode would stop listing the song (its NM has no level)                                                                                           |
 | `cabinet-2p`               | warning         | the game's two-player file for the tier stays as it is                                                                                             |
 | `cabinet-gds`              | warning         | the game has no `.gds` for the mode: EZ2BMS's own lane table is used                                                                               |
-| `cabinet-records-res`      | warning         | the resolution was changed since the import, so kept records may land elsewhere                                                                    |
+| `cabinet-records-res`      | warning         | kept records fall between EZ2 ticks (a resolution changed by hand; a change of resolution in EZ2BMS moves them)                                    |
 | `cabinet-tier-new`         | info            | a tier the song did not have, and the level it will show                                                                                           |
 | `cabinet-tracks`           | info            | background notes moved off a track that is a lane in this mode, or tracks added                                                                    |
 | `cabinet-kept`             | info            | records written back                                                                                                                               |
@@ -172,8 +173,9 @@ so charts that share a stem's slices share its files:
 
 Names are unique whatever their case.
 
-**Lost, and said:** velocity and pan (BMS has neither), and an imported game
-chart's kept records.
+**Lost, and said:** velocity and pan (BMS has neither), scroll changes (LR2
+has none, and beatoraja's `#SCROLL` jumps where EZ2PORT eases), and an
+imported game chart's kept records.
 
 The export is checked by reading it back with EZ2BMS's own BMS reader
 (`bms-write.test.ts`): random charts come back with every note in its lane,

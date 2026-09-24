@@ -426,6 +426,71 @@ device. To confirm on the owner's machines:
   WebView2 and WebKitGTK;
 - the clicks' sound and loudness over a mix.
 
+### Milestone 8: EZ2-native extras (M8.1-M8.6), 2026-09-24
+
+The assistant wrote Milestone 8 after the owner chose it. The owner decided:
+
+- scroll-speed changes (EZFF type 6): edit, play and publish them, as
+  EZ2PORT plays them;
+- per-track volume (type 2): show and keep, nothing new authored;
+- Test from the cursor: wait for the port (build 1582 has no `--start`);
+- sprite BGA: deferred.
+
+The assistant took the rest and stated it in the plan:
+
+- the bmson member `x_scroll_events: [{y, rate}]`, written only when there
+  are some;
+- an imported change keeping its track and second word;
+- charts imported before M8 keeping their changes as records, still played
+  and published, with a quick fix to make them the chart's own;
+- F5 passing the Play view's speed;
+- K cycling the common hold kinds, the Inspector offering all of 0-12.
+
+New areas of work:
+
+- **the hold-kind preview:** where each hold kind pays its instalments,
+  shown on the field and counted in the Inspector;
+- **scroll-speed changes:** the chart model and bmson member; the field's
+  scroll arithmetic transcribed from EZ2PORT and checked bit for bit; the
+  play loop's handling of the records (from `reference/play.c`, which the
+  oracle does not build); publishing them to packages and the cabinet; the
+  Play view scrolling with them;
+- **the game chart's kept records** shown in the editor, with what each
+  engine does with them.
+
+What is checked:
+
+- **Against EZ2PORT's own code, through the oracle, on made-up data:**
+  - the scroll arithmetic (target, chase, offset, y) on random scripts, bit
+    for bit, through a new oracle command;
+  - packages' scroll changes read back by the port's chart parser at the
+    chart's ticks with the same f32, on random charts;
+  - random game charts with scroll records on any track and random words
+    still going back to the cabinet record for record.
+- **Unit tests:**
+  - hold previews against the (oracle-checked) play session in autoplay,
+    for random kinds and lengths: the same instalments, each within a
+    millisecond;
+  - the bmson member's round trip and byte stability, the edit command
+    and its undo, rescale, lint, the legacy quick fix (the cabinet getting
+    the same records), the kept records' descriptions;
+  - publish output unchanged for charts without scroll changes (the
+    pre-M8 hashes are kept and checked).
+- **End to end:** the Inspector's counts and K; adding, changing, saving
+  and undoing a scroll change; the Play field's rate before, after and
+  while easing across a change; an imported game song's scroll change and
+  kept records.
+
+Nothing has been run in EZ2PORT or on the cabinet. To confirm on the
+owner's machines:
+
+- a published scroll chart in EZ2PORT scrolls as the Play view does;
+- an imported shipped scroll chart looks right in the editor and plays the
+  same in EZ2PORT after publishing;
+- F5 starting ez2play at the Play view's speed;
+- the hold ticks against what EZ2PORT pays while a hold is held (the
+  session they are checked against is itself oracle-checked).
+
 ---
 
 ## Verification status
@@ -509,3 +574,8 @@ device. To confirm on the owner's machines:
 | A take lands on its pulses, is one undo step, keeps a Classic song's sound          | unit tests and Playwright, pretend controller   | Yes, in the container |
 | The latency tests' offsets, and the cursor ahead by the picture offset              | unit tests and Playwright, pretend controller   | Yes, in the container |
 | Recording and calibrating feel right on a real machine and cabinet                  | not run                                         | **No** - owner        |
+| Hold-kind previews: where each instalment is paid, what is counted                  | the oracle-checked play session, random holds   | Yes, in the container |
+| Scroll arithmetic (target, chase, offset, y) as EZ2PORT's                           | oracle, random scripts, bit for bit             | Yes, in the container |
+| Scroll changes in a package read back at their ticks with their f32                 | oracle, random charts                           | Yes, in the container |
+| Scroll records go back to the cabinet as the game had them                          | oracle, random game charts                      | Yes, in the container |
+| A published scroll chart scrolls in EZ2PORT as in the Play view                     | not run (no game here)                          | **No** - owner        |

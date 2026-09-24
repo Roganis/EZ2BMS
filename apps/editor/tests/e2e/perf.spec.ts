@@ -262,3 +262,48 @@ test('stem strips draw while playing, and a long stem chops quickly', async ({ p
   expect(scroll.median).toBeLessThan(16);
   expect(bench.chopMs).toBeLessThan(20_000);
 });
+
+// M8: the Play field on the 50k-note chart with the 4096 scroll changes
+// EZ2PORT keeps at most, one every quarter beat, stepped as a chart plays
+// (10 pulses a frame): the multiplier walk, the chase and the rescaled field.
+test('the Play field draws with 4096 scroll changes at a small cost', async ({ page }, info) => {
+  test.setTimeout(90_000);
+  await openBench(page);
+  const stats = await page.evaluate(async () => {
+    const w = window as unknown as W & {
+      __ez2bms: {
+        view: { mode: string };
+        doc: {
+          resolution: number;
+          transact(label: string, fn: (tx: { setScrollEvents(e: unknown[]): void }) => void): void;
+        };
+      };
+    };
+    const a = w.__ez2bms;
+    const f = w.__ez2bmsField;
+    const res = a.doc.resolution;
+    const run = async () => {
+      f.drawTimes.length = 0;
+      for (let i = 0; i < 60; i++) {
+        a.view.cursor = res * 64 + i * 10;
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+      }
+      await new Promise((r) => setTimeout(r, 50));
+      const t = [...f.drawTimes].sort((x, y) => x - y);
+      return t[Math.floor(t.length / 2)]!;
+    };
+    a.view.mode = 'play';
+    await new Promise((r) => setTimeout(r, 400));
+    const plain = await run();
+    a.doc.transact('Scroll', (tx) =>
+      tx.setScrollEvents(
+        Array.from({ length: 4096 }, (_, i) => ({ y: (i * res) / 4, rate: 0.75 + (i % 4) * 0.25 })),
+      ),
+    );
+    const scroll = await run();
+    return { plainMedian: plain, scrollMedian: scroll };
+  });
+  info.annotations.push({ type: 'perf', description: JSON.stringify(stats) });
+  console.log('play with scroll changes, draw ms', stats);
+  expect(stats.scrollMedian).toBeLessThan(16);
+});

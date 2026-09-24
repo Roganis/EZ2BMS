@@ -36,6 +36,10 @@ import { InputMapper } from '../src/input/mapper';
 import { keyconfDefaults, KEY_CHANNELS } from '../src/input/keyconf';
 import { EngineTempo } from '../src/timing/engine-tempo';
 import { PlanTimeline } from '../src/timing/plan-timeline';
+import { holdPreview } from '../src/engine/holdpreview';
+import { EZ_SCROLL_MAX, multiplierAt, scrollPoints } from '../src/timing/scroll';
+import { TickConverter } from '../src/timing/ticks';
+import type { ChartData } from '../src/model/types';
 
 function time<T>(f: () => T): [T, number] {
   const t0 = performance.now();
@@ -420,5 +424,72 @@ describe('input at full rate', () => {
     expect(report.axisUsPerEvent).toBeLessThan(50);
     expect(report.buttonUsPerEvent).toBeLessThan(50);
     expect(report.snap5000).toBeLessThan(500);
+  });
+});
+
+// M8: what the hold-kind preview and scroll changes ask for. Every hold of a
+// 50k-note chart previewed (the Inspector with everything selected; the
+// renderer asks only for what is on screen, once per chart version), and a
+// chart with the 4096 scroll changes EZ2PORT keeps at most: built for the
+// field, walked every frame, saved, read and compiled.
+describe('hold previews and scroll changes at full size', () => {
+  it('previews 50k holds, and handles 4096 scroll changes, within budget', () => {
+    const data = synthChart({ mode: '14k', notes: 50_000, channels: 1500 });
+    const res = data.info.resolution ?? 240;
+    let k = 0;
+    for (const n of data.notes)
+      if (n.x !== 0) {
+        n.l = n.l || (res / 4) * (1 + (k % 8));
+        n.kind = k++ % 13;
+      }
+    const holds = data.notes.filter((n) => n.l > 0);
+    const [pays, previewMs] = time(() =>
+      holds.reduce((s, n) => s + (holdPreview(data, n)?.pays ?? 0), 0),
+    );
+    expect(pays).toBeGreaterThan(0);
+
+    const scrolls = Array.from({ length: EZ_SCROLL_MAX }, (_, i) => ({
+      y: i * (res / 4),
+      rate: 0.5 + (i % 8) * 0.25,
+    }));
+    const withScroll = { ...data, scrollEvents: scrolls };
+    const tc = new TickConverter(res, data.stopEvents);
+    const [points, pointsMs] = time(() => scrollPoints(withScroll, (y) => tc.tick(y).tick));
+    expect(points).toHaveLength(EZ_SCROLL_MAX);
+    const N = 1_000_000;
+    const [, walkMs] = time(() => {
+      let m = 0;
+      for (let i = 0; i < N; i++) m += multiplierAt(points, (i * 4096 * 12) / N);
+      return m;
+    });
+    const [text, saveMs] = time(() => serializeBmson(withScroll));
+    const [, loadMs] = time(() => parseBmson(text));
+    const compile = (c: ChartData) =>
+      compileChart(c, {
+        columns: modeDef('14k').columns,
+        name: 'bench',
+        keysounds: new KeysoundRegistry(),
+        samples: () => undefined,
+      });
+    const [, plainMs] = time(() => compile(data));
+    const [plan, scrollMs] = time(() => compile(withScroll));
+    expect(plan.ezff.tracks[0]!.records.filter((r) => r.type === 6)).toHaveLength(EZ_SCROLL_MAX);
+    const report = {
+      holds: holds.length,
+      previewAll: previewMs,
+      scrollPoints4096: pointsMs,
+      walkNsPerFrame: (walkMs * 1e6) / N,
+      save4096: saveMs,
+      load4096: loadMs,
+      compilePlain: plainMs,
+      compileScroll: scrollMs,
+    };
+    console.log(
+      'bench M8 (ms):',
+      Object.fromEntries(Object.entries(report).map(([k, v]) => [k, Math.round(v * 100) / 100])),
+    );
+    expect(report.previewAll).toBeLessThan(2000);
+    expect(report.scrollPoints4096).toBeLessThan(200);
+    expect(report.walkNsPerFrame).toBeLessThan(5000);
   });
 });
