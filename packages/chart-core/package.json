@@ -20,5 +20,8 @@
     "fast-check": "^4.10.2",
     "typescript": "~6.0.3",
     "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "intl-messageformat": "^10.7.18"
   }
 }
