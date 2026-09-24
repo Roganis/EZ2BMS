@@ -3,8 +3,8 @@
 
 import { setBpmAt, type ChartDoc, type Clip } from '@ez2bms/chart-core';
 import { AudioClient } from '../audio/client.svelte';
-import { createBackend, joinPath, type AudioInfo, type Backend } from '../bridge';
-import { laneKeysFromIni } from '../input/lanekeys';
+import { createBackend, type AudioInfo, type Backend } from '../bridge';
+import { InputHub } from '../input/hub.svelte';
 import { PlayController } from '../play/controller.svelte';
 import { PortState } from './port.svelte';
 import { Autosave, formatWhen } from './autosave';
@@ -30,6 +30,7 @@ export class App {
   readonly view = new View();
   readonly commands = new Commands();
   readonly audio: AudioClient;
+  readonly input: InputHub;
   readonly play: PlayController;
   readonly port: PortState;
   readonly autosave: Autosave;
@@ -53,6 +54,7 @@ export class App {
   constructor(readonly backend: Backend) {
     this.settings = new Settings(backend);
     this.audio = new AudioClient(backend, this.view, this.settings);
+    this.input = new InputHub(this);
     this.play = new PlayController(this);
     this.port = new PortState(this);
     this.autosave = new Autosave(backend);
@@ -77,22 +79,12 @@ export class App {
     this.view.speed = this.settings.data.speed;
     this.commands.setOverrides(this.settings.data.keys);
     this.audioInfo = await this.backend.audio.info().catch(() => null);
+    this.input.start();
     void this.backend.audio.cacheSetCap(this.settings.data.audioCacheMB).catch(() => {});
     await this.port.detect();
     if (this.audioInfo?.device_error)
       toast(`No audio device - playing silently (${this.audioInfo.device_error})`, 'warn');
     this.ready = true;
-  }
-
-  /** The player's EZ2PORT key bindings (<game>/ez2port/keys.ini), else the port's defaults. */
-  async loadKeys(): Promise<void> {
-    const root = this.settings.data.gameRoot;
-    const text = root
-      ? await this.backend
-          .readText(joinPath(joinPath(root, 'ez2port'), 'keys.ini'))
-          .catch(() => null)
-      : null;
-    this.play.keys = laneKeysFromIni(text);
   }
 
   get slot(): ChartSlot | undefined {

@@ -78,6 +78,7 @@ export * from './input/keyconf';
 export * from './input/scancodes';
 export * from './input/channels';
 export * from './input/mapper';
+export * from './input/portcfg';
 export * from './sound/grouping';
 export * from './sound/usage';
 export * from './sound/rename';

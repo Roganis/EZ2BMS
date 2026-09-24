@@ -84,3 +84,29 @@ fn bindspec_parses_every_kind_and_refuses_a_broken_device_token() {
     assert_eq!(v[1]["formatted"], "0810:e501#2/h0.downright");
     assert_eq!(v[2]["ok"], 0);
 }
+
+#[test]
+fn portcfg_reads_debounce_over_the_default() {
+    let dir = std::env::temp_dir().join(format!("ez2oracle-cfg-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("settings.ini");
+    let run = |text: Option<&str>| {
+        match text {
+            Some(t) => std::fs::write(&file, t).unwrap(),
+            None => {
+                let _ = std::fs::remove_file(&file);
+            }
+        }
+        let out = oracle().args(["portcfg", file.to_str().unwrap()]).output().unwrap();
+        assert!(out.status.success());
+        serde_json::from_slice::<serde_json::Value>(&out.stdout).unwrap()
+    };
+    assert_eq!(run(None), serde_json::json!({ "read": 0, "debounce": 8 }));
+    assert_eq!(
+        run(Some("[Port]\ndebounce = 12 ; ms\n")),
+        serde_json::json!({ "read": 1, "debounce": 12 })
+    );
+    // Out of range: ignored.
+    assert_eq!(run(Some("Debounce = 101\n"))["debounce"], 8);
+    std::fs::remove_dir_all(&dir).ok();
+}

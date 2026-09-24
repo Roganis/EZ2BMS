@@ -41,6 +41,8 @@
  *                             turntables, and ez2_keyconf_format's text
  *   bindspec                  stdin: one binding token per line; each parsed
  *                             and formatted back
+ *   portcfg FILE              a settings.ini read over the defaults: whether
+ *                             it was read, and the input Debounce
  */
 #include "ez2/abm.h"
 #include "ez2/bmson.h"
@@ -53,6 +55,7 @@
 #include "ez2/gds.h"
 #include "ez2/mixparam.h"
 #include "ez2/mode.h"
+#include "ez2/portcfg.h"
 #include "ez2/pvi.h"
 #include "ez2/ranking.h"
 #include "ez2/score.h"
@@ -1290,6 +1293,19 @@ static int cmd_keyconf(int bare)
     return 0;
 }
 
+/* settings.ini as the port reads it over its defaults: whether it was read,
+ * and the input Debounce (the one value EZ2BMS takes from it). */
+static int cmd_portcfg(const char *path)
+{
+    ez2_portcfg c;
+    int read;
+
+    ez2_portcfg_defaults(&c);
+    read = ez2_portcfg_load(path, &c);
+    printf("{\"read\":%d,\"debounce\":%d}\n", read, c.debounce);
+    return 0;
+}
+
 static int cmd_bindspec(void)
 {
     char line[1024], out[256];
@@ -1366,6 +1382,7 @@ int ez2bms_oracle_main(int argc, char **argv)
     if (!strcmp(c, "keyconf") && (argc == 2 || (argc == 3 && !strcmp(argv[2], "bare"))))
         return cmd_keyconf(argc == 3);
     if (!strcmp(c, "bindspec") && argc == 2) return cmd_bindspec();
+    if (!strcmp(c, "portcfg") && argc == 3) return cmd_portcfg(argv[2]);
     if (!strcmp(c, "bmson-import") && argc >= 5 && argc <= 7) {
         /* [KEY] [--rgba]: --rgba reads the art from test RGBA files */
         int images = !strcmp(argv[argc - 1], "--rgba");
@@ -1390,6 +1407,7 @@ int ez2bms_oracle_main(int argc, char **argv)
             "       ez2port-oracle select-wheel COUNT SCROLL\n"
             "       ez2port-oracle select-chase COUNT FROM TO TICKS\n"
             "       ez2port-oracle select-swing DIFFS\n"
-            "       ez2port-oracle keyconf [bare] | bindspec   (text on stdin)\n");
+            "       ez2port-oracle keyconf [bare] | bindspec   (text on stdin)\n"
+            "       ez2port-oracle portcfg FILE\n");
     return 2;
 }

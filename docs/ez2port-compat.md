@@ -382,6 +382,18 @@ six frames after a strum still counts. The port measures that latch on its
 frame clock; EZ2BMS on the events' own times, which is what they are judged
 at.
 
+Pads are read with the same SDL the port uses (`crates/ez2bms-input`): a
+board is `vid:pid`, the n-th more of a make `vid:pid#n` in SDL's order
+(`ezpad.c` `key_for`/`count_same`), and a hot-plug renumbers them. A press
+is placed by its age (`press = now - age`), and an age over 200 ms is taken
+as now, as the port does; `input/hub.svelte.ts` applies both to keys and
+pads alike. `settings.ini`'s `Debounce` is read as `ez2/portcfg.c` reads it
+(`input/portcfg.ts`, against the oracle's `portcfg` in
+`input.oracle.test.ts`); `keys.ini` is looked for where the port keeps it
+(`ez2/cfgdir.c`, `ez2bms-launch` `config.rs`). EZ2BMS reads both files and
+never writes them: its bindings are its own, taken from the port's file the
+first time.
+
 Where EZ2BMS departs, deliberately:
 
 - times are float ms on the audio engine's host clock, where the port uses

@@ -24,7 +24,8 @@ export class PortState {
   async detect(): Promise<void> {
     const s = this.app.settings;
     const b = this.app.backend;
-    if (b.kind === 'web') return;
+    // The bindings follow EZ2PORT's keys.ini until the player picks their own.
+    if (b.kind === 'web') return this.app.input.loadControls();
     const root = s.data.gameRoot;
     if (root) {
       this.located = await b.port.locate(root).catch(() => null);
@@ -41,7 +42,7 @@ export class PortState {
         this.probeError = e instanceof Error ? e.message : String(e);
       }
     }
-    await this.app.loadKeys();
+    await this.app.input.loadControls();
   }
 
   say(text: string): void {

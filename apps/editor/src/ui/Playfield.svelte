@@ -1,8 +1,7 @@
 <script lang="ts">
   // The canvas. Scroll to move through the chart, Ctrl+scroll to zoom.
-  import { columnsFor, eraseNotes, modeDef, placeNote } from '@ez2bms/chart-core';
+  import { columnsFor, eraseNotes, laneForChannel, modeDef, placeNote } from '@ez2bms/chart-core';
   import { onMount } from 'svelte';
-  import { laneForKey } from '../input/lanekeys';
   import { PointerTool, type StripHooks, type ToolHost } from '../input/pointer';
   import { PlayfieldRenderer } from '../render/renderer';
   import { toast } from '../state/toasts.svelte';
@@ -135,23 +134,14 @@
     if (h) tool.up(e, h);
   }
 
-  function onKeyUpCapture(e: KeyboardEvent) {
-    if (app.play.key(e, false)) e.stopImmediatePropagation();
-  }
-
   function onKeyCapture(e: KeyboardEvent) {
-    // Play: lane keys belong to the game, Esc ends the run.
-    if (app.play.active) {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        void app.play.stop(true);
-        return;
-      }
-      if (app.play.key(e, true)) {
-        e.stopImmediatePropagation();
-        return;
-      }
+    // Play: Esc ends the run (the lane keys never get here: the input hub
+    // takes them first).
+    if (app.play.active && e.key === 'Escape') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      void app.play.stop(true);
+      return;
     }
     // While drawing a note in Classic mode, Tab picks the next sound (it is
     // Edit/Play otherwise, which means nothing in the middle of a drag).
@@ -168,24 +158,15 @@
       e.preventDefault();
       return;
     }
-    // Step input: the cabinet's keys toggle a note at the cursor.
-    const t = e.target as HTMLElement | null;
-    const typing = !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
-    if (
-      !v.stepInput ||
-      v.mode !== 'edit' ||
-      typing ||
-      e.ctrlKey ||
-      e.metaKey ||
-      e.altKey ||
-      app.view.paletteOpen
-    )
-      return;
-    const x = laneForKey(e.code, new Set(columns.map((c) => c.x)), app.play.keys);
-    if (x === undefined) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    if (e.repeat) return;
+  }
+
+  /**
+   * Step input: a press on the cabinet's keys - keyboard or controller,
+   * through the input hub - toggles a note at the cursor on that key's lane.
+   */
+  function stepPress(ch: number) {
+    const x = laneForChannel(ch);
+    if (x === undefined || !columns.some((c) => c.x === x) || app.view.paletteOpen) return;
     const d = slot.doc;
     const step = (d.resolution * 4) / v.snap;
     const y = Math.max(0, Math.round(v.cursor / step) * step);
@@ -209,6 +190,18 @@
     else if (placeNote(d, { x, y, ch: v.brush }) === undefined)
       toast("Can't place a note there", 'warn');
   }
+
+  // Listening for step input only while it is on: otherwise the keys are the editor's.
+  $effect(() => {
+    if (!v.stepInput || v.mode !== 'edit') return;
+    return app.input.attach({
+      keys: 'plain',
+      pads: true,
+      edges: (edges) => {
+        for (const e of edges) if (e.down) stepPress(e.channel);
+      },
+    });
+  });
 
   const columns = $derived(columnsFor(modeDef(slot.mode), v.side));
   const stripSpecs = $derived.by(() => {
@@ -258,10 +251,8 @@
       })
       .catch((e: unknown) => (failed = e instanceof Error ? e.message : String(e)));
     window.addEventListener('keydown', onKeyCapture, true);
-    window.addEventListener('keyup', onKeyUpCapture, true);
     return () => {
       window.removeEventListener('keydown', onKeyCapture, true);
-      window.removeEventListener('keyup', onKeyUpCapture, true);
       alive = false;
       ro?.disconnect();
       renderer?.destroy();

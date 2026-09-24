@@ -57,6 +57,11 @@ export class AudioClient {
     private readonly settings: Settings,
   ) {}
 
+  /** Whether calibrate() has run: until then host and page times can't be compared. */
+  get calibrated(): boolean {
+    return this.clock !== undefined;
+  }
+
   /** Measure how far the engine's host clock is from performance.now(): the fastest of ten pings. */
   async calibrate(): Promise<void> {
     let best = Infinity;
@@ -256,13 +261,35 @@ export class AudioClient {
     });
   }
 
-  /** What the speaker is playing now, in song ms; undefined until the engine has started. */
-  private heardMs(): number | undefined {
+  /**
+   * A page time (performance.now(), an event's timeStamp) on the engine's
+   * host clock, in ms - the clock controller events are stamped on, so a key
+   * and a pad press compare.
+   */
+  hostMsAtPerf(perfMs: number): number {
+    return perfMs + this.offsetMs;
+  }
+
+  hostNowMs(): number {
+    return this.hostMsAtPerf(performance.now());
+  }
+
+  /**
+   * The song ms the speaker was playing at host time `hostMs` (undefined
+   * until the engine has started this play). What a press is judged and
+   * recorded at, before the player's input offset.
+   */
+  songMsAtHost(hostMs: number): number | undefined {
     const c = this.clock;
     if (!c || !c.playing || c.generation === this.startGen) return undefined;
-    const hostNs = (performance.now() + this.offsetMs) * 1e6;
-    const frame = c.frame + ((hostNs - c.host_ns) * c.rate) / 1e9 - c.latency_frames;
-    const ms = (frame * 1000) / c.rate - this.settings.data.audioOffsetMs;
+    const frame = c.frame + ((hostMs * 1e6 - c.host_ns) * c.rate) / 1e9 - c.latency_frames;
+    return (frame * 1000) / c.rate - this.settings.data.audioOffsetMs;
+  }
+
+  /** What the speaker is playing now, in song ms; undefined until the engine has started. */
+  private heardMs(): number | undefined {
+    const ms = this.songMsAtHost(this.hostNowMs());
+    if (ms === undefined) return undefined;
     // Never backwards: a late buffer must not make the cursor jitter.
     this.lastMs = Math.max(this.lastMs, ms);
     return this.lastMs;

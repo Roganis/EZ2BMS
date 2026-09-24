@@ -147,6 +147,11 @@ export class InputMapper {
     });
   }
 
+  /** Whether a key is bound to any channel (the editor keeps such keys from its shortcuts while playing). */
+  keyBound(scancode: number): boolean {
+    return this.bind.some((bs) => bs.some((b) => b.kind === 'key' && b.scancode === scancode));
+  }
+
   isDown(ch: number): boolean {
     return this.down[ch] ?? false;
   }

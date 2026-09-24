@@ -21,7 +21,9 @@ import {
   KEY_CHANNELS,
   parseKeyconf,
 } from '../src/input/keyconf';
+import { DEFAULT_DEBOUNCE_MS, portDebounce } from '../src/input/portcfg';
 import { ORACLE, oracle } from './oracle';
+import { withTmpDir } from './tmp';
 
 interface OracleConf {
   rc: number;
@@ -253,6 +255,62 @@ describe.skipIf(!ORACLE)('binding tokens, against the port (ez2/bindspec.c)', ()
         expect(clean.map(ourSpec)).toEqual(want);
       }),
       { numRuns: 60 },
+    );
+  });
+});
+
+describe.skipIf(!ORACLE)('settings.ini Debounce against the port', () => {
+  const port = (bytes: Uint8Array) =>
+    withTmpDir((_, write) =>
+      oracle<{ debounce: number }>(['portcfg', write('settings.ini', bytes)]),
+    ).debounce;
+  const ours = (bytes: Uint8Array) => portDebounce(bytes) ?? DEFAULT_DEBOUNCE_MS;
+  const enc = (s: string) => new TextEncoder().encode(s);
+
+  it('reads the files people write', () => {
+    for (const text of [
+      '',
+      'Debounce = 12\n',
+      '[Settings]\r\nDEBOUNCE=0\r\n',
+      '; Debounce = 3\nDebounce = 5 ; ms\nDebounce = 200\n',
+      '# Debounce = 4\n  debounce\t=\t 16x\n',
+      'Debounce = -1\nDebounce = +7\n',
+      'Debounce Time = 9\nDebounce\n',
+      `Wide = 1\n${'x'.repeat(250)} Debounce = 30\n`,
+      `${'Debounce = 4 '.padEnd(255, ' ')}Debounce = 6\n`,
+      'Debounce = 9\0 = 3\n',
+    ]) {
+      const b = enc(text);
+      expect(ours(b), JSON.stringify(text)).toBe(port(b));
+    }
+  });
+
+  it('agrees on random lines', () => {
+    const key = fc.constantFrom(
+      'Debounce',
+      'debounce',
+      'DeBounce',
+      ' Debounce',
+      'Debounc',
+      'Wide',
+      '[x]',
+      '#D',
+    );
+    const val = fc.oneof(
+      fc.integer({ min: -20, max: 130 }).map(String),
+      fc.stringMatching(/^[ \t+\-0-9a;#=]{0,8}$/),
+    );
+    const line = fc.oneof(
+      fc.tuple(key, fc.constantFrom('=', ' = ', '\t=', ''), val).map(([k, e, v]) => k + e + v),
+      fc.stringMatching(/^[ -~]{0,300}$/),
+    );
+    const eol = fc.constantFrom('\n', '\r\n', '');
+    fc.assert(
+      fc.property(fc.array(fc.tuple(line, eol), { maxLength: 12 }), (lines) => {
+        const b = enc(lines.map(([l, e]) => l + (e || '\n')).join(''));
+        expect(ours(b)).toBe(port(b));
+      }),
+      { numRuns: 80 },
     );
   });
 });

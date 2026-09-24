@@ -1,10 +1,13 @@
 // Play mode: autoplay (everything KOOL, as EZ2PORT's --auto) and test play
-// (you press, with EZ2PORT's keys), judged by chart-core's port of the
-// engine's score.c, timed by the audio clock.
+// (you press, on the keyboard or a controller, through the input hub with
+// the player's bindings), judged by chart-core's port of the engine's
+// score.c, timed by the audio clock.
 //
 // In test play the engine plays the backing only. A key press sounds the
 // lane's nearest keysound on the lane's own voice, whether or not it hits,
-// and a note left unpressed is silent - as the cabinet does.
+// and a note left unpressed is silent - as the cabinet does. Each channel
+// goes where EZ2PORT sends it (chart-core routeChannel); in ScratchMix the
+// turntable strums and the keys are frets (engine/strum.ts).
 
 import {
   effectiveIni,
@@ -13,11 +16,14 @@ import {
   LIFE_PRESETS,
   modeDef,
   PlaySession,
+  routeChannel,
   songIniFrom,
+  type ChannelEdge,
+  type Column,
   type JudgeFx,
+  type SoundCmd,
 } from '@ez2bms/chart-core';
 import { SvelteSet } from 'svelte/reactivity';
-import { DEFAULT_LANE_KEYS, laneForKey } from '../input/lanekeys';
 import type { App } from '../state/app.svelte';
 import type { ChartSlot } from '../state/project.svelte';
 
@@ -64,16 +70,12 @@ export class PlayController {
    */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   readonly hidden = new Set<number>();
-  /** code -> lane, from the player's keys.ini when there is one. */
-  keys: Record<string, number> = DEFAULT_LANE_KEYS;
   private session: PlaySession | undefined;
   private slot: ChartSlot | undefined;
+  private cols: readonly Column[] = [];
   private raf = 0;
   private seq = 0;
-  /** bmson lane -> the session's lane index, for this run (not UI state). */
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity
-  private laneIndex = new Map<number, number>();
-  private laneSet: ReadonlySet<number> = new SvelteSet();
+  private detach: (() => void) | undefined;
 
   constructor(private readonly app: App) {}
 
@@ -98,13 +100,15 @@ export class PlayController {
     await app.audio.sync(slot);
     const plan = app.audio.currentPlan!;
     const cols = modeDef(slot.mode).columns;
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity
-    this.laneIndex = new Map(cols.map((c) => [c.x, c.index]));
-    this.laneSet = new SvelteSet(this.laneIndex.keys());
+    this.cols = cols;
     const res = slot.doc.resolution;
     const from = app.view.cursor;
     const startMs = app.audio.msAt(slot, from);
-    this.session = new PlaySession(plan, cols, ini, { autoplay: kind === 'auto', startMs });
+    this.session = new PlaySession(plan, cols, ini, {
+      autoplay: kind === 'auto',
+      startMs,
+      strum: slot.mode === 'scratch',
+    });
     this.hidden.clear();
     this.pressed.clear();
     this.result = null;
@@ -118,6 +122,8 @@ export class PlayController {
       judge: null,
     };
     this.active = kind;
+    if (kind === 'test')
+      this.detach = app.input.attach({ keys: 'all', pads: true, edges: (e) => this.onEdges(e) });
     // A beat of lead-in before the cursor.
     await app.audio.play(slot, Math.max(0, from - res));
     cancelAnimationFrame(this.raf);
@@ -143,6 +149,8 @@ export class PlayController {
   /** Stop; with `report`, show the result card. */
   async stop(report: boolean): Promise<void> {
     cancelAnimationFrame(this.raf);
+    this.detach?.();
+    this.detach = undefined;
     const s = this.session;
     const kind = this.active;
     this.active = null;
@@ -172,31 +180,39 @@ export class PlayController {
     this.session = undefined;
   }
 
-  /** A key went down or up. True when it was a lane key (and was used). */
-  key(e: KeyboardEvent, down: boolean): boolean {
-    if (this.active !== 'test' || !this.session || !this.slot) return false;
-    const x = laneForKey(e.code, this.laneSet, this.keys);
-    if (x === undefined) return false;
-    e.preventDefault();
-    const lane = this.laneIndex.get(x)!;
-    if (!down) {
-      this.pressed.delete(x);
-      this.session.release(lane);
-      return true;
+  /** Channels from the input hub: presses and releases, strums in ScratchMix. */
+  private onEdges(edges: readonly ChannelEdge[]): void {
+    const s = this.session;
+    const slot = this.slot;
+    if (this.active !== 'test' || !s || !slot) return;
+    for (const e of edges) {
+      const route = routeChannel(slot.mode, this.cols, e.channel);
+      if (!route) continue;
+      if ('strum' in route) {
+        if (!e.down) continue;
+        const at = this.app.input.songMs(e.ms);
+        if (at !== undefined) this.sound(s.strum(route.strum, at));
+        continue;
+      }
+      const x = this.cols[route.column]!.x;
+      if (!e.down) {
+        this.pressed.delete(x);
+        s.release(route.column);
+        continue;
+      }
+      this.pressed.add(x);
+      // When it was pressed, not when this ran (the hub's times).
+      const at = this.app.input.songMs(e.ms);
+      if (at !== undefined) this.sound(s.press(route.column, at));
     }
-    if (e.repeat) return true;
-    this.pressed.add(x);
-    const heard = this.app.audio.heardNow();
-    if (heard === undefined) return true;
-    // When the key actually went down, not when this handler ran.
-    const at = heard - (performance.now() - e.timeStamp) - this.app.settings.data.inputOffsetMs;
-    const r = this.session.press(lane, at);
+  }
+
+  private sound(r: { sounds: SoundCmd[]; fx: JudgeFx[] }): void {
     for (const snd of r.sounds) {
       const i = Number(snd.voice.slice(4));
       void this.app.audio.triggerKeysound(snd.keysound, LANE_VOICE_BASE + i, snd.level, snd.pan);
     }
     this.show(r.fx);
-    return true;
   }
 
   private show(fx: JudgeFx[]): void {

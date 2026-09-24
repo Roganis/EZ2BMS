@@ -27,6 +27,19 @@ export interface SettingsData {
   audioCacheMB: number;
   /** Per song folder: the files with stem strips, once the song has chosen. */
   strips: Record<string, string[]>;
+  /** Keyboard and controller bindings (input/hub.svelte.ts). */
+  controls: Controls;
+}
+
+/**
+ * EZ2BMS's own bindings, in keys.ini's grammar (chart-core input/keyconf.ts),
+ * so they copy into EZ2PORT's file as they are. `ini` null: none chosen yet -
+ * EZ2PORT's own keys.ini is taken (and kept) when one is found, else its
+ * defaults are used. `debounceMs` null: settings.ini's, else the port's 8.
+ */
+export interface Controls {
+  ini: string | null;
+  debounceMs: number | null;
 }
 
 export const DEFAULT_SETTINGS: SettingsData = {
@@ -44,6 +57,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   gameSkin: true,
   audioCacheMB: 2048,
   strips: {},
+  controls: { ini: null, debounceMs: null },
 };
 
 export class Settings {

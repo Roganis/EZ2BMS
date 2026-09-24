@@ -36,6 +36,12 @@ describe('the resolver (test_inputchannel.c)', () => {
     expect(m.input(key('A', false, 120))).toEqual([]);
     expect(m.isDown(ch('Key1'))).toBe(true);
     expect(m.input(key('B', false, 130))).toEqual([{ channel: ch('Key1'), down: false, ms: 130 }]);
+    // Which keys are bound at all (the editor keeps them from its shortcuts).
+    expect([m.keyBound(sc('A')), m.keyBound(sc('B')), m.keyBound(sc('Z'))]).toEqual([
+      true,
+      true,
+      false,
+    ]);
   });
 
   it('timing: an event carries the time it arrived', () => {
