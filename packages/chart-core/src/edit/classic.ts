@@ -169,6 +169,45 @@ export function classicCandidates(
   return checked(doc, [...exact, ...sounding], (cand) => keyChange(doc, x, y, l, cand), env);
 }
 
+/**
+ * What a recorded press could key at (x, y), unchecked and background only:
+ * notes already there in the background (never a note keyed on another lane
+ * - a take must not take another lane's keyings away), then sounds playing
+ * through. Ordered as classicCandidates orders them; classicKey's own check
+ * refuses one that would change the sound. No dry runs, which is what makes
+ * a take of hundreds of presses affordable.
+ */
+export function recordCandidates(
+  doc: ChartDoc,
+  x: number,
+  y: number,
+  l: number,
+  env: ClassicEnv = {},
+): Candidate[] {
+  const brush = env.brush != null ? doc.channel(env.brush) : undefined;
+  const group = brush ? groupKeyOf(brush.name) : undefined;
+  const order = new Map(doc.data.channels.map((c, i) => [c.id, i]));
+  const exact: Candidate[] = [];
+  const atY = new Set<ChannelId>();
+  for (const lane of doc.index.laneKeys()) {
+    for (const n of doc.index.at(lane, y)) {
+      atY.add(n.ch);
+      if (n.x !== BGM) continue;
+      const c = doc.channel(n.ch);
+      const tier = group !== undefined && c && groupKeyOf(c.name) === group ? 0 : 1;
+      exact.push({ kind: 'note', id: n.id, ch: n.ch, tier });
+    }
+  }
+  exact.sort(
+    (p, q) =>
+      p.tier - q.tier ||
+      (order.get(p.ch) ?? 0) - (order.get(q.ch) ?? 0) ||
+      (p.kind === 'note' && q.kind === 'note' ? p.id - q.id : 0),
+  );
+  const sounding = !placementConflict(doc, x, y, l) ? soundingAt(doc, y, env, atY) : [];
+  return [...exact, ...sounding];
+}
+
 /** Dry-run the first few candidates; those that would change the sound go last, with the reason. */
 function checked(
   doc: ChartDoc,

@@ -45,6 +45,7 @@ export * from './edit/note-index';
 export * from './edit/doc';
 export * from './edit/commands';
 export * from './edit/classic';
+export * from './edit/record';
 export * from './slice/view';
 export * from './slice/ops';
 export * from './slice/midi';

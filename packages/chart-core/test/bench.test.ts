@@ -31,6 +31,7 @@ import { memoryGameFs, openGame } from '../src/io/ez/game';
 import { synthGame, SYNTH_EZ_TABLES } from '../src/dev/synthgame';
 import { cabinetTargets, finishCabinet, nameSounds, planCabinet } from '../src/publish/cabinet';
 import { lintCabinet } from '../src/lint/cabinet';
+import { applyTake } from '../src/edit/record';
 
 function time<T>(f: () => T): [T, number] {
   const t0 = performance.now();
@@ -304,5 +305,56 @@ describe('exporters at full size', () => {
     expect(report.encoderSjis).toBeLessThan(2000);
     expect(report.cabinet50k).toBeLessThan(5000);
     expect(report.bmsWrite50k).toBeLessThan(3000);
+  });
+});
+
+// M7: takes at full size - 1000 presses with the brush on the 50k-note chart,
+// and 300 presses keying a sliced 5-minute stem in a Classic song (each keying
+// is checked for sounding the same, which is where a Classic take's time goes).
+describe('takes at full size', () => {
+  it('applies a brush take and a Classic take within budget', () => {
+    const report: Record<string, number> = {};
+    const big = new ChartDoc(synthChart({ mode: '5k', notes: 50_000, channels: 1500 }));
+    const res = big.resolution;
+    const brushNotes = Array.from({ length: 1000 }, (_, i) => ({
+      x: 11 + (i % 5),
+      y: (i * res) / 4 + res / 8,
+      l: 0,
+      offsetMs: 0,
+    }));
+    const [brush, brushMs] = time(() => applyTake(big, brushNotes, { brush: 1 }));
+    report.brush1000 = brushMs;
+    expect(brush.placed + brush.clash).toBe(1000);
+
+    // A 5-minute stem at 150 BPM (750 beats), sliced every beat.
+    const data = newChart({ mode: '5k', tier: 'NM', bpm: 150 });
+    data.channels = [{ id: 1, name: 'stem.wav' }];
+    data.notes = Array.from({ length: 750 }, (_, b) => ({
+      id: b + 1,
+      ch: 1,
+      x: 0,
+      y: b * 240,
+      l: 0,
+      c: b > 0,
+    }));
+    const stem = new ChartDoc(data);
+    const samples = () => ({ frames: 300 * 44100 });
+    const classicNotes = Array.from({ length: 300 }, (_, i) => ({
+      x: 11 + (i % 5),
+      y: i * 480 + (i % 2 ? 120 : 0),
+      l: 0,
+      offsetMs: 0,
+    }));
+    const [classic, classicMs] = time(() =>
+      applyTake(stem, classicNotes, { classic: { samples, brush: 1 } }),
+    );
+    report.classic300 = classicMs;
+    expect(classic.placed).toBe(300);
+    console.log(
+      'bench M7 (ms):',
+      Object.fromEntries(Object.entries(report).map(([k, v]) => [k, Math.round(v * 100) / 100])),
+    );
+    expect(report.brush1000).toBeLessThan(2000);
+    expect(report.classic300).toBeLessThan(10000);
   });
 });

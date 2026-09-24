@@ -151,6 +151,8 @@ export class ChartDoc {
   private nextChannel: number;
   private listeners = new Set<(cs: ChangeSet) => void>();
   private open: { ops: Op[]; cs: ChangeSet } | null = null;
+  /** An open group: the ops of every transaction inside it, recorded as one entry at its end. */
+  private grouping: { ops: Op[] } | null = null;
   /** Bumped on every applied change; cheap "did anything happen" check for UIs. */
   version = 0;
 
@@ -245,6 +247,37 @@ export class ChartDoc {
     return result;
   }
 
+  /**
+   * Run `fn` - any number of transactions - as ONE undo step. Each inner
+   * transaction applies and notifies as it always does (so caches built on
+   * the change events stay right between them, which Classic keying needs:
+   * its candidates are read off the chart as it now is), but only the group
+   * is recorded. A throw rolls every inner change back and rethrows. Groups
+   * nest: an inner one is part of the outer.
+   */
+  group<T>(label: string, fn: () => T): T {
+    if (this.open) throw new Error('a draft is open; commit or cancel it first');
+    if (this.grouping) return fn();
+    const selBefore = this._selection;
+    const g = { ops: [] as Op[] };
+    this.grouping = g;
+    let result: T;
+    try {
+      result = fn();
+    } catch (e) {
+      this.grouping = null;
+      const cs = emptyChangeSet();
+      for (let i = g.ops.length - 1; i >= 0; i--) this.apply(invert(g.ops[i]!), cs);
+      this._selection = selBefore;
+      cs.selection = true;
+      if (g.ops.length) this.emit(cs);
+      throw e;
+    }
+    this.grouping = null;
+    if (g.ops.length) this.record(label, g.ops, selBefore);
+    return result;
+  }
+
   /** Open a draft (a drag). Its content is replaced by each `update`, then committed or cancelled. */
   begin(label: string): Draft {
     if (this.open) throw new Error('a draft is already open');
@@ -288,6 +321,10 @@ export class ChartDoc {
   }
 
   private record(label: string, ops: Op[], selBefore: Selection, mergeKey?: string): void {
+    if (this.grouping) {
+      this.grouping.ops.push(...ops);
+      return;
+    }
     const now = Date.now();
     const last = this.undoStack[this.undoStack.length - 1];
     if (
