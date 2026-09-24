@@ -11,31 +11,36 @@
     type ModeId,
     type Tier,
   } from '@ez2bms/chart-core';
+  import { t, tCore, tParts } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
 
   const im = app.importer;
-  const TABS = [
-    { id: 'game', label: 'EZ2AC songs' },
+  const TABS = $derived([
+    { id: 'game', label: t('import.tab.game') },
     { id: 'bms', label: 'BMS' },
     { id: 'bmson', label: 'bmson' },
-  ] as const;
+  ] as const);
   const MODE_IDS = MODES.filter((m) => m.portPlayable).map((m) => m.id);
   const ENCODINGS = [
     { id: 'utf-8', label: 'UTF-8' },
     { id: 'shift_jis', label: 'Shift-JIS' },
     { id: 'euc-kr', label: 'EUC-KR / CP949' },
   ] as const;
+  const MAPS = $derived([
+    { id: 'ez2', label: 'EZ2 BME' },
+    { id: 'keys', label: t('import.bms.keysInOrder') },
+  ] as const);
 
   let bmsDir = $state(im.bmsDir);
   const summary = (charts: { mode: ModeId; tier: Tier; level: number }[]) =>
     charts.map((c) => `${modeNames(c.mode).label} ${c.tier} ${c.level}`).join(' · ');
 
   async function pickDest() {
-    const d = await app.backend.pickFolder('Where the new song folder goes');
+    const d = await app.backend.pickFolder(t('import.dest.pick'));
     if (d) im.dest = d;
   }
   async function pickBms() {
-    const d = await app.backend.pickFolder('A folder of BMS files');
+    const d = await app.backend.pickFolder(t('import.bms.pick'));
     if (d) {
       bmsDir = d;
       await im.loadBms(d);
@@ -55,19 +60,19 @@
 
 <svelte:window onkeydown={onkey} />
 
-<section class="wizard ez-form" data-testid="import-wizard" aria-label="Import a song">
+<section class="wizard ez-form" data-testid="import-wizard" aria-label={t('import.label')}>
   <header>
-    <h2>Import</h2>
+    <h2>{t('import.title')}</h2>
     <nav class="tabs">
-      {#each TABS as t (t.id)}
+      {#each TABS as src (src.id)}
         <button
-          class:on={im.source === t.id}
-          onclick={() => tab(t.id)}
-          data-testid="import-tab-{t.id}">{t.label}</button
+          class:on={im.source === src.id}
+          onclick={() => tab(src.id)}
+          data-testid="import-tab-{src.id}">{src.label}</button
         >
       {/each}
     </nav>
-    <button class="x" onclick={() => im.close()} aria-label="Close">×</button>
+    <button class="x" onclick={() => im.close()} aria-label={t('import.close')}>×</button>
   </header>
 
   {#if im.source === 'game'}
@@ -75,15 +80,15 @@
       <aside class="list">
         <input
           type="search"
-          placeholder="Search titles"
+          placeholder={t('import.search')}
           bind:value={im.query}
           data-testid="import-search"
         />
         {#if im.loadingGame}
-          <p class="hint">Reading the song tables…</p>
+          <p class="hint">{t('import.reading')}</p>
         {:else if im.gameError}
           <p class="warn">{im.gameError}</p>
-          <button class="ez-btn" onclick={() => void im.loadGame()}>Read again</button>
+          <button class="ez-btn" onclick={() => void im.loadGame()}>{t('import.readAgain')}</button>
         {/if}
         <ul>
           {#each im.songs as s (s.dir)}
@@ -95,7 +100,9 @@
                 data-testid="import-song"
               >
                 <b>{s.title?.title ?? s.dir}</b>
-                <span class="dim">{s.dir} · {Math.round(s.bpm * 100) / 100} BPM</span>
+                <span class="dim"
+                  >{s.dir} · {t('import.game.bpm', { bpm: Math.round(s.bpm * 100) / 100 })}</span
+                >
                 <span class="charts">{summary(s.charts)}</span>
               </button>
             </li>
@@ -108,19 +115,22 @@
       <div class="detail">
         {#if im.gameImport}
           {@const g = im.gameImport}
+          {@const song = { category: categoryLabel(g.song.category), n: g.copies.length }}
           <h3>{im.selected?.title?.title ?? im.selected?.dir}</h3>
           {#if im.selected?.title?.subtitle}<p class="dim">{im.selected.title.subtitle}</p>{/if}
           <p>
-            Song key <b data-testid="import-key">{g.key}</b> · category {categoryLabel(
-              g.song.category,
-            )} ·
-            {g.copies.length} keysounds
+            {#each tParts('import.game.summary', song, ['key']) as p, i (i)}
+              {#if 'slot' in p}<b data-testid="import-key">{g.key}</b>{:else}{p.text}{/if}
+            {/each}
           </p>
           <ul class="charts-list">
             {#each g.charts as c (c.file)}
               <li>
-                <b>{modeNames(c.mode).label} {c.tier}</b> level {c.data.info.level} ·
-                {c.data.notes.filter((n) => n.x).length} notes
+                <b>{modeNames(c.mode).label} {c.tier}</b>
+                {t('import.game.chart', {
+                  level: c.data.info.level,
+                  notes: c.data.notes.filter((n) => n.x).length,
+                })}
                 <span class="dim">{c.from} → {c.file}</span>
               </li>
             {/each}
@@ -134,18 +144,14 @@
           ])}
           {@render dest()}
         {:else if !im.gameError}
-          <p class="hint">
-            Pick a song. Its charts become bmson files in a new song folder, its keysounds WAVs (the
-            same samples), under a new key - publishing under the game's own would replace that song
-            on the wheel.
-          </p>
+          <p class="hint">{t('import.game.hint')}</p>
         {/if}
       </div>
     </div>
   {:else if im.source === 'bms'}
     <div class="body one">
       <div class="line">
-        <span class="lbl">Folder</span>
+        <span class="lbl">{t('import.bms.folder')}</span>
         <input
           class="path"
           bind:value={bmsDir}
@@ -153,19 +159,22 @@
           onkeydown={(e) => e.key === 'Enter' && void im.loadBms(bmsDir)}
         />
         <button class="ez-btn" onclick={() => void im.loadBms(bmsDir)} data-testid="bms-load"
-          >Read</button
+          >{t('import.bms.read')}</button
         >
-        <button class="ez-btn" onclick={pickBms}>Choose…</button>
+        <button class="ez-btn" onclick={pickBms}>{t('import.choose')}</button>
       </div>
       {#if im.bmsError}<p class="warn">{im.bmsError}</p>{/if}
       {#if im.bmsImport}
         {@const b = im.bmsImport}
+        {@const counts = { charts: b.charts.length, files: b.uses.length }}
         <table class="files">
           <thead>
             <tr
-              ><th>File</th><th>Title</th><th>Text</th><th>Random</th><th>Lanes</th><th>Mode</th><th
-                >Tier</th
-              ><th></th></tr
+              ><th>{t('import.bms.file')}</th><th>{t('import.bms.songTitle')}</th><th
+                >{t('import.bms.text')}</th
+              ><th>{t('import.bms.random')}</th><th>{t('import.bms.lanes')}</th><th
+                >{t('import.bms.mode')}</th
+              ><th>{t('import.bms.tier')}</th><th></th></tr
             >
           </thead>
           <tbody>
@@ -173,7 +182,9 @@
               {@const c = im.choices[f.file] ?? {}}
               <tr data-file={f.file} class:skipped={f.skipped}>
                 <td>{f.file}</td>
-                <td>{f.title} <span class="dim">· {f.noteCount} notes</span></td>
+                <td>
+                  {f.title} <span class="dim">· {t('import.bms.notes', { n: f.noteCount })}</span>
+                </td>
                 <td>
                   <select
                     value={c.encoding ?? f.encoding}
@@ -184,7 +195,7 @@
                     {#each ENCODINGS as enc (enc.id)}<option value={enc.id}>{enc.label}</option
                       >{/each}
                   </select>
-                  {#if !f.sure && !c.encoding}<span class="warn" title="A guess from the bytes"
+                  {#if !f.sure && !c.encoding}<span class="warn" title={t('import.bms.guess')}
                       >?</span
                     >{/if}
                 </td>
@@ -192,7 +203,7 @@
                   {#each f.randoms.filter((r) => !r.fixed && r.value) as r, i (r.line)}
                     <select
                       value={r.value}
-                      title="#RANDOM on line {r.line}"
+                      title={t('import.bms.randomLine', { line: r.line })}
                       onchange={(e) => {
                         const picks = [...(c.picks ?? f.randoms.map((x) => x.value || 1))];
                         picks[f.randoms.indexOf(r)] = Number(e.currentTarget.value);
@@ -212,8 +223,7 @@
                     onchange={(e) =>
                       im.choose(f.file, { map: e.currentTarget.value as 'ez2' | 'keys' })}
                   >
-                    <option value="ez2">EZ2 BME</option>
-                    <option value="keys">Keys in order</option>
+                    {#each MAPS as map (map.id)}<option value={map.id}>{map.label}</option>{/each}
                   </select>
                 </td>
                 <td>
@@ -230,19 +240,19 @@
                     onchange={(e) => im.choose(f.file, { tier: e.currentTarget.value as Tier })}
                     data-testid="bms-tier"
                   >
-                    {#each TIERS as t (t)}<option value={t}>{t}</option>{/each}
+                    {#each TIERS as tier (tier)}<option value={tier}>{tier}</option>{/each}
                   </select>
                 </td>
                 <td>
-                  <label class="check" title="Leave this file out"
+                  <label class="check" title={t('import.bms.skip')}
                     ><input
                       type="checkbox"
                       checked={!c.skip}
                       onchange={(e) => im.choose(f.file, { skip: !e.currentTarget.checked })}
                     /></label
                   >
-                  {#if f.clash}<span class="warn" title="{f.clash} is already that chart"
-                      >taken</span
+                  {#if f.clash}<span class="warn" title={t('import.bms.clash', { file: f.clash })}
+                      >{t('import.bms.taken')}</span
                     >{/if}
                 </td>
               </tr>
@@ -250,19 +260,17 @@
           </tbody>
         </table>
         <p>
-          Song key <b data-testid="import-key">{b.key}</b> · {b.charts.length} chart{b.charts
-            .length === 1
-            ? ''
-            : 's'} ·
-          {b.uses.length} file{b.uses.length === 1 ? '' : 's'} used
+          {#each tParts('import.bms.summary', counts, ['key']) as p, i (i)}
+            {#if 'slot' in p}<b data-testid="import-key">{b.key}</b>{:else}{p.text}{/if}
+          {/each}
         </p>
         {@render notesList([
           { label: '', notes: b.notes },
           ...b.charts.map((c) => ({ label: c.from, notes: c.notes })),
         ])}
         <label class="check"
-          ><input type="checkbox" bind:checked={im.inPlace} data-testid="bms-inplace" /> Write the song
-          beside the BMS files (nothing copied)</label
+          ><input type="checkbox" bind:checked={im.inPlace} data-testid="bms-inplace" />
+          {t('import.bms.inPlace')}</label
         >
         {#if !im.inPlace}{@render dest()}{:else}{@render go()}{/if}
       {/if}
@@ -270,12 +278,13 @@
   {:else}
     <div class="body one">
       <p>
-        A bmson opens as it is: open its folder. Older bmson (0.21, from BmsONE) is read as 1.0, and
-        lanes numbered the BMS way (<code>beat-7k</code>, <code>beat-10k</code>, both numberings)
-        are moved onto EZ2's; Issues says what changed. circus2bmson's output opens the same way.
+        {#each tParts('import.bmson.hint', {}, ['beat7k', 'beat10k']) as p, i (i)}
+          {#if 'slot' in p}<code>{p.slot === 'beat7k' ? 'beat-7k' : 'beat-10k'}</code
+            >{:else}{p.text}{/if}
+        {/each}
       </p>
       <button class="ez-btn" onclick={() => (im.close(), app.commands.run('file.open'))}
-        >Open a folder…</button
+        >{t('import.bmson.open')}</button
       >
     </div>
   {/if}
@@ -290,13 +299,13 @@
   {@const all = groups.flatMap((g) => g.notes.map((n) => ({ ...n, label: g.label })))}
   {#if all.length}
     <details class="notes" open={all.some((n) => n.severity !== 'info')}>
-      <summary>{all.length} thing{all.length === 1 ? '' : 's'} to know (they go to Issues)</summary>
+      <summary>{t('import.findings', { n: all.length })}</summary>
       <ul>
         {#each all as n, i (i)}
           <li class={n.severity}>
             {sev[n.severity]}
             {#if n.label}<b>{n.label}:</b>{/if}
-            {n.message}
+            {tCore(n)}
           </li>
         {/each}
       </ul>
@@ -306,9 +315,9 @@
 
 {#snippet dest()}
   <div class="line">
-    <span class="lbl">New folder</span>
+    <span class="lbl">{t('import.dest')}</span>
     <input class="path" bind:value={im.dest} data-testid="import-dest" />
-    <button class="ez-btn" onclick={pickDest}>Choose…</button>
+    <button class="ez-btn" onclick={pickDest}>{t('import.choose')}</button>
   </div>
   {@render go()}
 {/snippet}
@@ -321,9 +330,11 @@
       onclick={() => void im.run()}
       data-testid="import-go"
     >
-      {im.busy ? 'Importing…' : 'Import'}
+      {im.busy ? t('import.going') : t('import.go')}
     </button>
-    {#if im.progress}<span class="dim">{im.progress[0]} / {im.progress[1]} files</span>{/if}
+    {#if im.progress}<span class="dim"
+        >{t('import.progress', { done: im.progress[0], total: im.progress[1] })}</span
+      >{/if}
   </div>
 {/snippet}
 

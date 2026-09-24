@@ -17,9 +17,10 @@ import {
   type Tier,
 } from '@ez2bms/chart-core';
 import { joinPath } from '../bridge';
+import { t } from '../i18n/i18n.svelte';
 import type { App } from './app.svelte';
 import type { ChartSlot, Project } from './project.svelte';
-import { plural, songwideToast, stepOf, type SongwideStep } from './songwide';
+import { songwideToast, stepOf, type SongwideStep } from './songwide';
 import { toast, toasts } from './toasts.svelte';
 
 export interface NewChartOptions {
@@ -54,7 +55,7 @@ export class SongState {
     const done: SongwideStep[] = [];
     for (const slot of p.charts) if (applySongMeta(slot.doc, patch, merge)) done.push(stepOf(slot));
     if (!merge && done.length > 1)
-      songwideToast(`Song info changed in ${plural(done.length, 'chart')}`, done, 'Song info');
+      songwideToast(t('song.metaChanged', { n: done.length }), done, t('song.metaStep'));
   }
 
   /** The song.ini Category (1..48). */
@@ -78,22 +79,22 @@ export class SongState {
     if (!p || slot.tier === tier) return false;
     const other = p.charts.find((c) => c !== slot && c.mode === slot.mode && c.tier === tier);
     if (other) {
-      toast(`${other.label} already exists - move that chart first`, 'warn');
+      toast(t('song.tierTaken', { chart: other.label }), 'warn');
       return false;
     }
-    slot.doc.transact('Change tier', (tx) => tx.setInfo({ tier }));
+    slot.doc.transact(t('song.changeTier'), (tx) => tx.setInfo({ tier }));
     return true;
   }
 
   /** Why a chart cannot be made at (mode, tier), or undefined. */
   cannotCreate(mode: ModeId, tier: Tier): string | undefined {
     const p = this.app.project;
-    if (!p) return 'no song is open';
-    if (!isValidSongKey(p.sidecar.key))
-      return 'set a song key first (1-15 lowercase letters or digits)';
-    if (!modeNames(mode).portPlayable) return `${modeNames(mode).label} cannot be published yet`;
+    if (!p) return t('song.noSong');
+    if (!isValidSongKey(p.sidecar.key)) return t('song.needKey');
+    if (!modeNames(mode).portPlayable)
+      return t('song.unpublishable', { mode: modeNames(mode).label });
     if (p.charts.some((c) => c.mode === mode && c.tier === tier))
-      return `the song already has ${modeNames(mode).label} ${tier}`;
+      return t('song.chartExists', { mode: modeNames(mode).label, tier });
     return undefined;
   }
 
@@ -105,7 +106,7 @@ export class SongState {
     const p = this.app.project;
     const why = this.cannotCreate(mode, tier);
     if (!p || why) {
-      toast(`Can't make that chart: ${why}`, 'warn');
+      toast(t('song.cannotMake', { why }), 'warn');
       return undefined;
     }
     const file = `${chartBaseName(mode, p.sidecar.key, tier)}.bmson`;
@@ -148,7 +149,8 @@ export class SongState {
       try {
         await this.app.backend.renameFile(joinPath(p.dir, slot.file), joinPath(p.dir, trashed));
       } catch (e) {
-        toast(`Can't remove ${slot.file}: ${e instanceof Error ? e.message : String(e)}`, 'error');
+        const error = e instanceof Error ? e.message : String(e);
+        toast(t('song.removeFailed', { file: slot.file, error }), 'error');
         return;
       }
     }
@@ -157,8 +159,11 @@ export class SongState {
     // Its crash copy would otherwise come back as a stray chart on the next open.
     void this.app.autosave.clear(p, [slot]);
     if (wasActive) this.app.selectChart(p.activeIndex);
-    toasts.push(`Removed ${slot.label}${onDisk ? ` (its file is in ${TRASH})` : ''}`, 'ok', 15000, {
-      label: 'Undo',
+    const removed = onDisk
+      ? t('song.removedTrash', { chart: slot.label, folder: TRASH })
+      : t('song.removed', { chart: slot.label });
+    toasts.push(removed, 'ok', 15000, {
+      label: t('song.undo'),
       run: () =>
         void (async () => {
           if (onDisk)
@@ -166,7 +171,13 @@ export class SongState {
           p.attachChart(slot, at);
           this.app.selectChart(p.charts.indexOf(slot));
         })().catch((e: unknown) =>
-          toast(`Could not restore ${slot.file}: ${e instanceof Error ? e.message : e}`, 'error'),
+          toast(
+            t('song.restoreFailed', {
+              file: slot.file,
+              error: e instanceof Error ? e.message : String(e),
+            }),
+            'error',
+          ),
         ),
     });
   }

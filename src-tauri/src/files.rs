@@ -364,12 +364,20 @@ impl From<ez2bms_audio::import::ImportReport> for ImportReportDto {
 /// nothing).
 pub fn rename(from: &Path, to: &Path) -> CmdResult<()> {
     if !from.is_file() {
-        return Err(CmdError::Invalid(format!("{} is not a file", from.display())));
+        return Err(CmdError::coded(
+            "not-a-file",
+            &[("path", from.display().to_string())],
+            format!("{} is not a file", from.display()),
+        ));
     }
     let same_but_case =
         from.to_string_lossy().to_lowercase() == to.to_string_lossy().to_lowercase();
     if !same_but_case && to.exists() {
-        return Err(CmdError::Invalid(format!("{} already exists", to.display())));
+        return Err(CmdError::coded(
+            "exists",
+            &[("path", to.display().to_string())],
+            format!("{} already exists", to.display()),
+        ));
     }
     if let Some(parent) = to.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent).map_err(|e| CmdError::io(parent, e))?;

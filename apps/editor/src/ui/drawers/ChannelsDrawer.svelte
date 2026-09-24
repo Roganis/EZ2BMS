@@ -3,6 +3,7 @@
   // rename; sounds in the song folder that the chart does not use yet are
   // listed below, one click to add.
   import { addChannels, removeChannel, renameChannel } from '@ez2bms/chart-core';
+  import { t } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import type { ChartSlot } from '../../state/project.svelte';
   import { toast } from '../../state/toasts.svelte';
@@ -34,7 +35,7 @@
   function add(names: string[]) {
     const made = addChannels(slot.doc, names);
     if (made[0] && app.view.brush === null) app.view.brush = made[0].id;
-    if (made.length > 1) toast(`Added ${made.length} sounds`, 'ok');
+    if (made.length > 1) toast(t('channels.added', { n: made.length }), 'ok');
   }
 
   function commitRename(id: number, name: string) {
@@ -44,23 +45,28 @@
   }
 </script>
 
-<Drawer side="left" title="Sounds" width={260} onclose={() => (app.view.leftOpen = false)}>
+<Drawer
+  side="left"
+  title={t('channels.title')}
+  width={260}
+  onclose={() => (app.view.leftOpen = false)}
+>
   <div class="search">
     <input
       bind:value={filter}
-      placeholder="Filter {slot.doc.data.channels.length} sounds"
+      placeholder={t('channels.filter', { n: slot.doc.data.channels.length })}
       spellcheck="false"
     />
     <button
       class="bench"
-      title="Import sound files into the song (or drop them on the window)"
+      title={t('channels.importTitle')}
       data-testid="import-sounds"
       onclick={() => app.commands.run('sounds.import')}>+</button
     >
     <button
       class="bench"
       class:on={app.view.workbench}
-      title="Every sound of the song, with waveforms (Ctrl+Shift+B)"
+      title={t('channels.workbenchTitle')}
       data-testid="open-workbench"
       onclick={() => app.commands.run('view.workbench')}>▦</button
     >
@@ -86,7 +92,7 @@
             class:brush={app.view.brush === r.id}
             onclick={() => (app.view.brush = r.id)}
             ondblclick={() => (renaming = r.id)}
-            title="{r.name} - double-click to rename"
+            title={t('channels.renameTitle', { name: r.name })}
           >
             <span
               class="sw"
@@ -94,7 +100,7 @@
               class:bad={!!app.audio.loadedInfo(r.name)?.error}
               role="button"
               tabindex="-1"
-              title={app.audio.loadedInfo(r.name)?.error ?? 'Listen'}
+              title={app.audio.loadedInfo(r.name)?.error ?? t('channels.listen')}
               onclick={(e) => {
                 e.stopPropagation();
                 void app.audio.audition(r.name);
@@ -109,7 +115,7 @@
                 class="rm"
                 role="button"
                 tabindex="0"
-                title="Remove (unused)"
+                title={t('channels.remove')}
                 onclick={(e) => {
                   e.stopPropagation();
                   if (app.view.brush === r.id) app.view.brush = null;
@@ -122,22 +128,26 @@
         {/if}
       </li>
     {:else}
-      <li class="none">{filter ? 'No sound matches' : 'No sounds yet'}</li>
+      <li class="none">{filter ? t('channels.noMatch') : t('channels.none')}</li>
     {/each}
     {#if rows.length > SHOW}<li class="none">
-        …and {rows.length - SHOW} more, filter to find them
+        {t('channels.more', { n: rows.length - SHOW })}
       </li>{/if}
   </ul>
   {#if unused.length}
     <div class="more">
       <div class="head">
-        <span>In the folder, not in this chart</span>
-        <button class="ez-btn" onclick={() => add(unused)}>Add all</button>
+        <span>{t('channels.unused')}</span>
+        <button class="ez-btn" onclick={() => add(unused)}>{t('channels.addAll')}</button>
       </div>
       <ul>
         {#each unused.slice(0, 200) as s (s)}
           <li>
-            <button class="item dim" onclick={() => add([s])} title="Add {s}">
+            <button
+              class="item dim"
+              onclick={() => add([s])}
+              title={t('channels.add', { name: s })}
+            >
               <span class="plus">+</span><span class="nm">{s}</span>
             </button>
           </li>

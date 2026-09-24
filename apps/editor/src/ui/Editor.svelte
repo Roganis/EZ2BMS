@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n/i18n.svelte';
   import type { Project } from '../state/project.svelte';
   import { app } from '../state/app.svelte';
   import ChannelsDrawer from './drawers/ChannelsDrawer.svelte';
@@ -34,8 +35,8 @@
     void project.images;
     const key = app.art.plateKey(project);
     if (app.art.plateCheck?.key === key) return;
-    const t = setTimeout(() => void app.art.renderPlate(project).catch(() => undefined), 400);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => void app.art.renderPlate(project).catch(() => undefined), 400);
+    return () => clearTimeout(timer);
   });
   // New sounds in the chart get loaded.
   $effect(() => {
@@ -59,9 +60,9 @@
         <Playfield {slot} />
       {:else}
         <div class="empty">
-          <p>This song has no charts yet.</p>
+          <p>{t('field.noCharts')}</p>
           <button class="ez-btn" onclick={() => (app.view.newChartOpen = true)}
-            >New chart <kbd>Ctrl N</kbd></button
+            >{t('field.newChart')} <kbd>Ctrl N</kbd></button
           >
         </div>
       {/if}

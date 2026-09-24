@@ -8,7 +8,7 @@
 // stands in). chart-core has its catalogs for what it says (lint, import
 // notes); the editor has its own for its screens, through the same `Catalogs`.
 
-import IntlMessageFormat from 'intl-messageformat';
+import { IntlMessageFormat } from 'intl-messageformat';
 
 export type Locale = 'en' | 'ko' | 'ja';
 export const LOCALES: readonly Locale[] = ['en', 'ko', 'ja'];
@@ -80,8 +80,12 @@ export class Catalogs<K extends string> {
     return this.format(key, params, this.locale);
   }
 
-  /** `key` in a given language (the palette also searches the English titles). */
-  format(key: K, params: Params | undefined, locale: Locale): string {
+  /**
+   * `key` in a given language (the palette also searches the English
+   * titles). `mark: false` never marks it in the pseudo-language: the
+   * English a finding keeps for the log stays plain.
+   */
+  format(key: K, params: Params | undefined, locale: Locale, mark = true): string {
     // English standing in for a missing translation counts in English
     // ("1 note", not Korean's single form "1 notes").
     const own = locale !== 'en' && this.others[locale]?.[key] !== undefined;
@@ -93,7 +97,7 @@ export class Catalogs<K extends string> {
       this.cache.set(id, f);
     }
     const out = String(f.format(params as Record<string, never>));
-    return this.pseudoOn && locale === this.locale ? pseudo(out) : out;
+    return mark && this.pseudoOn && locale === this.locale ? pseudo(out) : out;
   }
 }
 

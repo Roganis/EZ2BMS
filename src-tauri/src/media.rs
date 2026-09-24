@@ -8,10 +8,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::SystemTime;
 
-use ez2bms_media::text::{render_plate, Fonts, PlateSpec};
+use ez2bms_media::text::{render_plate, Fonts, PlateSpec, TextError};
 use ez2bms_media::{decode, render, ArtJob, Rgba};
 
-use crate::error::{CmdError, CmdResult};
+use crate::error::{CmdError, CmdResult, Coded};
 use crate::files;
 
 /// Which file a decoded image came from, as it was on disk.
@@ -26,7 +26,7 @@ pub struct Media {
     /// Where the plate fonts are (fonts/README.md): the bundle's resources.
     fonts_dir: PathBuf,
     /// Read on the first plate - the CJK collection is 20 MB - and kept.
-    fonts: OnceLock<Result<Fonts, String>>,
+    fonts: OnceLock<Result<Fonts, Coded>>,
 }
 
 const KEEP: usize = 2;
@@ -42,10 +42,10 @@ impl Media {
     pub fn plate(&self, spec: &PlateSpec) -> CmdResult<Vec<u8>> {
         let fonts = self
             .fonts
-            .get_or_init(|| Fonts::from_dir(&self.fonts_dir).map_err(|e| e.to_string()))
+            .get_or_init(|| Fonts::from_dir(&self.fonts_dir).map_err(text_error))
             .as_ref()
-            .map_err(|e| CmdError::Invalid(e.clone()))?;
-        let p = render_plate(spec, fonts, 1).map_err(|e| CmdError::Invalid(e.to_string()))?;
+            .map_err(|e| CmdError::Coded(e.clone()))?;
+        let p = render_plate(spec, fonts, 1).map_err(|e| CmdError::Coded(text_error(e)))?;
         let mut out = Vec::with_capacity(12 + 4 * p.missing.len() + p.rgba.len());
         for v in [p.w as u32, p.h as u32, p.missing.len() as u32] {
             out.extend_from_slice(&v.to_le_bytes());
@@ -77,9 +77,11 @@ impl Media {
         }
         // Decoded outside the lock: another cut need not wait for this one.
         let img = Arc::new(decode(&files::read(path)?).map_err(|e| match e {
-            ez2bms_media::MediaError::Decode(m) => {
-                CmdError::Invalid(format!("{}: {m}", path.display()))
-            }
+            ez2bms_media::MediaError::Decode(m) => CmdError::coded(
+                "not-an-image-file",
+                &[("path", path.display().to_string()), ("detail", m.clone())],
+                format!("{}: not an image EZ2BMS can read (PNG, JPEG or BMP): {m}", path.display()),
+            ),
             e => e.into(),
         })?);
         let mut recent = lock();
@@ -88,6 +90,18 @@ impl Media {
         recent.truncate(KEEP);
         Ok(img)
     }
+}
+
+/// A font or plate refusal, as the editor words it (error.rs).
+fn text_error(e: TextError) -> Coded {
+    let message = e.to_string();
+    let (kind, params) = match e {
+        TextError::Font(path, error) => ("font-unreadable", vec![("path", path), ("error", error)]),
+        TextError::NotAFont(path) => ("not-a-font", vec![("path", path)]),
+        TextError::NoCjkFont => ("no-cjk-font", vec![]),
+        TextError::BadSize(..) => ("other", vec![]),
+    };
+    Coded { kind, params, message }
 }
 
 #[cfg(test)]

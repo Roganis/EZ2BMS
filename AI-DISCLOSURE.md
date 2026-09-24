@@ -491,7 +491,7 @@ owner's machines:
 - the hold ticks against what EZ2PORT pays while a hold is held (the
   session they are checked against is itself oracle-checked).
 
-### Milestone 9: polish and distribution (M9.1-M9.4 so far), 2026-09-24
+### Milestone 9: polish and distribution (M9.1-M9.6 so far), 2026-09-24
 
 The assistant is writing Milestone 9 after the owner chose it. The owner
 decided:
@@ -518,13 +518,28 @@ New areas of work (details and checks are completed at M9.9):
   Korean and Japanese are drafted by the assistant**, marked as drafts in
   the app, and need reading by a native speaker before they are relied on.
   So far only the Preferences dialog and two command titles are translated;
-  the rest follows in M9.7 (Korean) and M9.8 (Japanese).
+  the rest follows in M9.7 (Korean) and M9.8 (Japanese), with the words
+  chosen in `docs/i18n-glossary.md`.
+- **every English string moved into the catalogs** (M9.5, M9.6): about
+  1,200 in the editor and 300 in chart-core, converted by several assistant
+  helpers working area by area in parallel, each told to keep the English
+  exactly as it was. Lint findings and import notes now carry a message key
+  beside their English, so a song file's notes are said in the language
+  chosen later; the desktop host's errors carry a kind.
 
-What is checked so far for translations: every message parses; a
-translation takes the same parameters as the English; a converted screen
-has no English written into its markup (a scan of the Svelte source);
-switching language live, following a Korean system, and the pseudo-language
-end to end.
+What is checked so far for translations:
+
+- every message parses; a translation takes the same parameters as the
+  English;
+- no screen has English written into its markup (a scan of the Svelte
+  source), and every command's title is in the catalog;
+- the host's error kinds each have a sentence (read from the Rust source);
+- the English is unchanged: the whole unit and end-to-end suites pass on
+  their existing text, and for lint a comparison of the old and new code on
+  random songs gave the same findings, word for word; the helpers compared
+  every other message they converted with the text it replaced;
+- switching language live, following a Korean system, and the
+  pseudo-language, end to end.
 
 ---
 

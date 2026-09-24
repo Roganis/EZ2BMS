@@ -4,7 +4,16 @@
 // language as Svelte state, so every screen re-renders when it changes.
 // chart-core's own messages (lint, import notes) follow the same choice.
 
-import { Catalogs, localeOf, setCoreLocale, type Locale, type Params } from '@ez2bms/chart-core';
+import {
+  Catalogs,
+  localeOf,
+  sayText,
+  setCoreLocale,
+  textOf,
+  type Locale,
+  type Params,
+  type Said,
+} from '@ez2bms/chart-core';
 import { en, type MessageKey } from './en';
 import { ja } from './ja';
 import { ko } from './ko';
@@ -65,6 +74,24 @@ export function tParts(key: MessageKey, params: Params, slots: string[]): Part[]
     .split(/\ue000(\d+)\ue001/)
     .map((piece, i): Part => (i % 2 ? { slot: slots[Number(piece)]! } : { text: piece }))
     .filter((p) => !('text' in p) || p.text !== '');
+}
+
+/**
+ * What chart-core said (a finding, an import note: `{message, said}`), in
+ * the current language, re-said when the language changes. A note without
+ * `said` (an older song file's) is its English text.
+ */
+export function tCore(m: { message: string; said?: Said }): string {
+  void i18n.locale;
+  void i18n.pseudo;
+  return textOf(m);
+}
+
+/** A chart-core message (a fix's label, a hold kind's description), reactive like `t`. */
+export function tSaid(s: Said): string {
+  void i18n.locale;
+  void i18n.pseudo;
+  return sayText(s);
 }
 
 /** `key` in English (what the palette also searches, and the docs are generated from). */

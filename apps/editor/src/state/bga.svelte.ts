@@ -14,10 +14,10 @@ import {
 } from '@ez2bms/chart-core';
 import { SvelteMap } from 'svelte/reactivity';
 import { baseName, joinPath } from '../bridge';
+import { t } from '../i18n/i18n.svelte';
 import type { App } from './app.svelte';
 import type { Project } from './project.svelte';
 import { chartTiming } from './timing';
-import { plural } from './songwide';
 import { toast } from './toasts.svelte';
 
 export type Probe = MovieInfo | { error: string };
@@ -58,7 +58,7 @@ export class BgaState {
 
   /** The file chooser, then `import`. */
   async pickAndImport(): Promise<void> {
-    const paths = await this.app.backend.pickFiles('A movie for the BGA', MOVIE_FILE_EXTENSIONS);
+    const paths = await this.app.backend.pickFiles(t('bga.pick'), MOVIE_FILE_EXTENSIONS);
     await this.import(paths);
   }
 
@@ -72,12 +72,14 @@ export class BgaState {
       const names = res.flatMap((r) => (r.name ? [r.name] : []));
       const bad = res.filter((r) => r.error);
       const copied = res.filter((r) => r.name && !r.reused).length;
-      if (copied) toast(`Imported ${plural(copied, 'movie')}`, 'ok');
-      if (bad.length)
-        toast(`Skipped ${bad.map((r) => baseName(r.from)).join(', ')} (${bad[0]!.error})`, 'warn');
+      if (copied) toast(t('bga.imported', { n: copied }), 'ok');
+      if (bad.length) {
+        const files = bad.map((r) => baseName(r.from)).join(', ');
+        toast(t('bga.skipped', { files, error: bad[0]!.error }), 'warn');
+      }
       if (names[0]) await this.patch({ file: names[0], startMs: undefined });
     } catch (e) {
-      toast(`Import failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
+      toast(t('song.importFailed', { error: e instanceof Error ? e.message : String(e) }), 'error');
     }
   }
 

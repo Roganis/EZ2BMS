@@ -6,6 +6,8 @@
 // byte for byte as the port's own ez2_textspec_render does
 // (test/plate.oracle.test.ts).
 
+import { said, type Said } from '../i18n/say';
+
 export const PLATE_W = 256;
 export const PLATE_H = 32;
 
@@ -44,7 +46,9 @@ export interface PlateSpec {
 
 export interface PlateTint {
   id: string;
+  /** In English; `said` names it in the language chosen (i18n/say.ts). */
   label: string;
+  said?: Said;
   ink: string;
   glow?: string;
 }
@@ -55,11 +59,23 @@ export interface PlateTint {
  * white in an orange halo, the 11th's; white in a cyan halo, the 15th's.
  */
 export const PLATE_TINTS: readonly PlateTint[] = [
-  { id: 'white', label: 'White', ink: 'ffffff' },
-  { id: 'green', label: 'Green (12th)', ink: '00f283' },
-  { id: 'cyan', label: 'Cyan', ink: '46e1ff' },
-  { id: 'orange-halo', label: 'Orange halo (11th)', ink: 'ffffff', glow: 'eb4800' },
-  { id: 'cyan-halo', label: 'Cyan halo (15th)', ink: 'ffffff', glow: '42d3ef' },
+  { id: 'white', label: 'White', said: said('publish.tint.white'), ink: 'ffffff' },
+  { id: 'green', label: 'Green (12th)', said: said('publish.tint.green'), ink: '00f283' },
+  { id: 'cyan', label: 'Cyan', said: said('publish.tint.cyan'), ink: '46e1ff' },
+  {
+    id: 'orange-halo',
+    label: 'Orange halo (11th)',
+    said: said('publish.tint.orange-halo'),
+    ink: 'ffffff',
+    glow: 'eb4800',
+  },
+  {
+    id: 'cyan-halo',
+    label: 'Cyan halo (15th)',
+    said: said('publish.tint.cyan-halo'),
+    ink: 'ffffff',
+    glow: '42d3ef',
+  },
 ];
 
 /** The shipped subtitles' grey. */

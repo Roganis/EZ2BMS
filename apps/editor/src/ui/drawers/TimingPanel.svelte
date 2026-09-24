@@ -10,6 +10,7 @@
     setScrollAt,
     setStopAt,
   } from '@ez2bms/chart-core';
+  import { t, tParts } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import type { ChartSlot } from '../../state/project.svelte';
 
@@ -28,12 +29,15 @@
     };
   });
   const pos = (y: number) => formatPosition(positionOf(y, d.resolution));
+  const noBpm = $derived(tParts('timing.noBpm', {}, ['key']));
+  const noStops = $derived(tParts('timing.noStops', {}, ['key']));
+  const noScroll = $derived(tParts('timing.noScroll', {}, ['palette', 'command']));
 </script>
 
 <div class="ez-form">
   <div class="cols">
     <div class="row">
-      <label for="tp-init">Start BPM</label>
+      <label for="tp-init">{t('timing.startBpm')}</label>
       <input
         id="tp-init"
         type="number"
@@ -45,12 +49,12 @@
       />
     </div>
     <div class="row">
-      <span class="lbl">Resolution</span>
-      <div class="ro">{d.resolution} / beat</div>
+      <span class="lbl">{t('timing.resolution')}</span>
+      <div class="ro">{t('timing.perBeat', { n: d.resolution })}</div>
     </div>
   </div>
 
-  <h3>BPM changes</h3>
+  <h3>{t('timing.bpmChanges')}</h3>
   {#each data.bpms as e (e.y)}
     <div class="ev">
       <button class="at" onclick={() => (app.view.cursor = e.y)}>{pos(e.y)}</button>
@@ -62,15 +66,19 @@
         value={e.bpm}
         onchange={(ev) => setBpmAt(d, e.y, Number(ev.currentTarget.value))}
       />
-      <button class="ez-btn danger" onclick={() => setBpmAt(d, e.y, null)} aria-label="Remove"
-        >×</button
+      <button
+        class="ez-btn danger"
+        onclick={() => setBpmAt(d, e.y, null)}
+        aria-label={t('timing.remove')}>×</button
       >
     </div>
   {:else}
-    <p class="hint">None. <kbd>B</kbd> adds one at the cursor.</p>
+    <p class="hint">
+      {#each noBpm as p, i (i)}{#if 'slot' in p}<kbd>B</kbd>{:else}{p.text}{/if}{/each}
+    </p>
   {/each}
 
-  <h3>STOPs</h3>
+  <h3>{t('timing.stops')}</h3>
   {#each data.stops as e (e.y)}
     <div class="ev">
       <button class="at" onclick={() => (app.view.cursor = e.y)}>{pos(e.y)}</button>
@@ -81,20 +89,22 @@
         value={e.duration}
         onchange={(ev) => setStopAt(d, e.y, Number(ev.currentTarget.value))}
       />
-      <button class="ez-btn danger" onclick={() => setStopAt(d, e.y, null)} aria-label="Remove"
-        >×</button
+      <button
+        class="ez-btn danger"
+        onclick={() => setStopAt(d, e.y, null)}
+        aria-label={t('timing.remove')}>×</button
       >
     </div>
   {:else}
-    <p class="hint">None. <kbd>S</kbd> adds one at the cursor (length in pulses).</p>
+    <p class="hint">
+      {#each noStops as p, i (i)}{#if 'slot' in p}<kbd>S</kbd>{:else}{p.text}{/if}{/each}
+    </p>
   {/each}
   {#if data.stops.length}
-    <p class="warn">
-      EZ2 has no STOP: EZ2PORT gets a gap in time instead, so the scroll does not freeze.
-    </p>
+    <p class="warn">{t('timing.stopWarn')}</p>
   {/if}
 
-  <h3>Scroll speed</h3>
+  <h3>{t('timing.scroll')}</h3>
   {#each data.scrolls as e (e.y)}
     <div class="ev" data-testid="scroll-event">
       <button class="at" onclick={() => (app.view.cursor = e.y)}>{pos(e.y)}</button>
@@ -103,50 +113,46 @@
         min="0.01"
         step="0.05"
         value={e.rate}
-        aria-label="Scroll multiplier"
+        aria-label={t('timing.scrollMultiplier')}
         onchange={(ev) => {
           const r = Number(ev.currentTarget.value);
           if (r > 0) setScrollAt(d, e.y, r);
           else ev.currentTarget.value = String(e.rate);
         }}
       />
-      <button class="ez-btn danger" onclick={() => setScrollAt(d, e.y, null)} aria-label="Remove"
-        >×</button
+      <button
+        class="ez-btn danger"
+        onclick={() => setScrollAt(d, e.y, null)}
+        aria-label={t('timing.remove')}>×</button
       >
     </div>
   {:else}
     <p class="hint">
-      None. <kbd>Ctrl K</kbd> <code>scroll 1.5</code> makes the field scroll 1.5 times as fast from the
-      cursor on.
+      {#each noScroll as p, i (i)}{#if 'text' in p}{p.text}{:else if p.slot === 'palette'}<kbd
+            >Ctrl K</kbd
+          >{:else}<code>scroll 1.5</code>{/if}{/each}
     </p>
   {/each}
   {#if data.legacy}
-    <p class="hint">
-      {data.legacy} more from the game chart, kept by an older import: they play and publish; Issues turns
-      them into changes you can edit here.
-    </p>
+    <p class="hint">{t('timing.legacy', { n: data.legacy })}</p>
   {/if}
   {#if data.scrolls.length}
-    <p class="hint">
-      A multiplier on the player's speed: EZ2PORT eases to it over a few frames, and every note on
-      the field moves with it. Timing does not change.
-    </p>
+    <p class="hint">{t('timing.scrollHint')}</p>
   {/if}
   {#if data.kept.length}
     <details class="kept" data-testid="kept-records">
-      <summary>From the game chart ({data.kept.length})</summary>
-      <p class="hint">
-        Records bmson has no place for, kept for a cabinet export, which writes them back on their
-        tracks. Read-only; they move with a change of resolution. EZ2PORT does not use them.
-      </p>
+      <summary>{t('timing.kept', { n: data.kept.length })}</summary>
+      <p class="hint">{t('timing.keptHint')}</p>
       {#each data.kept.slice(0, 200) as k (k.index)}
         <div class="krow" title={k.long}>
           <button class="at" onclick={() => (app.view.cursor = k.y)}>{pos(k.y)}</button>
           <span>{k.short}</span>
-          <span class="trk">track {k.track}</span>
+          <span class="trk">{t('timing.track', { n: k.track })}</span>
         </div>
       {/each}
-      {#if data.kept.length > 200}<p class="hint">and {data.kept.length - 200} more</p>{/if}
+      {#if data.kept.length > 200}<p class="hint">
+          {t('timing.andMore', { n: data.kept.length - 200 })}
+        </p>{/if}
     </details>
   {/if}
 </div>

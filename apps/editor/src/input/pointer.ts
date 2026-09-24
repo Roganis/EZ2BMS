@@ -29,6 +29,7 @@ import {
   BGM,
   movedConflict,
   placementConflict,
+  placementRule,
   placeNote,
   eraseNotes,
   gridsFor,
@@ -42,6 +43,7 @@ import {
   type NoteRec,
   type StemSlice,
 } from '@ez2bms/chart-core';
+import { t } from '../i18n/i18n.svelte';
 import type { PlayfieldRenderer } from '../render/renderer';
 
 export interface ToolHost {
@@ -238,7 +240,7 @@ export class PointerTool {
         eraseNotes(h.doc, h.doc.selection.ids);
         return;
       }
-      const draft = h.doc.begin('Erase notes');
+      const draft = h.doc.begin(t('undo.eraseNotes'));
       const ids = new Set<NoteId>();
       this.g = { kind: 'erase', ids, draft };
       this.eraseAt(px, py, h);
@@ -247,13 +249,13 @@ export class PointerTool {
     if (e.button !== 0) return;
     if (note && e.altKey) {
       h.setBrush(note.ch);
-      h.say(`Brush: ${h.doc.channel(note.ch)?.name ?? '?'}`);
+      h.say(t('field.brush', { sound: h.doc.channel(note.ch)?.name ?? '?' }));
       return;
     }
     const additive = e.shiftKey || e.ctrlKey || e.metaKey;
     if (hit?.part === 'tail') {
       h.doc.setSelection([hit.note.id], hit.note.id);
-      this.g = { kind: 'resize', note: hit.note, draft: h.doc.begin('Set length') };
+      this.g = { kind: 'resize', note: hit.note, draft: h.doc.begin(t('undo.setLength')) };
       return;
     }
     if (note) {
@@ -344,7 +346,7 @@ export class PointerTool {
       }
       case 'move': {
         if (!g.draft && Math.hypot(px - g.sx, py - g.sy) < DRAG_PX) return;
-        g.draft ??= h.doc.begin(g.orig.length === 1 ? 'Move note' : `Move ${g.orig.length} notes`);
+        g.draft ??= h.doc.begin(t('undo.moveNotes', { n: g.orig.length }));
         // Classic mode moves sounds between lanes, never in time.
         const dy = h.classic ? 0 : this.snap(h, g.anchor.y + (p - g.p0), e.altKey) - g.anchor.y;
         const target = this.targets(h, g, px, dy);
@@ -358,7 +360,8 @@ export class PointerTool {
       }
       case 'resize': {
         const l = Math.max(0, this.snap(h, p, e.altKey) - g.note.y);
-        if (placementConflict(h.doc, g.note.x, g.note.y, l, new Set([g.note.id]))) return;
+        // Only whether it fits: this runs on every mouse move of a resize.
+        if (placementRule(h.doc, g.note.x, g.note.y, l, new Set([g.note.id]))) return;
         g.draft.update((tx) => tx.patchNotes([{ id: g.note.id, patch: { l } }]));
         return;
       }
@@ -404,12 +407,12 @@ export class PointerTool {
           return;
         }
         if (h.brush === null || !h.doc.channel(h.brush)) {
-          h.say('Pick a sound to draw with first (Sounds, on the left)');
+          h.say(t('field.pickSoundLeft'));
           return;
         }
         const why = placementConflict(h.doc, g.x, g.y0, g.l);
         if (why) {
-          h.say(`Can't place a note here: ${why}`);
+          h.say(t('field.cantPlace', { reason: why }));
           return;
         }
         placeNote(h.doc, { x: g.x, y: g.y0, l: g.l, ch: h.brush });

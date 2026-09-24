@@ -23,13 +23,14 @@
 // - no automatic split when a keyed long note is released, and no x_stop
 //   clearing (EZ2 does not publish x_stop).
 
+import { said, sayText } from '../i18n/say';
 import type { ChannelId, NoteId, NoteRec } from '../model/types';
 import { audible, audibleDiff } from '../publish/audible';
 import type { SampleLookup } from '../publish/chart-plan';
 import { OUT_RATE } from '../publish/keysounds';
 import { groupKeyOf } from '../sound/grouping';
 import { analysis } from './analysis';
-import { BGM, movedConflict, placementConflict } from './commands';
+import { BGM, movedConflict, placementConflict, placementRule } from './commands';
 import type { ChartDoc, NotePatch } from './doc';
 
 export interface ClassicEnv {
@@ -53,6 +54,11 @@ export type Candidate =
       bad?: string;
     };
 
+/**
+ * Done, or refused with why (and where the change would be heard). The reason
+ * is said in the language chosen when the refusal is made: the editor shows
+ * it at once, inside its own sentence ("Can't key that: …").
+ */
 export type Verdict = { ok: true } | { ok: false; reason: string; atMs?: number };
 
 export interface ClassicChange {
@@ -74,7 +80,7 @@ export function classicCheck(doc: ChartDoc, change: ClassicChange, env: ClassicE
   const patched = new Map<NoteId, NoteRec>();
   for (const { id, patch } of change.patch ?? []) {
     const n = doc.index.get(id);
-    if (!n) return { ok: false, reason: 'that note is gone' };
+    if (!n) return { ok: false, reason: sayText(said('edit.note-gone')) };
     touched.add(n.ch);
     const next = { ...n, ...patch } as NoteRec;
     for (const [k, v] of Object.entries(patch))
@@ -85,7 +91,7 @@ export function classicCheck(doc: ChartDoc, change: ClassicChange, env: ClassicE
   const removed = new Set(change.remove ?? []);
   for (const id of removed) {
     const n = doc.index.get(id);
-    if (!n) return { ok: false, reason: 'that note is gone' };
+    if (!n) return { ok: false, reason: sayText(said('edit.note-gone')) };
     touched.add(n.ch);
   }
   for (const n of change.insert ?? []) touched.add(n.ch);
@@ -113,7 +119,11 @@ export function classicCheck(doc: ChartDoc, change: ClassicChange, env: ClassicE
   });
   const d = audibleDiff(before, after);
   if (!d) return { ok: true };
-  return { ok: false, reason: `it would change how ${d.src} sounds`, atMs: d.atMs };
+  return {
+    ok: false,
+    reason: sayText(said('classic.changes-sound', { src: d.src })),
+    atMs: d.atMs,
+  };
 }
 
 // ---- what is there to key -----------------------------------------------------------
@@ -150,7 +160,7 @@ export function classicCandidates(
     for (const n of doc.index.at(lane, y)) {
       atY.add(n.ch);
       if (n.x === x) continue;
-      if (placementConflict(doc, x, y, x === BGM ? 0 : l, new Set([n.id]))) continue;
+      if (placementRule(doc, x, y, x === BGM ? 0 : l, new Set([n.id]))) continue;
       const bgm = n.x === BGM;
       const tier = (bgm ? 0 : 2) + (inGroup(n.ch) ? 0 : 1);
       exact.push({ kind: 'note', id: n.id, ch: n.ch, tier });
@@ -163,8 +173,7 @@ export function classicCandidates(
       (p.kind === 'note' && q.kind === 'note' ? p.id - q.id : 0),
   );
 
-  const sounding =
-    x !== BGM && !placementConflict(doc, x, y, l) ? soundingAt(doc, y, env, atY) : [];
+  const sounding = x !== BGM && !placementRule(doc, x, y, l) ? soundingAt(doc, y, env, atY) : [];
 
   return checked(doc, [...exact, ...sounding], (cand) => keyChange(doc, x, y, l, cand), env);
 }
@@ -204,7 +213,7 @@ export function recordCandidates(
       (order.get(p.ch) ?? 0) - (order.get(q.ch) ?? 0) ||
       (p.kind === 'note' && q.kind === 'note' ? p.id - q.id : 0),
   );
-  const sounding = !placementConflict(doc, x, y, l) ? soundingAt(doc, y, env, atY) : [];
+  const sounding = !placementRule(doc, x, y, l) ? soundingAt(doc, y, env, atY) : [];
   return [...exact, ...sounding];
 }
 
@@ -295,7 +304,7 @@ export function classicKey(
   cand: Candidate,
   env: ClassicEnv = {},
 ): ClassicResult {
-  if (x === BGM) return { ok: false, reason: 'pick a lane to key onto' };
+  if (x === BGM) return { ok: false, reason: sayText(said('classic.no-lane')) };
   const len = Math.max(0, l);
   const ignore = cand.kind === 'note' ? new Set([cand.id]) : new Set<NoteId>();
   const why = placementConflict(doc, x, y, len, ignore);
@@ -303,7 +312,7 @@ export function classicKey(
   const change = keyChange(doc, x, y, len, cand);
   const v = classicCheck(doc, change, env);
   if (!v.ok) return v;
-  const id = doc.transact('Key sound', (tx) => {
+  const id = doc.transact(sayText(said('undo.key-sound')), (tx) => {
     let keyed: NoteId;
     if (cand.kind === 'note') {
       tx.patchNotes(change.patch!);
@@ -324,15 +333,15 @@ export function classicMove(
   env: ClassicEnv = {},
 ): Verdict {
   const notes = moves.map((m) => ({ m, n: doc.index.get(m.id) }));
-  if (notes.some((p) => !p.n)) return { ok: false, reason: 'that note is gone' };
+  if (notes.some((p) => !p.n)) return { ok: false, reason: sayText(said('edit.note-gone')) };
   const moved = notes.map(({ m, n }) => ({ id: m.id, x: m.x, y: n!.y, l: m.x === BGM ? 0 : n!.l }));
-  if (movedConflict(doc, moved)) return { ok: false, reason: 'a lane is taken there' };
+  if (movedConflict(doc, moved)) return { ok: false, reason: sayText(said('classic.lane-taken')) };
   const change: ClassicChange = {
     patch: moved.map((m) => ({ id: m.id, patch: { x: m.x, l: m.l } })),
   };
   const v = classicCheck(doc, change, env);
   if (!v.ok) return v;
-  doc.transact('Move keyed notes', (tx) => tx.patchNotes(change.patch!));
+  doc.transact(sayText(said('undo.move-keyed')), (tx) => tx.patchNotes(change.patch!));
   return { ok: true };
 }
 
@@ -353,11 +362,7 @@ export function classicUnkey(
     const n = doc.index.get(id);
     if (!n) continue;
     if (n.x === BGM) {
-      if (!n.c)
-        return {
-          ok: false,
-          reason: 'that is where a sound starts - Classic mode never removes one',
-        };
+      if (!n.c) return { ok: false, reason: sayText(said('classic.sound-starts')) };
       heal.push(id);
     } else if (n.c && env.healable?.has(id)) heal.push(id);
     else patch.push({ id, patch: { x: BGM, l: 0 } });
@@ -375,7 +380,7 @@ export function classicUnkey(
   }
   if (!v.ok) return v;
   const removed = change.remove ?? [];
-  doc.transact(patch.length + heal.length === 1 ? 'Un-key note' : 'Un-key notes', (tx) => {
+  doc.transact(sayText(said('undo.unkey', { n: patch.length + heal.length })), (tx) => {
     if (change.patch?.length) tx.patchNotes(change.patch);
     if (removed.length) tx.deleteNotes(removed);
   });
@@ -396,12 +401,13 @@ export function classicSplit(
   cand: Candidate,
   env: ClassicEnv = {},
 ): ClassicResult {
-  if (cand.kind !== 'split') return { ok: false, reason: 'nothing to split there' };
+  if (cand.kind !== 'split')
+    return { ok: false, reason: sayText(said('classic.nothing-to-split')) };
   const change = keyChange(doc, BGM, y, 0, cand);
   const v = classicCheck(doc, change, env);
   if (!v.ok) return v;
   const id = doc.transact(
-    'Split sound',
+    sayText(said('undo.split-sound')),
     (tx) => tx.insertNotes([{ ...change.insert![0]!, id: doc.newNoteId() }])[0]!.id,
   );
   return { ok: true, id };
@@ -411,10 +417,10 @@ export function classicSplit(
 export function classicHeal(doc: ChartDoc, id: NoteId, env: ClassicEnv = {}): Verdict {
   const n = doc.index.get(id);
   if (!n || n.x !== BGM || !n.c)
-    return { ok: false, reason: 'only a split in the background can be healed' };
+    return { ok: false, reason: sayText(said('classic.heal-background')) };
   const v = classicCheck(doc, { remove: [id] }, env);
   if (!v.ok) return v;
-  doc.transact('Heal split', (tx) => tx.deleteNotes([id]));
+  doc.transact(sayText(said('undo.heal-split')), (tx) => tx.deleteNotes([id]));
   return { ok: true };
 }
 
@@ -426,7 +432,7 @@ export function resetAllToBgm(doc: ChartDoc, env: ClassicEnv = {}): Verdict & { 
   const change: ClassicChange = { patch: lane.map((n) => ({ id: n.id, patch: { x: BGM, l: 0 } })) };
   const v = classicCheck(doc, change, env);
   if (!v.ok) return v;
-  doc.transact('Reset all to background', (tx) => tx.patchNotes(change.patch!));
+  doc.transact(sayText(said('undo.reset-background')), (tx) => tx.patchNotes(change.patch!));
   return { ok: true, count: lane.length };
 }
 

@@ -4,6 +4,7 @@
   // plate, its disc and eyecatch, its preview, its BGA movie, and all of them
   // on the song select as the game will show them. It sits over the playfield like the
   // keysound workbench (one or the other).
+  import { t, tParts } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import type { Project } from '../../state/project.svelte';
   import ArtCropper from './ArtCropper.svelte';
@@ -15,12 +16,12 @@
   import WheelPreview from './WheelPreview.svelte';
 
   const TABS = [
-    { id: 'charts', label: 'Charts' },
-    { id: 'plate', label: 'Title plate' },
-    { id: 'art', label: 'Disc & eyecatch' },
-    { id: 'preview', label: 'Preview' },
-    { id: 'bga', label: 'BGA' },
-    { id: 'wheel', label: 'Wheel' },
+    { id: 'charts', label: 'song.tab.charts' },
+    { id: 'plate', label: 'song.tab.plate' },
+    { id: 'art', label: 'song.tab.art' },
+    { id: 'preview', label: 'song.tab.preview' },
+    { id: 'bga', label: 'song.tab.bga' },
+    { id: 'wheel', label: 'song.tab.wheel' },
   ] as const;
 
   let { project }: { project: Project } = $props();
@@ -34,22 +35,24 @@
 
 <svelte:window onkeydown={onkey} />
 
-<section class="manager" data-testid="song-manager" aria-label="Song manager">
+<section class="manager" data-testid="song-manager" aria-label={t('song.label')}>
   <header>
-    <h2>Song</h2>
+    <h2>{t('song.heading')}</h2>
     <span class="folder" title={project.dir}>{project.name}</span>
-    <span class="count">{project.charts.length} chart{project.charts.length === 1 ? '' : 's'}</span>
-    <nav class="tabs" aria-label="Song manager pages">
-      {#each TABS as t (t.id)}
+    <span class="count">{t('song.chartCount', { n: project.charts.length })}</span>
+    <nav class="tabs" aria-label={t('song.pages')}>
+      {#each TABS as tab (tab.id)}
         <button
-          class:on={app.view.songTab === t.id}
-          data-testid="song-tab-{t.id}"
-          aria-pressed={app.view.songTab === t.id}
-          onclick={() => (app.view.songTab = t.id)}>{t.label}</button
+          class:on={app.view.songTab === tab.id}
+          data-testid="song-tab-{tab.id}"
+          aria-pressed={app.view.songTab === tab.id}
+          onclick={() => (app.view.songTab = tab.id)}>{t(tab.label)}</button
         >
       {/each}
     </nav>
-    <button class="x" title="Close (Esc)" onclick={() => (app.view.songManager = false)}>×</button>
+    <button class="x" title={t('song.close')} onclick={() => (app.view.songManager = false)}
+      >×</button
+    >
   </header>
   <div class="body" class:full={app.view.songTab !== 'charts'}>
     {#if app.view.songTab === 'charts'}<MetaForm {project} />{/if}
@@ -66,19 +69,19 @@
         <ArtCropper {project} kind="disc" />
         <ArtCropper {project} kind="eyecatch" />
         <p class="hint">
-          Cut here exactly as they are published (<code>disc.abm</code>,
-          <code>eyecatch.abm</code>). Without a choice, the image a chart's bmson names is used, as
-          EZ2PORT's own importer would. Drop images anywhere on this page to add them.
+          {#each tParts('song.artHint', {}, ['disc', 'eyecatch']) as p, i (i)}{#if 'slot' in p}<code
+                >{p.slot}.abm</code
+              >{:else}{p.text}{/if}{/each}
         </p>
       </div>
     {:else}
       <div class="charts">
-        <h3>Charts</h3>
+        <h3>{t('song.charts')}</h3>
         <Matrix {project} />
         <p class="hint">
-          Click a chart to open it, an empty cell to start one there. Charts are saved as
-          <code>&lt;mode&gt;1p-{project.sidecar.key || 'key'}[-hd|-shd|-ex].bmson</code>, the way
-          EZ2PORT names them.
+          {#each tParts('song.chartsHint', {}, ['file']) as p, i (i)}{#if 'slot' in p}<code
+                >&lt;mode&gt;1p-{project.sidecar.key || 'key'}[-hd|-shd|-ex].bmson</code
+              >{:else}{p.text}{/if}{/each}
         </p>
       </div>
     {/if}

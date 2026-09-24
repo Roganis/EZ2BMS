@@ -12,6 +12,7 @@
     type LifeDeltas,
     type Tier,
   } from '@ez2bms/chart-core';
+  import { t, tSaid } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import type { ChartSlot } from '../../state/project.svelte';
 
@@ -40,29 +41,31 @@
   const category = $derived(app.project ? app.song.category(app.project) : 48);
 
   function set(patch: Partial<Omit<ChartInfo, 'extra'>>, merge?: string) {
-    d.transact('Chart info', (tx) => tx.setInfo(patch), merge ? { merge } : {});
+    d.transact(t('undo.chartInfo'), (tx) => tx.setInfo(patch), merge ? { merge } : {});
   }
 </script>
 
 <div class="ez-form">
   <div class="row">
-    <span class="lbl">Mode</span>
+    <span class="lbl">{t('chartInfo.mode')}</span>
     <div class="mode"><b>{names.label}</b> · {names.portName} · <code>{slot.file}</code></div>
   </div>
   <div class="row">
-    <label for="ci-title">Title <span class="scope">every chart</span></label>
+    <label for="ci-title"
+      >{t('chartInfo.title')} <span class="scope">{t('chartInfo.everyChart')}</span></label
+    >
     <input
       id="ci-title"
       value={song?.values.title ?? ''}
       oninput={(e) => app.song.setMeta({ title: e.currentTarget.value }, 'title')}
     />
     {#if new TextEncoder().encode(song?.values.title ?? '').length > 32}<span class="warn"
-        >EZ2PORT's song list keeps the first 32 bytes</span
+        >{t('chartInfo.titleBytes')}</span
       >{/if}
   </div>
   <div class="cols">
     <div class="row">
-      <label for="ci-artist">Artist</label>
+      <label for="ci-artist">{t('chartInfo.artist')}</label>
       <input
         id="ci-artist"
         value={song?.values.artist ?? ''}
@@ -70,7 +73,7 @@
       />
     </div>
     <div class="row">
-      <label for="ci-genre">Genre</label>
+      <label for="ci-genre">{t('chartInfo.genre')}</label>
       <input
         id="ci-genre"
         value={song?.values.genre ?? ''}
@@ -79,22 +82,22 @@
     </div>
   </div>
   {#if song?.differs.length}<span class="warn"
-      >The charts differ in {song.differs.join(', ')}: this shows the NM chart's</span
+      >{t('chartInfo.differs', { fields: song.differs.join(', ') })}</span
     >{/if}
   <div class="row">
-    <span class="lbl">Tier</span>
+    <span class="lbl">{t('chartInfo.tier')}</span>
     <div class="ez-seg">
-      {#each TIERS as t (t)}
+      {#each TIERS as tier (tier)}
         <button
-          class:on={slot.tier === t}
-          title={t === slot.tier ? '' : `Make this chart ${t} (its file follows when saved)`}
-          onclick={() => app.song.setTier(slot, t)}>{t}</button
+          class:on={slot.tier === tier}
+          title={tier === slot.tier ? '' : t('chartInfo.makeTier', { tier })}
+          onclick={() => app.song.setTier(slot, tier)}>{tier}</button
         >
       {/each}
     </div>
   </div>
   <div class="row">
-    <label for="ci-level">Level <span class="num">{info.level ?? 0}</span></label>
+    <label for="ci-level">{t('chartInfo.level')} <span class="num">{info.level ?? 0}</span></label>
     <input
       id="ci-level"
       type="range"
@@ -105,7 +108,7 @@
     />
   </div>
 
-  <h3>Judgement</h3>
+  <h3>{t('chartInfo.judgement')}</h3>
   <div class="row">
     <select
       value={jPreset}
@@ -114,8 +117,8 @@
         if (p) set({ judgementDeltas: { ...p.deltas } });
       }}
     >
-      {#each JUDGEMENT_PRESETS as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
-      {#if jPreset === 'custom'}<option value="custom">Custom</option>{/if}
+      {#each JUDGEMENT_PRESETS as p (p.id)}<option value={p.id}>{tSaid(p.said)}</option>{/each}
+      {#if jPreset === 'custom'}<option value="custom">{t('chartInfo.custom')}</option>{/if}
     </select>
   </div>
   <div class="cols">
@@ -133,9 +136,9 @@
       </div>
     {/each}
   </div>
-  <p class="hint">Windows in 1/192-beat ticks at each note's BPM; EZ2PORT adds 3 when it loads.</p>
+  <p class="hint">{t('chartInfo.windowsHint')}</p>
 
-  <h3>Gauge</h3>
+  <h3>{t('chartInfo.gauge')}</h3>
   <div class="row">
     <select
       value={lPreset}
@@ -144,8 +147,8 @@
         if (p) set({ lifeDeltas: { ...p.deltas } });
       }}
     >
-      {#each LIFE_PRESETS as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
-      {#if lPreset === 'custom'}<option value="custom">Custom</option>{/if}
+      {#each LIFE_PRESETS as p (p.id)}<option value={p.id}>{tSaid(p.said)}</option>{/each}
+      {#if lPreset === 'custom'}<option value="custom">{t('chartInfo.custom')}</option>{/if}
     </select>
   </div>
   <div class="cols">
@@ -163,9 +166,9 @@
     {/each}
   </div>
 
-  <h3>Song</h3>
+  <h3>{t('chartInfo.song')}</h3>
   <div class="row">
-    <label for="ci-key">Key (folder name in EZ2PORT)</label>
+    <label for="ci-key">{t('chartInfo.key')}</label>
     <input
       id="ci-key"
       value={key}
@@ -174,10 +177,10 @@
         if (app.project) app.project.sidecar.key = e.currentTarget.value;
       }}
     />
-    {#if key && !isValidSongKey(key)}<span class="warn">1-15 lowercase letters or digits</span>{/if}
+    {#if key && !isValidSongKey(key)}<span class="warn">{t('chartInfo.keyRule')}</span>{/if}
   </div>
   <div class="row">
-    <label for="ci-category">Category on the song wheel</label>
+    <label for="ci-category">{t('chartInfo.category')}</label>
     <select
       id="ci-category"
       value={category}
@@ -187,7 +190,7 @@
         <option value={c.id}>{c.id} · {c.label}</option>
       {/each}
     </select>
-    <span class="hint">EZ2PORT lists the song in this one bank only (not in ALL)</span>
+    <span class="hint">{t('chartInfo.categoryHint')}</span>
   </div>
 </div>
 

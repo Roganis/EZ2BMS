@@ -1,6 +1,7 @@
 // Playback commands: the chart as EZ2PORT will sound it, from the cursor.
 
 import { laneInfo } from '@ez2bms/chart-core';
+import { t, tEn } from '../i18n/i18n.svelte';
 import type { App } from '../state/app.svelte';
 import { toast } from '../state/toasts.svelte';
 
@@ -10,7 +11,7 @@ export function registerPlayCommands(app: App): void {
   app.commands.register(
     {
       id: 'play.toggle',
-      title: 'Play / stop from the cursor',
+      title: tEn('cmd.play.toggle'),
       group: 'Play',
       keys: ['Space'],
       enabled: () => !!app.slot,
@@ -25,7 +26,7 @@ export function registerPlayCommands(app: App): void {
     },
     {
       id: 'play.test',
-      title: 'Test play from the cursor (your keys, judged like EZ2PORT)',
+      title: tEn('cmd.play.test'),
       group: 'Play',
       keys: ['Shift+Tab'],
       enabled: () => !!app.slot,
@@ -37,7 +38,7 @@ export function registerPlayCommands(app: App): void {
     },
     {
       id: 'play.record',
-      title: 'Record: play along from the cursor, then keep the take (R again stops, or retakes)',
+      title: tEn('cmd.play.record'),
       group: 'Play',
       keys: ['R'],
       enabled: () => !!app.slot && !app.play.active,
@@ -45,14 +46,14 @@ export function registerPlayCommands(app: App): void {
     },
     {
       id: 'input.controls',
-      title: 'Controls and timing… (keys, controllers, offsets)',
+      title: tEn('cmd.input.controls'),
       group: 'Play',
       global: true,
       run: () => app.controls.show(),
     },
     {
       id: 'play.again',
-      title: 'Play again from where playback last started',
+      title: tEn('cmd.play.again'),
       group: 'Play',
       keys: ['Shift+Space'],
       enabled: () => !!app.slot,
@@ -64,19 +65,19 @@ export function registerPlayCommands(app: App): void {
     },
     {
       id: 'audio.muteBgm',
-      title: 'Mute / unmute background sounds',
+      title: tEn('cmd.audio.muteBgm'),
       group: 'Play',
       keys: ['Mod+Shift+M'],
       global: true,
       run: () => {
         app.audio.muteBgm = !app.audio.muteBgm;
-        toast(app.audio.muteBgm ? 'Background muted' : 'Background on');
+        toast(t(app.audio.muteBgm ? 'play.bgmMuted' : 'play.bgmOn'));
         if (app.slot) void app.audio.sync(app.slot);
       },
     },
     {
       id: 'audio.solo',
-      title: 'Solo the lane under the pointer (again to clear)',
+      title: tEn('cmd.audio.solo'),
       group: 'Play',
       keys: ['Mod+Shift+S'],
       global: true,
@@ -85,8 +86,8 @@ export function registerPlayCommands(app: App): void {
         app.audio.solo = app.audio.solo !== null || x === null ? null : x;
         toast(
           app.audio.solo === null
-            ? 'Solo off'
-            : `Solo: lane ${laneInfo(app.audio.solo)?.short ?? app.audio.solo}`,
+            ? t('play.soloOff')
+            : t('play.solo', { lane: laneInfo(app.audio.solo)?.short ?? app.audio.solo }),
         );
         if (app.slot) void app.audio.sync(app.slot);
       },

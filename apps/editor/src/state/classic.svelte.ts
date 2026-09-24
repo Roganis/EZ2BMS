@@ -22,6 +22,7 @@ import {
   type NoteId,
   type NoteRec,
 } from '@ez2bms/chart-core';
+import { t } from '../i18n/i18n.svelte';
 import type { App } from './app.svelte';
 import { toast } from './toasts.svelte';
 
@@ -47,12 +48,7 @@ export class ClassicState {
     p.sidecar.classic = !this.on;
     void p.saveSidecar();
     this.clear();
-    toast(
-      this.on
-        ? 'Classic mode: placing a note keys the sound playing there'
-        : 'Classic mode off: notes use the picked sound',
-      'info',
-    );
+    toast(t(this.on ? 'classic.on' : 'classic.off'), 'info');
   }
 
   env(): ClassicEnv {
@@ -88,10 +84,13 @@ export class ClassicState {
   /** "stem_pad.wav (2/3) · slice", for the ghost and the status bar. */
   label(doc: ChartDoc): string {
     const c = this.current;
-    if (!c) return 'nothing sounds here';
-    const name = doc.channel(c.ch)?.name ?? '?';
-    const of = this.cands.length > 1 ? ` (${this.index + 1}/${this.cands.length})` : '';
-    return `${name}${of}${c.bad ? ' - would change the sound' : c.kind === 'split' ? ' · slice' : ''}`;
+    if (!c) return t('classic.nothingHere');
+    return t('classic.label', {
+      sound: doc.channel(c.ch)?.name ?? '?',
+      i: this.index + 1,
+      n: this.cands.length,
+      state: c.bad ? 'bad' : c.kind === 'split' ? 'slice' : 'none',
+    });
   }
 
   /** The note in the rack the current candidate comes from. */
@@ -113,12 +112,12 @@ export class ClassicState {
     this.hover(doc, x, y, l);
     const c = this.current;
     if (!c) {
-      toast('Nothing sounds there to key', 'warn');
+      toast(t('classic.nothingToKey'), 'warn');
       return false;
     }
     const r = classicKey(doc, x, y, l, c, this.env());
     if (!r.ok) {
-      toast(`Can't key that: ${r.reason}`, 'warn');
+      toast(t('classic.cantKey', { reason: r.reason }), 'warn');
       return false;
     }
     if (c.kind === 'split' && r.id !== undefined) this.madeOf(doc).add(r.id);
@@ -136,7 +135,7 @@ export class ClassicState {
   /** Delete in Classic mode: back to the background (and heal splits Classic made). */
   unkey(doc: ChartDoc, ids: Iterable<NoteId>): void {
     const r = classicUnkey(doc, ids, { ...this.env(), healable: this.madeOf(doc) });
-    if (!r.ok) toast(`Can't do that in Classic mode: ${r.reason}`, 'warn');
+    if (!r.ok) toast(t('classic.cantUnkey', { reason: r.reason }), 'warn');
     this.clear();
   }
 
@@ -146,20 +145,20 @@ export class ClassicState {
     if (note) {
       if (note.x !== 0) return this.unkey(doc, [note.id]);
       if (!note.c) {
-        toast('That is where a sound starts - Classic mode never removes one', 'warn');
+        toast(t('classic.soundStarts'), 'warn');
         return;
       }
       const r = classicHeal(doc, note.id, env);
-      if (!r.ok) toast(`Can't heal that split: ${r.reason}`, 'warn');
+      if (!r.ok) toast(t('classic.cantHeal', { reason: r.reason }), 'warn');
       return;
     }
     const c = splitCandidates(doc, y, env).find((k) => !k.bad);
     if (!c) {
-      toast('Nothing sounds there to split', 'warn');
+      toast(t('classic.nothingToSplit'), 'warn');
       return;
     }
     const r = classicSplit(doc, y, c, env);
-    if (!r.ok) toast(`Can't split there: ${r.reason}`, 'warn');
+    if (!r.ok) toast(t('classic.cantSplit', { reason: r.reason }), 'warn');
   }
 
   /** Whether a drag may put notes on these lanes (same positions) without changing the sound. */
@@ -170,8 +169,8 @@ export class ClassicState {
 
   resetAll(doc: ChartDoc): void {
     const r = resetAllToBgm(doc, this.env());
-    if (!r.ok) toast(`Can't reset: ${r.reason}`, 'warn');
-    else toast(`${r.count} note${r.count === 1 ? '' : 's'} back in the background`, 'ok');
+    if (!r.ok) toast(t('classic.cantReset', { reason: r.reason }), 'warn');
+    else toast(t('classic.reset', { n: r.count }), 'ok');
   }
 
   /** Snap to the picked sound's group (BmsTWO's magnet in Classic mode). */

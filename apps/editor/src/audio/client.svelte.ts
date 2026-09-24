@@ -16,6 +16,7 @@ import {
 } from '@ez2bms/chart-core';
 import { SvelteMap } from 'svelte/reactivity';
 import type { AudioEvent, Backend, Clicks, ClockSnapshot, Loaded } from '../bridge';
+import { t } from '../i18n/i18n.svelte';
 import type { ChartSlot, Project } from '../state/project.svelte';
 import type { Settings } from '../state/settings.svelte';
 import { toast } from '../state/toasts.svelte';
@@ -101,11 +102,7 @@ export class AudioClient {
       if (r.error) failed++;
     });
     this.loadedRev++;
-    if (failed)
-      toast(
-        `${failed} sound${failed === 1 ? '' : 's'} could not be read (see the Sounds drawer)`,
-        'warn',
-      );
+    if (failed) toast(t('audio.unreadable', { n: failed }), 'warn');
     this.planRev = -1;
   }
 

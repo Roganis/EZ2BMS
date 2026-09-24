@@ -5,6 +5,7 @@
 // the chart Publish reads song.ini's Title from.
 
 import type { ChartDoc } from '../edit/doc';
+import { said, sayText } from '../i18n/say';
 import type { ChartData, ChartInfo, Tier } from '../model/types';
 
 export const SONG_FIELDS = ['title', 'subtitle', 'artist', 'genre'] as const;
@@ -57,6 +58,8 @@ export function applySongMeta(
     if (doc.data.info[f] !== want) set[f] = want;
   }
   if (!Object.keys(set).length) return false;
-  doc.transact('Song info', (tx) => tx.setInfo(set), merge ? { merge } : {});
+  // The undo step's name is shown as it stands (the status bar's "last"), so
+  // it is said in the language chosen now, as the editor's own steps are.
+  doc.transact(sayText(said('song.undo.info')), (tx) => tx.setInfo(set), merge ? { merge } : {});
   return true;
 }

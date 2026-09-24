@@ -96,11 +96,14 @@ export class App {
     this.commands.onError = (e, c) => {
       const message = e instanceof Error ? e.message : String(e);
       this.backend.diag.log('warn', `${c.id}: ${describeError(e).detail}`);
-      toast(`${this.commands.titleOf(c)}: ${message}`, 'error');
+      toast(t('app.commandFailed', { command: this.commands.titleOf(c), message }), 'error');
     };
     this.commands.localize = (c) => {
       const key = `cmd.${c.id}`;
-      return hasMessage(key) ? t(key) : undefined;
+      if (hasMessage(key)) return t(key);
+      // Ctrl+1 … Ctrl+9: one sentence with the chart's number.
+      const n = /^chart\.select(\d)$/.exec(c.id)?.[1];
+      return n ? t('app.switchChart', { n: Number(n) }) : undefined;
     };
     this.commands.groupLabel = (g) => t(`group.${g}`);
   }
@@ -119,7 +122,7 @@ export class App {
     void this.backend.audio.cacheSetCap(this.settings.data.audioCacheMB).catch(() => {});
     await this.port.detect();
     if (this.audioInfo?.device_error)
-      toast(`No audio device - playing silently (${this.audioInfo.device_error})`, 'warn');
+      toast(t('app.noAudio', { error: this.audioInfo.device_error }), 'warn');
     this.ready = true;
     void this.updates.start();
     // Files the system handed over: at launch, and from later launches.
@@ -153,7 +156,7 @@ export class App {
     const bmson = paths.find((p) => /\.bmson$/i.test(p));
     const bms = paths.find((p) => BMS_FILE.test(p));
     if (!bmson && !bms) {
-      if (paths.length) toast(`EZ2BMS does not open ${baseName(paths[0]!)}`, 'warn');
+      if (paths.length) toast(t('app.cannotOpen', { file: baseName(paths[0]!) }), 'warn');
       return;
     }
     if (!bmson) {
@@ -166,7 +169,7 @@ export class App {
     const pick = () => {
       const i = this.project?.charts.findIndex((c) => c.file.toLowerCase() === file) ?? -1;
       if (i >= 0) this.selectChart(i);
-      else toast(`Opened the song, but ${baseName(bmson)} is not one of its charts`, 'warn');
+      else toast(t('app.notAChart', { file: baseName(bmson) }), 'warn');
     };
     if (this.project && samePath(this.project.dir, dir)) return pick();
     this.leaveProject(baseName(bmson), async () => {
@@ -181,8 +184,8 @@ export class App {
   leaveProject(what: string, go: () => unknown): void {
     const p = this.project;
     if (!p?.dirty) return void go();
-    ask(`${baseName(p.dir)} has unsaved changes. Open ${what} anyway? The autosave keeps them.`, {
-      label: 'Open',
+    ask(t('app.leaveUnsaved', { song: baseName(p.dir), what }), {
+      label: t('app.open'),
       run: () => void go(),
     });
   }
@@ -197,7 +200,7 @@ export class App {
     if (!d) return;
     const v = Math.round(bpm * 100) / 100;
     setBpmAt(d, 0, v);
-    toast(`${v} BPM from the start`, 'ok');
+    toast(t('app.startBpm', { bpm: v }), 'ok');
   }
 
   get doc(): ChartDoc | undefined {
@@ -217,7 +220,10 @@ export class App {
       void this.offerRecovery(p);
       return true;
     } catch (e) {
-      toast(`Could not open ${dir}: ${e instanceof Error ? e.message : String(e)}`, 'error');
+      toast(
+        t('app.openFailed', { dir, error: e instanceof Error ? e.message : String(e) }),
+        'error',
+      );
       return false;
     }
   }
@@ -232,26 +238,21 @@ export class App {
   private async offerRecovery(p: Project): Promise<void> {
     const found = await this.autosave.pending(p).catch(() => []);
     for (const r of found) {
-      ask(
-        `Unsaved changes to ${r.file} from ${formatWhen(r.when)} were kept after EZ2BMS closed.`,
-        {
-          label: 'Recover',
-          run: () => {
-            p.recover(r.file, r.text);
-            const i = p.charts.findIndex((c) => c.file === r.file);
-            if (i >= 0) this.selectChart(i);
-            toast(`Recovered ${r.file} - save to keep it`, 'ok');
-          },
+      ask(t('autosave.kept', { file: r.file, when: formatWhen(r.when) }), {
+        label: t('autosave.recover'),
+        run: () => {
+          p.recover(r.file, r.text);
+          const i = p.charts.findIndex((c) => c.file === r.file);
+          if (i >= 0) this.selectChart(i);
+          toast(t('autosave.recovered', { file: r.file }), 'ok');
         },
-      );
+      });
     }
   }
 
   /** A new song in an empty (or audio-only) folder. */
   async newSong(): Promise<void> {
-    const dir = await this.backend.pickFolder(
-      'Folder for the new song (its sounds can already be there)',
-    );
+    const dir = await this.backend.pickFolder(t('app.newSongFolder'));
     if (!dir) return;
     if (await this.openProject(dir)) this.view.newChartOpen = true;
   }

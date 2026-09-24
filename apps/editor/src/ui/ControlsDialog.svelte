@@ -12,12 +12,19 @@
     routeChannel,
   } from '@ez2bms/chart-core';
   import { onMount } from 'svelte';
+  import { t, tParts } from '../i18n/i18n.svelte';
   import { app } from '../state/app.svelte';
   import { CAL_BEATS, CAL_WARMUP } from '../state/calibrator.svelte';
   import type { ControlsRow } from '../state/controls.svelte';
 
   const c = app.controls;
   const s = app.settings;
+  const tabs = $derived([
+    ['channels', t('controls.bindings')],
+    ['devices', t('controls.controllers')],
+    ['timing', t('controls.timing')],
+  ] as const);
+  const hint = $derived(tParts('controls.hint', {}, ['plus', 'file']));
 
   /** Redrawn every frame while open: which channels are down, what pads read. */
   let frame = $state(0);
@@ -40,7 +47,7 @@
     const cols = modeDef(slot.mode).columns;
     const r = routeChannel(slot.mode, cols, ch);
     if (!r) return '';
-    if ('strum' in r) return 'strum';
+    if ('strum' in r) return t('controls.strum');
     const x = cols[r.column]!.x;
     return LANES.find((l) => l.x === x)?.short ?? String(x);
   }
@@ -82,14 +89,14 @@
   class="dialog"
   role="dialog"
   aria-modal="true"
-  aria-label="Controls and timing"
+  aria-label={t('controls.title')}
   tabindex="-1"
   data-testid="controls-dialog"
 >
   <header>
-    <h2>Controls and timing</h2>
+    <h2>{t('controls.title')}</h2>
     <div class="ez-seg">
-      {#each [['channels', 'Bindings'], ['devices', 'Controllers'], ['timing', 'Timing']] as const as [id, label] (id)}
+      {#each tabs as [id, label] (id)}
         <button
           class:on={c.tab === id}
           onclick={() => (c.tab = id)}
@@ -101,20 +108,20 @@
 
   {#if c.tab === 'channels'}
     <p class="hint">
-      Four bindings a channel, keys or controller buttons and hats: <b>+</b> and press one. They are
-      EZ2BMS's own; EZ2PORT's <code>keys.ini</code> is only read.
+      {#each hint as p, i (i)}{#if !('slot' in p)}{p.text}{:else if p.slot === 'plus'}<b>+</b
+          >{:else}<code>keys.ini</code>{/if}{/each}
     </p>
     <div class="rows">
       {#each KEY_CHANNELS as name, ch (name)}
         <div class="row" class:down={isDown(ch)} data-testid={`controls-row-${name}`}>
           <span class="name">{name}</span>
-          <span class="lane" title="Where it plays in this chart's mode">{laneOf(ch)}</span>
+          <span class="lane" title={t('controls.laneTitle')}>{laneOf(ch)}</span>
           <span class="chips">
             {#each c.conf.names[ch] ?? [] as tok, i (tok)}
               <span class="chip" data-testid="binding-chip"
                 ><span data-testid="binding-token">{c.label(tok)}</span><button
                   class="x"
-                  title="Remove"
+                  title={t('controls.remove')}
                   data-testid="binding-remove"
                   onclick={() => c.remove(ch, i)}>×</button
                 ></span
@@ -122,12 +129,12 @@
             {/each}
             {#if waiting(ch)}
               <button class="chip wait" data-testid="binding-wait" onclick={() => c.cancelBind()}
-                >Press a key or button… <kbd>Esc</kbd></button
+                >{t('controls.pressKey')} <kbd>Esc</kbd></button
               >
             {:else if (c.conf.names[ch]?.length ?? 0) < KEY_ALTS}
               <button
                 class="chip add"
-                title="Bind by pressing"
+                title={t('controls.bindTitle')}
                 data-testid="binding-add"
                 onclick={() => void c.bind(ch)}>+</button
               >
@@ -140,25 +147,25 @@
         {@const axis = axisOf(which)}
         <div class="row tt" data-testid={`controls-row-${which ? 'P2Turntable' : 'Turntable'}`}>
           <span class="name">{which ? 'P2 Turntable' : 'Turntable'}</span>
-          <span class="lane">axis</span>
+          <span class="lane">{t('controls.axis')}</span>
           <span class="chips">
             {#if c.conf.analog[which]}
               <span class="chip"
                 >{c.label(c.conf.analog[which]!)}<button
                   class="x"
-                  title="Remove"
+                  title={t('controls.remove')}
                   onclick={() => c.remove(row)}>×</button
                 ></span
               >
             {/if}
             {#if waiting(row)}
               <button class="chip wait" data-testid="binding-wait" onclick={() => c.cancelBind()}
-                >Turn it… <kbd>Esc</kbd></button
+                >{t('controls.turnIt')} <kbd>Esc</kbd></button
               >
             {:else}
               <button
                 class="chip add"
-                title="Bind an axis by turning it"
+                title={t('controls.bindAxisTitle')}
                 data-testid="binding-add"
                 onclick={() => void c.bind(row)}>{c.conf.analog[which] ? '↻' : '+'}</button
               >
@@ -170,7 +177,8 @@
                   checked={axis.reverse}
                   onchange={() => c.toggle(which, 'reverse')}
                   data-testid="tt-rev"
-                /> reversed</label
+                />
+                {t('controls.reversed')}</label
               >
               <label class="flag"
                 ><input
@@ -178,7 +186,8 @@
                   checked={axis.velocity}
                   onchange={() => c.toggle(which, 'velocity')}
                   data-testid="tt-vel"
-                /> speed, not position</label
+                />
+                {t('controls.velocity')}</label
               >
             {/if}
           </span>
@@ -187,24 +196,30 @@
     </div>
   {:else if c.tab === 'devices'}
     {#if app.input.padError}
-      <p class="warn">Controllers are unavailable: {app.input.padError}</p>
+      <p class="warn">{t('controls.padError', { error: app.input.padError })}</p>
     {/if}
     {#if !app.input.devices.length}
-      <p class="hint">No controller found. Plug one in: it shows here as soon as it is seen.</p>
+      <p class="hint">{t('controls.noPads')}</p>
     {/if}
     {#each app.input.devices as d (d.key)}
       {@const r = readout(d.key)}
       <div class="device" data-testid="pad-device">
         <div class="dev-head">
           <b>{d.name}</b> <code>{d.key}</code>
-          <span class="dim">{d.buttons} buttons · {d.axes} axes · {d.hats} hats</span>
+          <span class="dim"
+            >{t('controls.padShape', { buttons: d.buttons, axes: d.axes, hats: d.hats })}</span
+          >
         </div>
         <div class="readout" data-testid="pad-readout">
-          <span>buttons: {r.buttons.length ? r.buttons.map((b) => `b${b}`).join(' ') : '-'}</span>
+          <span
+            >{t('controls.readout', {
+              list: r.buttons.length ? r.buttons.map((b) => `b${b}`).join(' ') : '-',
+            })}</span
+          >
           {#if r.hats.length}<span>{r.hats.join(' ')}</span>{/if}
           {#each r.axes as v, i (i)}
             <span class="axis" title={`a${i}: ${v}`}
-              >a{i}<i style:width={`${((v + 32768) / 65535) * 100}%`}></i></span
+              >{`a${i}`}<i style:width={`${((v + 32768) / 65535) * 100}%`}></i></span
             >
           {/each}
         </div>
@@ -212,34 +227,26 @@
     {/each}
   {:else}
     {@const cal = app.calibrator}
-    <p class="hint">
-      How late EZ2BMS hears, shows and takes presses on this machine. EZ2PORT has no offsets: these
-      are for playing and recording in the editor only.
-    </p>
+    <p class="hint">{t('calib.hint')}</p>
     <div class="tests">
       <div class="test">
-        <b>Sound test</b>
-        <span class="dim"
-          >Tap any of your keys or buttons on each click (20, the first 4 to find the beat). Sets
-          the input offset.</span
-        >
+        <b>{t('calib.sound')}</b>
+        <span class="dim">{t('calib.soundHint')}</span>
         <button
           class="ez-btn"
           disabled={cal.running}
           onclick={() => void cal.start('sound')}
-          data-testid="calibrate-sound">Start</button
+          data-testid="calibrate-sound">{t('calib.start')}</button
         >
       </div>
       <div class="test">
-        <b>Picture test</b>
-        <span class="dim"
-          >Tap on each flash (silent). Sets the picture offset; run the sound test first.</span
-        >
+        <b>{t('calib.picture')}</b>
+        <span class="dim">{t('calib.pictureHint')}</span>
         <button
           class="ez-btn"
           disabled={cal.running}
           onclick={() => void cal.start('picture')}
-          data-testid="calibrate-picture">Start</button
+          data-testid="calibrate-picture">{t('calib.start')}</button
         >
       </div>
     </div>
@@ -253,34 +260,34 @@
             <i class:done={k <= cal.beat} class:warm={k < CAL_WARMUP}></i>
           {/each}
         </div>
-        <span>{cal.taps} taps</span>
-        <button class="ez-btn" onclick={() => cal.stop()}>Stop</button>
+        <span>{t('calib.taps', { n: cal.taps })}</span>
+        <button class="ez-btn" onclick={() => cal.stop()}>{t('calib.stop')}</button>
       </div>
     {:else if cal.result}
+      {@const res = cal.result}
+      {@const detail = { used: res.used, spread: res.spreadMs.toFixed(1), dropped: res.dropped }}
       <div class="result" data-testid="calibrate-result">
-        Taps land <b
-          >{Math.abs(Math.round(cal.result.offsetMs))} ms
-          {cal.result.offsetMs >= 0 ? 'late' : 'early'}</b
-        >
+        {#each tParts('calib.land', {}, ['offset']) as p, i (i)}{#if 'slot' in p}<b
+              >{t('calib.offset', {
+                ms: Math.abs(Math.round(res.offsetMs)),
+                dir: res.offsetMs >= 0 ? 'late' : 'early',
+              })}</b
+            >{:else}{p.text}{/if}{/each}
         <span class="dim"
-          >({cal.result.used} taps, spread {cal.result.spreadMs.toFixed(1)} ms{cal.result.dropped
-            ? `, ${cal.result.dropped} left out`
-            : ''})</span
+          >{res.dropped ? t('calib.detailDropped', detail) : t('calib.detail', detail)}</span
         >
         <button class="ez-btn go" onclick={() => cal.apply()} data-testid="calibrate-apply"
-          >Use as the {cal.kind === 'sound' ? 'input' : 'picture'} offset</button
+          >{t('calib.use', { kind: cal.kind })}</button
         >
       </div>
     {:else if cal.failed}
       <p class="warn" data-testid="calibrate-failed">
-        Too few taps on the beat to tell. Try again, tapping on every {cal.kind === 'sound'
-          ? 'click'
-          : 'flash'}.
+        {t('calib.failed', { kind: cal.kind })}
       </p>
     {/if}
     <div class="timing">
       <label
-        >Audio offset (ms)<input
+        >{t('calib.audioOffset')}<input
           type="number"
           step="1"
           value={s.data.audioOffsetMs}
@@ -289,7 +296,7 @@
         /></label
       >
       <label
-        >Picture offset (ms)<input
+        >{t('calib.pictureOffset')}<input
           type="number"
           step="1"
           value={s.data.visualOffsetMs}
@@ -298,7 +305,7 @@
         /></label
       >
       <label
-        >Input offset (ms)<input
+        >{t('calib.inputOffset')}<input
           type="number"
           step="1"
           value={s.data.inputOffsetMs}
@@ -312,29 +319,31 @@
   <footer>
     {#if c.tab === 'channels'}
       <label class="deb"
-        >Debounce <input
-          type="number"
-          min="0"
-          max="100"
-          value={c.debounceMs}
-          onchange={(e) => c.setDebounce(Number(e.currentTarget.value))}
-          data-testid="controls-debounce"
-        /> ms</label
+        >{#each tParts('controls.debounce', {}, ['field']) as p, i (i)}{#if 'slot' in p}<input
+              type="number"
+              min="0"
+              max="100"
+              value={c.debounceMs}
+              onchange={(e) => c.setDebounce(Number(e.currentTarget.value))}
+              data-testid="controls-debounce"
+            />{:else}{p.text}{/if}{/each}</label
       >
       <span class="grow"></span>
       <button class="ez-btn" onclick={() => c.resetDefaults()} data-testid="controls-reset"
-        >EZ2PORT defaults</button
+        >{t('controls.defaults')}</button
       >
       <button class="ez-btn" onclick={() => void c.importPort()} data-testid="controls-import"
-        >Import from EZ2PORT</button
+        >{t('controls.import')}</button
       >
       <button class="ez-btn" onclick={() => void c.copy()} data-testid="controls-copy"
-        >Copy as keys.ini</button
+        >{t('controls.copy')}</button
       >
     {:else}
       <span class="grow"></span>
     {/if}
-    <button class="ez-btn go" onclick={() => c.close()} data-testid="controls-close">Done</button>
+    <button class="ez-btn go" onclick={() => c.close()} data-testid="controls-close"
+      >{t('controls.done')}</button
+    >
   </footer>
 </div>
 

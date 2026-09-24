@@ -1,6 +1,7 @@
 <script lang="ts">
   // What EZ2PORT said during the last test run.
   import { tick } from 'svelte';
+  import { t } from '../i18n/i18n.svelte';
   import { app } from '../state/app.svelte';
 
   const port = app.port;
@@ -11,18 +12,21 @@
   });
 </script>
 
-<section class="log" aria-label="EZ2PORT log">
+<section class="log" aria-label={t('run.label')}>
   <header>
     <span class="title">EZ2PORT</span>
-    {#if port.runId !== null}<span class="run">running</span>{:else if port.lastExit}<span
-        class="exit">{port.lastExit}</span
+    {#if port.runId !== null}<span class="run">{t('run.running')}</span
+      >{:else if port.lastExit}<span class="exit"
+        >{t('run.outcome', { outcome: port.lastExit })}</span
       >{/if}
     <span class="sp"></span>
     {#if port.runId !== null}
-      <button class="ez-btn danger" onclick={() => app.commands.run('port.stop')}>Stop</button>
+      <button class="ez-btn danger" onclick={() => app.commands.run('port.stop')}
+        >{t('run.stop')}</button
+      >
     {/if}
-    <button class="ez-btn" onclick={() => (port.log = [])}>Clear</button>
-    <button class="x" onclick={() => (port.logOpen = false)} aria-label="Hide">×</button>
+    <button class="ez-btn" onclick={() => (port.log = [])}>{t('run.clear')}</button>
+    <button class="x" onclick={() => (port.logOpen = false)} aria-label={t('run.hide')}>×</button>
   </header>
   <div class="lines" bind:this={box}>
     {#each port.log as l, i (i)}

@@ -1,6 +1,6 @@
 // The editor's commands. Anything a key, a button or the palette does is here.
 
-import { tEn } from '../i18n/i18n.svelte';
+import { t, tEn } from '../i18n/i18n.svelte';
 import { SNAP_GRIDS, eraseNotes, measureStart } from '@ez2bms/chart-core';
 import type { App } from '../state/app.svelte';
 import { toast } from '../state/toasts.svelte';
@@ -24,18 +24,18 @@ export function registerBuiltins(app: App): void {
     // ---- File
     {
       id: 'file.open',
-      title: 'Open song folder…',
+      title: tEn('cmd.file.open'),
       group: 'File',
       keys: ['Mod+O'],
       global: true,
       run: async () => {
-        const dir = await app.backend.pickFolder('Open a song folder');
+        const dir = await app.backend.pickFolder(t('project.pickFolder'));
         if (dir) app.leaveProject(baseName(dir), () => app.openProject(dir));
       },
     },
     {
       id: 'file.save',
-      title: 'Save',
+      title: tEn('cmd.file.save'),
       group: 'File',
       keys: ['Mod+S'],
       global: true,
@@ -43,49 +43,50 @@ export function registerBuiltins(app: App): void {
       run: async () => {
         const p = app.project!;
         const n = await p.saveAll();
-        toast(n ? `Saved ${n} chart${n === 1 ? '' : 's'}` : 'Nothing to save', n ? 'ok' : 'info');
+        toast(n ? t('project.saved', { n }) : t('project.nothingToSave'), n ? 'ok' : 'info');
         // A chart whose new name the disk refused keeps its old one; say so.
-        for (const f of p.renameFailures.splice(0)) toast(`Kept the old file name - ${f}`, 'warn');
+        for (const f of p.renameFailures.splice(0))
+          toast(t('project.keptOldName', { detail: f }), 'warn');
       },
     },
     {
       id: 'file.newSong',
-      title: 'New song…',
+      title: tEn('cmd.file.newSong'),
       group: 'File',
       global: true,
       run: () => app.newSong(),
     },
     {
       id: 'file.import',
-      title: 'Import a song… (EZ2AC, BMS, bmson)',
+      title: tEn('cmd.file.import'),
       group: 'File',
       global: true,
       run: () => app.importer.show(),
     },
     {
       id: 'file.exportCabinet',
-      title: 'Export to EZ2AC… (into a song the game has)',
+      title: tEn('cmd.file.exportCabinet'),
       group: 'File',
       enabled: () => !!app.project?.charts.length,
       run: () => app.exporter.show('cabinet'),
     },
     {
       id: 'file.exportBms',
-      title: 'Export as BMS…',
+      title: tEn('cmd.file.exportBms'),
       group: 'File',
       enabled: () => !!app.project?.charts.length,
       run: () => app.exporter.show('bms'),
     },
     {
       id: 'file.exportRestore',
-      title: 'Undo a cabinet export…',
+      title: tEn('cmd.file.exportRestore'),
       group: 'File',
       enabled: () => !!app.project,
       run: () => app.exporter.show('history'),
     },
     {
       id: 'song.clearImportNotes',
-      title: 'Forget what the import said (clear it from Issues)',
+      title: tEn('cmd.song.clearImportNotes'),
       group: 'File',
       enabled: () =>
         !!app.project &&
@@ -95,7 +96,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'chart.new',
-      title: 'New chart…',
+      title: tEn('cmd.chart.new'),
       group: 'Chart',
       keys: ['Mod+N'],
       global: true,
@@ -104,7 +105,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'file.close',
-      title: 'Close song',
+      title: tEn('cmd.file.close'),
       group: 'File',
       enabled: () => !!app.project,
       run: () => app.closeProject(),
@@ -112,7 +113,7 @@ export function registerBuiltins(app: App): void {
     // ---- Edit
     {
       id: 'edit.undo',
-      title: 'Undo',
+      title: tEn('cmd.edit.undo'),
       group: 'Edit',
       keys: ['Mod+Z'],
       global: true,
@@ -121,7 +122,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'edit.redo',
-      title: 'Redo',
+      title: tEn('cmd.edit.redo'),
       group: 'Edit',
       keys: ['Mod+Shift+Z', 'Mod+Y'],
       global: true,
@@ -130,7 +131,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'edit.selectAll',
-      title: 'Select all notes',
+      title: tEn('cmd.edit.selectAll'),
       group: 'Edit',
       keys: ['Mod+A'],
       enabled: hasDoc,
@@ -141,7 +142,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'edit.deselect',
-      title: 'Select nothing',
+      title: tEn('cmd.edit.deselect'),
       group: 'Edit',
       keys: ['Escape'],
       enabled: hasSel,
@@ -149,7 +150,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'edit.delete',
-      title: 'Delete selected notes',
+      title: tEn('cmd.edit.delete'),
       group: 'Edit',
       keys: ['Delete', 'Backspace'],
       enabled: hasSel,
@@ -162,7 +163,7 @@ export function registerBuiltins(app: App): void {
     // ---- View
     {
       id: 'view.palette',
-      title: 'Command palette',
+      title: tEn('cmd.view.palette'),
       group: 'View',
       keys: ['Mod+K'],
       global: true,
@@ -170,7 +171,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.togglePlay',
-      title: 'Switch Edit / Play view',
+      title: tEn('cmd.view.togglePlay'),
       group: 'View',
       keys: ['Tab'],
       enabled: hasDoc,
@@ -178,7 +179,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.snapFiner',
-      title: 'Finer snap',
+      title: tEn('cmd.view.snapFiner'),
       group: 'View',
       keys: [']'],
       run: () =>
@@ -186,27 +187,30 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.snapCoarser',
-      title: 'Coarser snap',
+      title: tEn('cmd.view.snapCoarser'),
       group: 'View',
       keys: ['['],
       run: () => (v.snap = SNAP_GRIDS[Math.max(0, snapIndex() - 1)]!.perMeasure),
     },
     {
       id: 'view.snap',
-      title: 'Snap to…',
+      title: tEn('cmd.view.snap'),
       group: 'View',
       verb: 'snap',
       argHint: '1/16',
       run: (arg) => {
         const n = Number((arg ?? '').replace(/^1\//, ''));
         const g = SNAP_GRIDS.find((s) => s.perMeasure === n);
-        if (!g) throw new Error(`snap is one of ${SNAP_GRIDS.map((s) => s.label).join(' ')}`);
+        if (!g)
+          throw new Error(
+            t('app.snapArg', { verb: 'snap', grids: SNAP_GRIDS.map((s) => s.label).join(' ') }),
+          );
         v.snap = g.perMeasure;
       },
     },
     {
       id: 'view.zoomIn',
-      title: 'Zoom in',
+      title: tEn('cmd.view.zoomIn'),
       group: 'View',
       keys: ['Mod+=', 'Mod++'],
       global: true,
@@ -217,7 +221,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.zoomOut',
-      title: 'Zoom out',
+      title: tEn('cmd.view.zoomOut'),
       group: 'View',
       keys: ['Mod+-'],
       global: true,
@@ -228,20 +232,21 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.speed',
-      title: 'Play speed…',
+      title: tEn('cmd.view.speed'),
       group: 'View',
       verb: 'speed',
       argHint: '250',
       run: (arg) => {
         const n = Math.round(Number(arg) / 25) * 25;
-        if (!(n >= SPEED_MIN && n <= SPEED_MAX)) throw new Error('speed is 50-999 %');
+        if (!(n >= SPEED_MIN && n <= SPEED_MAX))
+          throw new Error(t('app.speedArg', { verb: 'speed' }));
         v.speed = n;
         app.settings.set('speed', n);
       },
     },
     {
       id: 'view.side',
-      title: 'Swap P1 / P2 view',
+      title: tEn('cmd.view.side'),
       group: 'View',
       keys: ['F2'],
       run: () => {
@@ -251,7 +256,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.gameSkin',
-      title: 'Game skin on / off',
+      title: tEn('cmd.view.gameSkin'),
       group: 'View',
       enabled: () => !!app.settings.data.gameRoot,
       run: () => {
@@ -263,7 +268,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.left',
-      title: 'Show / hide sounds',
+      title: tEn('cmd.view.left'),
       group: 'View',
       keys: ['Mod+B'],
       global: true,
@@ -271,7 +276,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.workbench',
-      title: 'Keysound workbench',
+      title: tEn('cmd.view.workbench'),
       group: 'View',
       keys: ['Mod+Shift+B'],
       global: true,
@@ -283,7 +288,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.songManager',
-      title: 'Song manager (info, category, every chart)',
+      title: tEn('cmd.view.songManager'),
       group: 'View',
       keys: ['Mod+Shift+L'],
       global: true,
@@ -295,24 +300,24 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'sounds.import',
-      title: 'Import sounds…',
+      title: tEn('cmd.sounds.import'),
       group: 'Chart',
       enabled: () => !!app.project,
       run: () => app.sounds.importPicked(),
     },
     {
       id: 'sounds.reload',
-      title: 'Reload sound files (after editing them in another program)',
+      title: tEn('cmd.sounds.reload'),
       group: 'Chart',
       enabled: () => !!app.project,
       run: async () => {
         await app.audio.reload(app.project!);
-        toast('Sounds reloaded', 'ok');
+        toast(t('sounds.reloaded'), 'ok');
       },
     },
     {
       id: 'sounds.removeUnused',
-      title: 'Remove unused sounds from every chart',
+      title: tEn('cmd.sounds.removeUnused'),
       group: 'Chart',
       enabled: () => !!app.project,
       run: () => app.sounds.removeUnused(),
@@ -356,7 +361,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.inspector',
-      title: 'Inspector',
+      title: tEn('cmd.view.inspector'),
       group: 'View',
       keys: ['Mod+I'],
       global: true,
@@ -364,7 +369,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.chartInfo',
-      title: 'Chart info',
+      title: tEn('cmd.view.chartInfo'),
       group: 'View',
       keys: ['Mod+J'],
       global: true,
@@ -372,7 +377,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.timing',
-      title: 'Timing',
+      title: tEn('cmd.view.timing'),
       group: 'View',
       keys: ['Mod+T'],
       global: true,
@@ -380,20 +385,20 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.goto',
-      title: 'Go to measure…',
+      title: tEn('cmd.view.goto'),
       group: 'View',
       verb: 'goto',
       argHint: 'measure',
       enabled: hasDoc,
       run: (arg) => {
         const m = Number(arg);
-        if (!Number.isInteger(m) || m < 0) throw new Error('goto takes a measure number');
+        if (!Number.isInteger(m) || m < 0) throw new Error(t('app.gotoArg', { verb: 'goto' }));
         v.cursor = measureStart(m, app.doc!.resolution);
       },
     },
     {
       id: 'view.start',
-      title: 'Go to start',
+      title: tEn('cmd.view.start'),
       group: 'View',
       keys: ['Home'],
       enabled: hasDoc,
@@ -401,7 +406,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.end',
-      title: 'Go to last note',
+      title: tEn('cmd.view.end'),
       group: 'View',
       keys: ['End'],
       enabled: hasDoc,
@@ -409,7 +414,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.stepUp',
-      title: 'Cursor up one snap',
+      title: tEn('cmd.view.stepUp'),
       group: 'View',
       keys: ['ArrowUp'],
       enabled: hasDoc,
@@ -418,7 +423,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.stepDown',
-      title: 'Cursor down one snap',
+      title: tEn('cmd.view.stepDown'),
       group: 'View',
       keys: ['ArrowDown'],
       enabled: hasDoc,
@@ -430,7 +435,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.measureUp',
-      title: 'Cursor up one measure',
+      title: tEn('cmd.view.measureUp'),
       group: 'View',
       keys: ['PageUp'],
       enabled: hasDoc,
@@ -438,7 +443,7 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'view.measureDown',
-      title: 'Cursor down one measure',
+      title: tEn('cmd.view.measureDown'),
       group: 'View',
       keys: ['PageDown'],
       enabled: hasDoc,
@@ -447,7 +452,7 @@ export function registerBuiltins(app: App): void {
     // ---- Chart
     ...Array.from({ length: 9 }, (_, i) => ({
       id: `chart.select${i + 1}`,
-      title: `Switch to chart ${i + 1}`,
+      title: tEn('app.switchChart', { n: i + 1 }),
       group: 'Chart' as const,
       keys: [`Mod+${i + 1}`],
       global: true,

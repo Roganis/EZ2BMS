@@ -1,6 +1,7 @@
 <script lang="ts">
   // The end of a run, laid out like the cabinet's result screen: grade, score,
   // the five judgements, max combo, gauge. Enter retries, Esc closes.
+  import { t } from '../i18n/i18n.svelte';
   import type { Result } from '../play/controller.svelte';
 
   let { result, onretry, onclose }: { result: Result; onretry: () => void; onclose: () => void } =
@@ -32,13 +33,13 @@
   class="card"
   role="dialog"
   aria-modal="true"
-  aria-label="Result"
+  aria-label={t('result.label')}
   tabindex="-1"
   data-testid="result"
 >
   <header>
-    <span class="kind">{result.kind === 'auto' ? 'AUTO PLAY' : 'TEST PLAY'}</span>
-    <h2>{result.title || 'Untitled'}</h2>
+    <span class="kind">{t(result.kind === 'auto' ? 'play.kindAuto' : 'play.kindTest')}</span>
+    <h2>{result.title || t('result.untitled')}</h2>
     <p>{result.label}</p>
   </header>
   <div class="main">
@@ -46,28 +47,29 @@
     <div class="nums">
       <div class="score">{String(result.score).padStart(7, '0')}</div>
       <div class="rate">
-        {result.rate.toFixed(2)}% · {result.failed
-          ? 'FAILED'
-          : result.partial
-            ? 'STOPPED'
-            : 'CLEAR'}
+        {t('result.rate', {
+          rate: result.rate.toFixed(2),
+          state: result.failed ? 'failed' : result.partial ? 'stopped' : 'clear',
+        })}
       </div>
-      {#if result.partial}<div class="partial">graded on the {result.total} notes played</div>{/if}
+      {#if result.partial}<div class="partial">
+          {t('result.partial', { n: result.total })}
+        </div>{/if}
       <table>
         <tbody>
           {#each ROWS as [name, j, color] (name)}
             <tr><th style:color>{name}</th><td>{result.counts[j]}</td></tr>
           {/each}
-          <tr class="sep"><th>MAX COMBO</th><td>{result.maxCombo}</td></tr>
-          <tr><th>NOTES</th><td>{result.total}</td></tr>
-          <tr><th>GAUGE</th><td>{result.gauge.toFixed(1)}</td></tr>
+          <tr class="sep"><th>{t('result.maxCombo')}</th><td>{result.maxCombo}</td></tr>
+          <tr><th>{t('result.notes')}</th><td>{result.total}</td></tr>
+          <tr><th>{t('result.gauge')}</th><td>{result.gauge.toFixed(1)}</td></tr>
         </tbody>
       </table>
     </div>
   </div>
   <footer>
-    <button class="ez-btn" onclick={onretry}>Retry <kbd>Enter</kbd></button>
-    <button class="ez-btn" onclick={onclose}>Close <kbd>Esc</kbd></button>
+    <button class="ez-btn" onclick={onretry}>{t('result.retry')} <kbd>Enter</kbd></button>
+    <button class="ez-btn" onclick={onclose}>{t('result.close')} <kbd>Esc</kbd></button>
   </footer>
 </div>
 

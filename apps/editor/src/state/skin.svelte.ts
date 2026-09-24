@@ -4,6 +4,7 @@
 
 import type { ModeId, Side } from '@ez2bms/chart-core';
 import type { Backend } from '../bridge';
+import { t, type MessageKey } from '../i18n/i18n.svelte';
 import { loadGameSkin, SkinNotFound, type GameSkin } from '../skin/game';
 
 export type SkinStatus =
@@ -13,10 +14,22 @@ export type SkinStatus =
 
 type Loaded = { skin: GameSkin } | { error: unknown };
 
+/**
+ * A status that says a message: its words are looked up each time they are
+ * shown, so the first one (made before the language is applied) and those
+ * on screen follow a change of language.
+ */
+const saying = (kind: 'off' | 'loading', key: MessageKey): SkinStatus => ({
+  kind,
+  get text() {
+    return t(key);
+  },
+});
+
 export class SkinState {
   /** What the playfield draws with; null is the neon skin. */
   current = $state.raw<GameSkin | null>(null);
-  status = $state.raw<SkinStatus>({ kind: 'off', text: 'No game folder set' });
+  status = $state.raw<SkinStatus>(saying('off', 'skin.noRoot'));
   /** Bumped by reload(), so whoever shows the skin asks again. */
   rev = $state(0);
   // A plain cache: nothing renders from it, `current` and `status` are what change.
@@ -31,17 +44,14 @@ export class SkinState {
     if (!root || !enabled) {
       this.want = '';
       this.current = null;
-      this.status = {
-        kind: 'off',
-        text: root ? 'Off - drawing the neon skin' : 'No game folder set',
-      };
+      this.status = saying('off', root ? 'skin.off' : 'skin.noRoot');
       return;
     }
     const key = `${root}\n${mode}\n${side}`;
     this.want = key;
     let p = this.cache.get(key);
     if (!p) {
-      this.status = { kind: 'loading', text: 'Reading the panel…' };
+      this.status = saying('loading', 'skin.loading');
       p = loadGameSkin(this.backend, root, mode, side).then(
         (skin) => ({ skin }),
         (error: unknown) => ({ error }),

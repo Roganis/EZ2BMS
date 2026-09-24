@@ -30,6 +30,7 @@ import {
 } from '@ez2bms/chart-core';
 import { Application, Container, FillGradient, Graphics, Sprite } from 'pixi.js';
 import { channelHue } from '../colors';
+import { t } from '../i18n/i18n.svelte';
 import { beamColor, noteVariant, targetSway, type GameSkin, type SkinBlend } from '../skin/game';
 import { GameSkinTextures } from './gameskin';
 import {
@@ -118,8 +119,6 @@ const HOLD_LABEL: Record<number, string> = {
   1: '½',
   2: '⅛',
   3: '1/16',
-  4: 'end',
-  5: 'end',
   6: '6',
   7: '—',
   9: '9',
@@ -1470,7 +1469,12 @@ export class PlayfieldRenderer {
 
   /** A hold's kind and what a clean play is paid for it: `½ ×7`. */
   private holdLabel(s: FieldState, n: NoteRec): string {
-    const k = HOLD_LABEL[n.kind ?? 0] ?? String(n.kind);
+    // Kinds 4 and 5 pay once, after the end: a word, so the catalog's, read
+    // when drawn (the playfield redraws when the language changes).
+    const k =
+      n.kind === 4 || n.kind === 5
+        ? t('field.holdEnd')
+        : (HOLD_LABEL[n.kind ?? 0] ?? String(n.kind));
     const p = this.preview(s, n);
     return p?.pays ? `${k} ×${p.pays}` : k;
   }

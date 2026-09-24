@@ -19,11 +19,12 @@
 //   by classicKey, and a press with nothing to key is counted as silent.
 //   Other songs get a note with the brush sound.
 
+import { said, sayText } from '../i18n/say';
 import type { ChannelId, NoteId, NoteRec } from '../model/types';
 import { snapNearest } from '../timing/snap';
 import type { PlanTimeline } from '../timing/plan-timeline';
 import { classicKey, recordCandidates, type ClassicEnv } from './classic';
-import { BGM, placementConflict } from './commands';
+import { BGM, placementRule } from './commands';
 import type { ChartDoc } from './doc';
 
 /** One press: its lane and its song times (ms). `upMs` absent: still held when the take stopped. */
@@ -113,9 +114,9 @@ export function previewTake(
     (taken.get(x) ?? []).some(([a, b]) => y <= b && y + l >= a);
   return notes.map((n) => {
     let l = n.l;
-    if (overlaps(n.x, n.y, l) || placementConflict(doc, n.x, n.y, l)) {
+    if (overlaps(n.x, n.y, l) || placementRule(doc, n.x, n.y, l)) {
       l = 0;
-      if (overlaps(n.x, n.y, 0) || placementConflict(doc, n.x, n.y, 0)) return 'clash';
+      if (overlaps(n.x, n.y, 0) || placementRule(doc, n.x, n.y, 0)) return 'clash';
     }
     if ('classic' in target && !recordCandidates(doc, n.x, n.y, l, target.classic).length)
       return 'silent';
@@ -145,7 +146,7 @@ export function applyTake(
   doc: ChartDoc,
   notes: readonly TakeNote[],
   target: TakeTarget,
-  label = 'Record take',
+  label = sayText(said('undo.record-take')),
 ): TakeResult {
   const r: TakeResult = {
     placed: 0,
@@ -163,8 +164,8 @@ export function applyTake(
       for (const n of ordered) {
         if (n.x === BGM) continue;
         let l = n.l;
-        if (placementConflict(doc, n.x, n.y, l)) {
-          if (!l || placementConflict(doc, n.x, n.y, 0)) {
+        if (placementRule(doc, n.x, n.y, l)) {
+          if (!l || placementRule(doc, n.x, n.y, 0)) {
             r.clash++;
             continue;
           }
@@ -186,7 +187,7 @@ export function applyTake(
     for (const n of ordered) {
       if (n.x === BGM) continue;
       const tryKey = (l: number): 'ok' | 'clash' | 'silent' | 'refused' => {
-        if (placementConflict(doc, n.x, n.y, l)) return 'clash';
+        if (placementRule(doc, n.x, n.y, l)) return 'clash';
         const cands = recordCandidates(doc, n.x, n.y, l, env).slice(0, 3);
         if (!cands.length) return 'silent';
         for (const cand of cands) {

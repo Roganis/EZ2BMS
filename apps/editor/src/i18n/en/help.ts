@@ -10,7 +10,7 @@ export const help = {
   'about.log': 'Log',
   'about.crashed':
     'The last run ({version}, started {when}) closed without shutting down. Its last lines are in the log; the autosave kept unsaved charts.',
-  'about.errors': '{n, plural, one {# error} other {# errors}} this run, the last: {last}',
+  'about.errors': '{n, plural, one {{n} error} other {{n} errors}} this run, the last: {last}',
   'about.noKey': 'This build cannot update itself (it was built without the update key).',
   'about.checkNow': 'Check now',
   'about.logHint':

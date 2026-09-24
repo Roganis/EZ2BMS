@@ -4,8 +4,9 @@
   // chart and what becomes of its scores, the art as the very .abm bytes
   // will show it, the preview, the BGA, the keysounds - then written at once
   // (port/publish.ts), and what came of it.
-  import type { Thumb } from '../port/publish';
-  import { plural } from '../port/publish';
+  import type { PackageOwner } from '@ez2bms/chart-core';
+  import { t, tCore, tParts, type MessageKey } from '../i18n/i18n.svelte';
+  import type { ChartRow, Thumb } from '../port/publish';
   import { app } from '../state/app.svelte';
 
   const pub = app.publish;
@@ -20,24 +21,16 @@
   );
   const blocked = $derived(stage.kind === 'ready' ? pub.blocked(stage.review) : undefined);
 
-  const OWNER = {
-    new: { text: 'New', note: 'There is no package with this key yet.' },
-    ours: {
-      text: 'Update',
-      note: "This song's earlier publish is replaced (kept in .ez2bms-backup).",
-    },
-    legacy: {
-      text: 'Earlier EZ2BMS package',
-      note: 'A package from an earlier EZ2BMS, with no song id: it may be this song.',
-    },
-    foreign: {
-      text: "Another song's package",
-      note: 'Another tool or song made this folder. Replacing it keeps a copy in .ez2bms-backup.',
-    },
-  } as const;
-  const SCORES = { none: '—', kept: 'kept', reset: 'reset (changed)' } as const;
+  const OWNER: Record<PackageOwner, { text: MessageKey; note: MessageKey }> = {
+    new: { text: 'publish.owner.new', note: 'publish.note.new' },
+    ours: { text: 'publish.owner.ours', note: 'publish.note.ours' },
+    legacy: { text: 'publish.owner.legacy', note: 'publish.note.legacy' },
+    foreign: { text: 'publish.owner.foreign', note: 'publish.note.foreign' },
+  };
+  const scoresText = (s: ChartRow['scores']) =>
+    s === 'kept' ? t('publish.scores.kept') : s === 'reset' ? t('publish.scores.reset') : '—';
 
-  const mb = (b: number) => `${(b / 1024 / 1024).toFixed(1)} MB`;
+  const mb = (b: number) => (b / 1024 / 1024).toFixed(1);
   const clock = (ms: number) => {
     const s = ms / 1000;
     return `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
@@ -78,58 +71,71 @@
   role="presentation"
   onpointerdown={() => stage.kind !== 'writing' && pub.close()}
 ></div>
-<div class="dialog" role="dialog" aria-modal="true" aria-label="Publish" data-testid="publish">
+<div
+  class="dialog"
+  role="dialog"
+  aria-modal="true"
+  aria-label={t('publish.label')}
+  data-testid="publish"
+>
   <header>
-    <h2>Publish to EZ2PORT</h2>
+    <h2>{t('publish.heading')}</h2>
     {#if review}
       <code class="dest" title={review.root}>{review.root}/<b>{review.key}</b></code>
       <span class="badge {review.seen.shipped ? 'bad' : review.owner}" data-testid="publish-owner"
-        >{review.seen.shipped ? 'Shipped key' : OWNER[review.owner].text}</span
+        >{t(review.seen.shipped ? 'publish.owner.shipped' : OWNER[review.owner].text)}</span
       >
     {/if}
   </header>
 
   {#if stage.kind === 'no-root'}
-    <p>Choose the folder EZ2PORT keeps its songs in (its <code>ez2port/songs</code>).</p>
+    <p>
+      {#each tParts('publish.noRoot', { dir: 'ez2port/songs' }, ['dir']) as p, i (i)}
+        {#if 'slot' in p}<code>ez2port/songs</code>{:else}{p.text}{/if}
+      {/each}
+    </p>
     <div class="actions">
-      <button class="ez-btn" onclick={() => pub.close()}>Cancel</button>
-      <button class="ez-btn go" onclick={() => void pub.pickRoot()}>Choose the songs folder…</button
+      <button class="ez-btn" onclick={() => pub.close()}>{t('publish.cancel')}</button>
+      <button class="ez-btn go" onclick={() => void pub.pickRoot()}
+        >{t('publish.chooseRoot')}</button
       >
     </div>
   {:else if stage.kind === 'errors'}
     <div class="block" data-testid="publish-errors">
-      <b>{plural(stage.errors.length, 'problem')} to fix first</b>
+      <b>{t('publish.errors', { n: stage.errors.length })}</b>
       <ul>
-        {#each stage.errors as f, i (i)}<li>{f.message}</li>{/each}
+        {#each stage.errors as f, i (i)}<li>{tCore(f)}</li>{/each}
       </ul>
       <button
         class="ez-btn"
         onclick={() => {
           pub.close();
           app.view.right = 'issues';
-        }}>Show them in Issues</button
+        }}>{t('publish.showIssues')}</button
       >
     </div>
     <div class="actions">
-      <button class="ez-btn" onclick={() => pub.close()}>Close</button>
+      <button class="ez-btn" onclick={() => pub.close()}>{t('publish.close')}</button>
     </div>
   {:else if stage.kind === 'preparing'}
-    <p class="hint" data-testid="publish-preparing">
-      Rendering the title plate and art, compiling every chart, reading what is in the songs folder…
-    </p>
+    <p class="hint" data-testid="publish-preparing">{t('publish.preparing')}</p>
   {:else if review}
     {#if review.seen.shipped}
-      <p class="block">
-        "{review.key}" is the key of a song the game ships: EZ2PORT would play this package in its
-        place everywhere. Choose another key.
-      </p>
+      <p class="block">{t('publish.shipped', { key: review.key })}</p>
     {:else}
-      <p class="hint">{OWNER[review.owner].note}</p>
+      <p class="hint">{t(OWNER[review.owner].note)}</p>
       {#if review.owner === 'foreign'}
+        {@const parts = tParts(
+          'publish.confirmForeign',
+          { folder: review.seen.folder, key: review.key },
+          ['key'],
+        )}
         <label class="confirm">
-          <span
-            >{review.seen.folder} is another song's package. Type <b>{review.key}</b> to replace it:</span
-          >
+          <span>
+            {#each parts as p, i (i)}
+              {#if 'slot' in p}<b>{review.key}</b>{:else}{p.text}{/if}
+            {/each}
+          </span>
           <input data-testid="publish-confirm-key" bind:value={pub.confirmKey} spellcheck="false" />
         </label>
       {:else if review.owner === 'legacy'}
@@ -139,91 +145,110 @@
             data-testid="publish-confirm-legacy"
             bind:checked={pub.confirmLegacy}
           />
-          Replace it with this song
+          {t('publish.confirmLegacy')}
         </label>
       {/if}
     {/if}
 
     {#if review.warnings.length}
       <details class="warnings">
-        <summary>{plural(review.warnings.length, 'warning')}: it publishes, but look first</summary>
+        <summary>{t('publish.warnings', { n: review.warnings.length })}</summary>
         <ul>
-          {#each review.warnings as f, i (i)}<li>{f.message}</li>{/each}
+          {#each review.warnings as f, i (i)}<li>{tCore(f)}</li>{/each}
         </ul>
       </details>
     {/if}
 
     <div class="grid">
       <section>
-        <h3>Charts</h3>
+        <h3>{t('publish.charts')}</h3>
         <table data-testid="publish-charts">
-          <thead><tr><th>Chart</th><th>Level</th><th>File</th><th>Scores</th></tr></thead>
+          <thead>
+            <tr>
+              <th>{t('publish.col.chart')}</th>
+              <th>{t('publish.col.level')}</th>
+              <th>{t('publish.col.file')}</th>
+              <th>{t('publish.col.scores')}</th>
+            </tr>
+          </thead>
           <tbody>
             {#each review.charts as c (c.file)}
               <tr data-scores={c.scores}>
                 <td>{c.label}</td>
                 <td>{c.level}</td>
                 <td><code>{c.file}</code></td>
-                <td class={c.scores}>{SCORES[c.scores]}</td>
+                <td class={c.scores}>{scoresText(c.scores)}</td>
               </tr>
             {/each}
           </tbody>
         </table>
         <p class="n">
-          {plural(review.keysounds.count, 'keysound')}, about {mb(review.keysounds.bytes)} of 16-bit audio
+          {t('publish.keysounds', {
+            n: review.keysounds.count,
+            size: mb(review.keysounds.bytes),
+          })}
         </p>
       </section>
       <section class="assets">
-        <h3>On the wheel</h3>
+        <h3>{t('publish.wheel')}</h3>
         {#if review.art.plate}<canvas class="plate" use:thumb={review.art.plate}></canvas>{/if}
         <div class="pics">
           {#if review.art.disc}<canvas class="disc" use:thumb={review.art.disc}
-            ></canvas>{:else}<span class="none">no disc</span>{/if}
+            ></canvas>{:else}<span class="none">{t('publish.noDisc')}</span>{/if}
           {#if review.art.eyecatch}<canvas class="eye" use:thumb={review.art.eyecatch}
-            ></canvas>{:else}<span class="none">no eyecatch</span>{/if}
+            ></canvas>{:else}<span class="none">{t('publish.noEyecatch')}</span>{/if}
         </div>
         <p class="n">
           {#if review.preview}
-            Preview {clock(review.preview.fromMs)} + {(review.preview.lengthMs / 1000).toFixed(1)} s{review
-              .preview.file
-              ? ` of ${review.preview.file}`
-              : ''}
+            {@const from = clock(review.preview.fromMs)}
+            {@const length = (review.preview.lengthMs / 1000).toFixed(1)}
+            {review.preview.file
+              ? t('publish.previewOf', { from, length, file: review.preview.file })
+              : t('publish.preview', { from, length })}
             <button class="ez-btn small" data-testid="publish-preview" onclick={togglePreview}
-              >{previewing ? 'Stop' : 'Play'}</button
+              >{t(previewing ? 'publish.previewStop' : 'publish.previewPlay')}</button
             >
           {:else}
-            No preview: the wheel is silent for this song
+            {t('publish.noPreview')}
           {/if}
         </p>
         <p class="n">
-          {#if review.bga}BGA <code>{review.bga.src}</code> as <code>{review.bga.file}</code> from {clock(
-              review.bga.startMs,
-            )}{:else}No BGA{/if}
+          {#if review.bga}
+            {@const bga = review.bga}
+            {@const parts = tParts(
+              'publish.bga',
+              { src: bga.src, file: bga.file, from: clock(bga.startMs) },
+              ['src', 'file'],
+            )}
+            {#each parts as p, i (i)}
+              {#if 'slot' in p}<code>{p.slot === 'src' ? bga.src : bga.file}</code
+                >{:else}{p.text}{/if}
+            {/each}
+          {:else}{t('publish.noBga')}{/if}
         </p>
       </section>
     </div>
 
     {#if stage.kind === 'writing'}
       <div class="progress" data-testid="publish-writing"><span></span></div>
-      <p class="hint">
-        Cutting {plural(review.keysounds.count, 'keysound')} and writing the package…
-      </p>
+      <p class="hint">{t('publish.writing', { n: review.keysounds.count })}</p>
     {:else if stage.kind === 'done'}
       <p class="ok" data-testid="publish-done">{stage.text}</p>
       {#if stage.written.missing.length}
         <p class="warn">
-          {plural(stage.written.missing.length, 'keysound source')} could not be read: {stage.written.missing
-            .map((m) => m[0])
-            .join(', ')}
+          {t('publish.missing', {
+            n: stage.written.missing.length,
+            files: stage.written.missing.map((m) => m[0]).join(', '),
+          })}
         </p>
       {/if}
       {#if stage.written.retire}
         <p class="hint">
-          This song is still in the songs folder as "{stage.written.retire.key}" too.
+          {t('publish.retire', { key: stage.written.retire.key })}
           <button
             class="ez-btn small"
             data-testid="publish-retire"
-            onclick={() => void pub.retire()}>Remove that copy</button
+            onclick={() => void pub.retire()}>{t('publish.retireButton')}</button
           >
         </p>
       {/if}
@@ -234,11 +259,11 @@
     <div class="actions">
       {#if stage.kind === 'done'}
         <button class="ez-btn go" data-testid="publish-close" onclick={() => pub.close()}
-          >Done</button
+          >{t('publish.done')}</button
         >
       {:else}
         <button class="ez-btn" disabled={stage.kind === 'writing'} onclick={() => pub.close()}
-          >Cancel</button
+          >{t('publish.cancel')}</button
         >
         <button
           class="ez-btn go"
@@ -246,14 +271,14 @@
           disabled={stage.kind !== 'ready' || !!blocked}
           title={blocked ?? ''}
           onclick={() => void pub.write()}
-          >{review.owner === 'new' ? 'Publish' : 'Publish over it'}</button
+          >{t(review.owner === 'new' ? 'publish.go' : 'publish.goOver')}</button
         >
       {/if}
     </div>
   {:else if stage.kind === 'failed'}
     <p class="err">{stage.message}</p>
     <div class="actions">
-      <button class="ez-btn" onclick={() => pub.close()}>Close</button>
+      <button class="ez-btn" onclick={() => pub.close()}>{t('publish.close')}</button>
     </div>
   {/if}
 </div>

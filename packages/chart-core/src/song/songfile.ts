@@ -8,6 +8,7 @@
 // order, after them, and a value that is not what EZ2BMS expects (a category
 // of 0, say) is kept as it is and reported rather than silently changed.
 
+import { said, sayText, type Said } from '../i18n/say';
 import { readBgaSettings, type BgaSettings } from '../publish/bga';
 import { readPlateSettings, type PlateSettings } from '../publish/plate';
 import { readPreviewSettings, type PreviewSettings } from '../publish/preview';
@@ -47,7 +48,10 @@ export interface SourceNote {
   chart: string;
   rule: string;
   severity: 'error' | 'warning' | 'info';
+  /** In English, as it was said at import (an older EZ2BMS kept only this). */
   message: string;
+  /** Its catalog key and values, to say it in the language chosen (i18n/say.ts). */
+  said?: Said;
   /** Where to look, in pulses. */
   at?: number;
 }
@@ -117,24 +121,28 @@ export function newSongFile(key = ''): SongFile {
   return { key, extra: {} };
 }
 
-/** Read the song file. Never throws: a broken file gives an empty song and a warning. */
+/**
+ * Read the song file. Never throws: a broken file gives an empty song and a
+ * warning. Warnings are said in the language chosen, to show as the song opens.
+ */
 export function parseSongFile(text: string): { song: SongFile; warnings: string[] } {
   const warnings: string[] = [];
+  const warn = (s: Said) => warnings.push(sayText(s));
   let raw: unknown;
   try {
     raw = JSON.parse(text.replace(/^\uFEFF/, ''));
   } catch (e) {
-    warnings.push(`ez2bms.song.json is not valid JSON (${e instanceof Error ? e.message : e})`);
+    warn(said('song.file.json', { error: String(e instanceof Error ? e.message : e) }));
     return { song: newSongFile(), warnings };
   }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    warnings.push('ez2bms.song.json does not hold an object');
+    warn(said('song.file.not-object'));
     return { song: newSongFile(), warnings };
   }
   const o = raw as Record<string, unknown>;
   const song = newSongFile(typeof o.key === 'string' ? o.key : '');
   if (o.key !== undefined && typeof o.key !== 'string') {
-    warnings.push('key is not text; it was ignored');
+    warn(said('song.file.key'));
     song.extra.key = o.key;
   }
   if (typeof o.id === 'string') song.id = o.id;
@@ -146,7 +154,7 @@ export function parseSongFile(text: string): { song: SongFile; warnings: string[
     const preview = readPreviewSettings(o.preview);
     if (preview) song.preview = preview;
     else {
-      warnings.push('preview is not a preview setting EZ2BMS reads; it was kept as it is');
+      warn(said('song.file.preview'));
       song.extra.preview = o.preview;
     }
   }
@@ -154,7 +162,7 @@ export function parseSongFile(text: string): { song: SongFile; warnings: string[
     const bga = readBgaSettings(o.bga);
     if (bga !== undefined) song.bga = bga;
     else {
-      warnings.push('bga is not a BGA setting EZ2BMS reads; it was kept as it is');
+      warn(said('song.file.bga'));
       song.extra.bga = o.bga;
     }
   }
@@ -162,7 +170,7 @@ export function parseSongFile(text: string): { song: SongFile; warnings: string[
     const plate = readPlateSettings(o.plate);
     if (plate) song.plate = plate;
     else {
-      warnings.push('plate is not a plate setting EZ2BMS reads; it was kept as it is');
+      warn(said('song.file.plate'));
       song.extra.plate = o.plate;
     }
   }
@@ -173,7 +181,7 @@ export function parseSongFile(text: string): { song: SongFile; warnings: string[
     if (o[k] === undefined) continue;
     const art = read(o[k]);
     if (art === undefined) {
-      warnings.push(`${k} is not an image setting EZ2BMS reads; it was kept as it is`);
+      warn(said('song.file.art', { field: k }));
       song.extra[k] = o[k];
     } else if (k === 'disc') song.disc = art as DiscArt | null;
     else song.eyecatch = art as EyecatchArt | null;
@@ -182,7 +190,7 @@ export function parseSongFile(text: string): { song: SongFile; warnings: string[
     const source = readImportSource(o.source);
     if (source) song.source = source;
     else {
-      warnings.push('source is not an import record EZ2BMS reads; it was kept as it is');
+      warn(said('song.file.source'));
       song.extra.source = o.source;
     }
   }

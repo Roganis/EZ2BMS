@@ -23,9 +23,10 @@ import {
 } from '@ez2bms/chart-core';
 import { ThumbCache } from '../audio/thumbs';
 import { baseName, joinPath, type Imported } from '../bridge';
+import { t } from '../i18n/i18n.svelte';
 import type { App } from './app.svelte';
 import type { ChartSlot, Project } from './project.svelte';
-import { plural, songwideToast, stepOf, type SongwideStep } from './songwide';
+import { songwideToast, stepOf, type SongwideStep } from './songwide';
 import { toast, toasts } from './toasts.svelte';
 
 /** What the file chooser offers (the engine decodes these; see chart-core AUDIO_EXT). */
@@ -66,7 +67,10 @@ export class SoundsState {
     try {
       res = await this.app.backend.importFiles(p.dir, paths);
     } catch (e) {
-      toast(`Import failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
+      toast(
+        t('sounds.importFailed', { error: e instanceof Error ? e.message : String(e) }),
+        'error',
+      );
       return;
     }
     // Local bookkeeping in this function; nothing renders from these sets.
@@ -90,25 +94,29 @@ export class SoundsState {
         if (this.app.view.brush === null) this.app.view.brush = made[0]!.id;
       }
     }
+    // Each clause is its own message: any of them can be missing.
     const parts = [
-      copied ? `Imported ${plural(copied, 'sound')}` : names.length ? 'Already in the folder' : '',
-      added && slot ? `${plural(added, 'sound')} added to ${slot.label}` : '',
+      copied ? t('sounds.imported', { n: copied }) : names.length ? t('sounds.alreadyThere') : '',
+      added && slot ? t('sounds.addedTo', { n: added, chart: slot.label }) : '',
       skipped.length
-        ? `skipped ${skipped
-            .slice(0, 3)
-            .map((r) => baseName(r.from))
-            .join(', ')}${skipped.length > 3 ? '…' : ''} (${skipped[0]!.error})`
+        ? t('sounds.skipped', {
+            files: `${skipped
+              .slice(0, 3)
+              .map((r) => baseName(r.from))
+              .join(', ')}${skipped.length > 3 ? '…' : ''}`,
+            error: skipped[0]!.error,
+          })
         : '',
     ].filter(Boolean);
     toast(
-      parts.join(' - ') || 'Nothing to import',
+      parts.join(' - ') || t('sounds.nothing'),
       skipped.length && !names.length ? 'warn' : 'ok',
     );
   }
 
   /** Pick sound files to import. */
   async importPicked(): Promise<void> {
-    const paths = await this.app.backend.pickFiles('Import sounds into the song', IMPORT_EXT);
+    const paths = await this.app.backend.pickFiles(t('sounds.pickTitle'), IMPORT_EXT);
     await this.import(paths);
   }
 
@@ -132,9 +140,9 @@ export class SoundsState {
     if (!done.length) return;
     void this.app.audio.load(p, [to]);
     songwideToast(
-      `Replaced ${info.name} with ${to} in ${plural(done.length, 'chart')}`,
+      t('sounds.replaced', { from: info.name, to, n: done.length }),
       done,
-      'Replace',
+      t('sounds.replaceStep'),
     );
   }
 
@@ -153,14 +161,10 @@ export class SoundsState {
         this.app.view.brush = slot.doc.data.channels[0]?.id ?? null;
     }
     if (!n) {
-      toast('Every sound is used in its charts', 'info');
+      toast(t('sounds.allUsed'), 'info');
       return;
     }
-    songwideToast(
-      `Removed ${plural(n, 'unused sound')} from ${plural(done.length, 'chart')}`,
-      done,
-      'Remove',
-    );
+    songwideToast(t('sounds.removed', { n, charts: done.length }), done, t('sounds.removeStep'));
   }
 
   /**
@@ -178,14 +182,17 @@ export class SoundsState {
       newBase,
     );
     if (!plan.ok) {
-      toast(`Can't rename ${baseName(from)}: ${plan.reason}`, 'warn');
+      toast(t('sounds.cantRename', { file: baseName(from), reason: plan.reason }), 'warn');
       return false;
     }
     try {
       await this.app.backend.renameFile(joinPath(p.dir, from), joinPath(p.dir, plan.to));
     } catch (e) {
       toast(
-        `Can't rename ${baseName(from)}: ${e instanceof Error ? e.message : String(e)}`,
+        t('sounds.cantRename', {
+          file: baseName(from),
+          reason: e instanceof Error ? e.message : String(e),
+        }),
         'error',
       );
       return false;
@@ -213,13 +220,17 @@ export class SoundsState {
     await p.rescan();
     const charts = plan.renames.size;
     const unsaved = charts - saved.length;
-    const adopted = plan.adopts.length
-      ? ` - ${plan.adopts.join(', ')} ${plan.adopts.length === 1 ? 'was' : 'were'} missing and now play${plan.adopts.length === 1 ? 's' : ''} it`
-      : '';
-    const text = `Renamed ${baseName(from)} to ${baseName(plan.to)}${charts ? ` in ${plural(charts, 'chart')}` : ''}${unsaved ? ` (${unsaved} unsaved)` : ''}${adopted}`;
+    const text = [
+      t('sounds.renamed', { from: baseName(from), to: baseName(plan.to), charts, unsaved }),
+      plan.adopts.length
+        ? t('sounds.adopted', { names: plan.adopts.join(', '), n: plan.adopts.length })
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' - ');
     if (undo)
       toasts.push(text, 'ok', 15000, {
-        label: 'Undo',
+        label: t('sounds.undo'),
         run: () => void this.rename(plan.to, baseName(from), false),
       });
     else toast(text, 'ok');

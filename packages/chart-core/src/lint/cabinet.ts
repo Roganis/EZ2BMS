@@ -20,7 +20,8 @@ import type { ChartPlan, SampleLookup } from '../publish/chart-plan';
 import type { CabinetOutput, CabinetPlan, SoundNaming } from '../publish/cabinet';
 import { OUT_RATE, type KeysoundRegistry } from '../publish/keysounds';
 import { modeNames } from '../modes/ids';
-import type { Finding } from './lint';
+import { said, saying, type Said } from '../i18n/say';
+import type { Finding, Severity } from './lint';
 import { positionOf } from '../timing/measures';
 import { TickConverter } from '../timing/ticks';
 
@@ -104,16 +105,15 @@ export interface CabinetLintOptions {
 
 export function lintCabinet(plan: CabinetPlan, o: CabinetLintOptions = {}): Finding[] {
   const found: Finding[] = [];
-  const f = (x: Finding) => found.push(x);
-  const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  const f = (rule: string, severity: Severity, s: Said, extra: Partial<Finding> = {}) =>
+    found.push({ rule, severity, ...saying(s), ...extra });
 
-  for (const r of plan.refused)
-    f({ rule: 'cabinet-table', severity: 'error', message: r.reason, chart: r.chart.file });
+  for (const r of plan.refused) f('cabinet-table', 'error', r.said, { chart: r.chart.file });
 
   for (const cp of plan.charts) {
     const chart = cp.chart.file;
     const names = modeNames(cp.chart.mode);
-    const tierName = `${names.label} ${cp.chart.tier}`;
+    const tier = { mode: names.label, tier: cp.chart.tier };
     const noteY = new Map(cp.chart.data.notes.map((n) => [n.id, n.y]));
 
     // What the original cannot load.
@@ -121,28 +121,25 @@ export function lintCabinet(plan: CabinetPlan, o: CabinetLintOptions = {}): Find
       if (file.kind === 'songdb' || ![cp.paths.ez, cp.paths.ezi, cp.paths.ini].includes(file.path))
         continue;
       if (file.bytes.length > CABINET_FILE_MAX)
-        f({
-          rule: 'cabinet-size',
-          severity: 'error',
-          chart,
-          message: `${file.path.slice(file.path.lastIndexOf('/') + 1)} is ${file.bytes.length} bytes: the original game reads a file into ${CABINET_FILE_MAX} and cannot load it (${Math.round(file.bytes.length / 1024)} KB of 128 KB)`,
-        });
+        f(
+          'cabinet-size',
+          'error',
+          said('cabinet.size', {
+            file: file.path.slice(file.path.lastIndexOf('/') + 1),
+            bytes: file.bytes.length,
+            max: CABINET_FILE_MAX,
+            kb: Math.round(file.bytes.length / 1024),
+          }),
+          { chart },
+        );
     }
     const slots = cp.plan.keysoundSlots.length;
     if (slots > CABINET_SLOTS)
-      f({
-        rule: 'cabinet-slots',
-        severity: 'error',
+      f('cabinet-slots', 'error', said('cabinet.slots', { n: slots, max: CABINET_SLOTS }), {
         chart,
-        message: `${slots} keysounds (slices each count): the original game loads at most ${CABINET_SLOTS}`,
       });
     if (!Number.isInteger(cp.level) || cp.level < CABINET_LEVEL.min || cp.level > CABINET_LEVEL.max)
-      f({
-        rule: 'cabinet-level',
-        severity: 'error',
-        chart,
-        message: `level ${cp.level}: the game's table takes 1-20`,
-      });
+      f('cabinet-level', 'error', said('cabinet.level', { level: cp.level }), { chart });
 
     // What the original plays differently.
     if (o.samples) {
@@ -156,69 +153,51 @@ export function lintCabinet(plan: CabinetPlan, o: CabinetLintOptions = {}): Find
         const y = noteY.get(c.noteId);
         return y === undefined ? {} : { at: y };
       };
-      const first = (c: TrackCut) => {
-        const y = noteY.get(c.noteId);
-        return y === undefined
-          ? ''
-          : `, first in measure ${positionOf(y, cp.chart.data.info.resolution || 240).measure}`;
+      // What is said of a list of cuts: how many, and the measure of the
+      // first when its note is still in the chart (the key's `.measure` form).
+      const cutSaid = (
+        key: 'cabinet.voice-cut' | 'cabinet.voice-game' | 'cabinet.voice-lane',
+        list: TrackCut[],
+        more: Record<string, number> = {},
+      ): Said => {
+        const y = noteY.get(list[0]!.noteId);
+        const params = { n: list.length, ...more };
+        if (y === undefined) return said(key, params);
+        const measure = positionOf(y, cp.chart.data.info.resolution || 240).measure;
+        return said(`${key}.measure`, { ...params, measure });
       };
-      const tail = unknown ? ` (${plural(unknown, 'sound')} of unknown length not checked)` : '';
       if (ours.length)
-        f({
-          rule: 'cabinet-voice-backing',
-          severity: 'warning',
+        f('cabinet-voice-backing', 'warning', cutSaid('cabinet.voice-cut', ours, { unknown }), {
           chart,
           ...where(ours[0]!),
           notes: ours.map((c) => c.noteId),
-          message: `${plural(ours.length, 'background sound')} cut short on the cabinet by the next sound on ${ours.length === 1 ? 'its' : 'their'} track (the original plays one sound per track; EZ2PORT plays both)${first(ours[0]!)}${tail}`,
         });
       if (theirs.length)
-        f({
-          rule: 'cabinet-voice-backing',
-          severity: 'info',
+        f('cabinet-voice-backing', 'info', cutSaid('cabinet.voice-game', theirs), {
           chart,
           ...where(theirs[0]!),
           notes: theirs.map((c) => c.noteId),
-          message: `${plural(theirs.length, 'background sound')} cut by the next on the track, as the game's own chart has ${theirs.length === 1 ? 'it' : 'them'}${first(theirs[0]!)}`,
         });
       if (lane.length)
-        f({
-          rule: 'cabinet-voice-lane',
-          severity: 'info',
+        f('cabinet-voice-lane', 'info', cutSaid('cabinet.voice-lane', lane), {
           chart,
           ...where(lane[0]!),
           notes: lane.map((c) => c.noteId),
-          message: `${plural(lane.length, 'keyed sound')} cut by the lane's next note - on the cabinet in autoplay too, not only when played${first(lane[0]!)}`,
         });
     }
     const cab = cp.plan.cabinet;
     if (cab?.repinned)
-      f({
-        rule: 'cabinet-tracks',
-        severity: 'info',
-        chart,
-        message: `${plural(cab.repinned, 'background note')} could not stay on the game's track (a lane in ${names.label}) and ${cab.repinned === 1 ? 'was' : 'were'} placed on another`,
-      });
-    if (cab?.grown)
-      f({
-        rule: 'cabinet-tracks',
-        severity: 'info',
-        chart,
-        message: `${plural(cab.grown, 'track')} added to the chart so no background sound is cut`,
-      });
-    if (cab?.kept)
-      f({
-        rule: 'cabinet-kept',
-        severity: 'info',
-        chart,
-        message: `${plural(cab.kept, 'record')} bmson has no place for (scroll, volume, beats...) written back where the game had ${cab.kept === 1 ? 'it' : 'them'}`,
-      });
+      f(
+        'cabinet-tracks',
+        'info',
+        said('cabinet.repinned', { n: cab.repinned, mode: names.label }),
+        { chart },
+      );
+    if (cab?.grown) f('cabinet-tracks', 'info', said('cabinet.grown', { n: cab.grown }), { chart });
+    if (cab?.kept) f('cabinet-kept', 'info', said('cabinet.kept', { n: cab.kept }), { chart });
     if (cab?.nameUnmappable.length)
-      f({
-        rule: 'cabinet-name',
-        severity: 'info',
+      f('cabinet-name', 'info', said('cabinet.name', { chars: cab.nameUnmappable.join(' ') }), {
         chart,
-        message: `The chart's header name has characters Korean Windows (CP949) cannot write: ${cab.nameUnmappable.join(' ')} (written as ?)`,
       });
     // A change of resolution moves the kept records with the notes
     // (timing/rescale.ts); one set by hand does not, and leaves them between
@@ -235,36 +214,28 @@ export function lintCabinet(plan: CabinetPlan, o: CabinetLintOptions = {}): Find
           tc.tick((r as { y: number }).y).err > 1e-9,
       ).length;
       if (off)
-        f({
-          rule: 'cabinet-records-res',
-          severity: 'warning',
-          chart,
-          message: `${off} of the game chart's own records (volume, marks...) fall between EZ2 ticks - was the resolution changed by hand? Each is written at the nearest tick`,
-        });
+        f('cabinet-records-res', 'warning', said('cabinet.records-res', { n: off }), { chart });
     }
 
     // What changes in the game.
     if (cp.before.level === 0)
-      f({
-        rule: 'cabinet-tier-new',
-        severity: 'info',
+      f('cabinet-tier-new', 'info', said('cabinet.tier-new', { ...tier, level: cp.level }), {
         chart,
-        message: `${tierName} is new to this song: the game will list it at level ${cp.level}`,
       });
     if (cp.twoP)
-      f({
-        rule: 'cabinet-2p',
-        severity: 'warning',
-        chart,
-        message: `The game also has a two-player file for ${tierName} (${cp.twoP.slice(cp.twoP.lastIndexOf('/') + 1)}), which stays as it is`,
-      });
+      f(
+        'cabinet-2p',
+        'warning',
+        said('cabinet.2p', { ...tier, file: cp.twoP.slice(cp.twoP.lastIndexOf('/') + 1) }),
+        { chart },
+      );
     if (cp.gdsMissing)
-      f({
-        rule: 'cabinet-gds',
-        severity: 'warning',
-        chart,
-        message: `The game folder has no ${names.portName}.gds: lanes are placed on EZ2BMS's own tracks for ${names.label}`,
-      });
+      f(
+        'cabinet-gds',
+        'warning',
+        said('cabinet.gds', { file: `${names.portName}.gds`, mode: names.label }),
+        { chart },
+      );
   }
 
   // The song: whether each mode still lists it, and its keysounds.
@@ -272,31 +243,29 @@ export function lintCabinet(plan: CabinetPlan, o: CabinetLintOptions = {}): Find
     const entry = plan.target.entries[mode]!;
     const nm = edits.find((e) => e.tier === 0)?.level ?? entry.steps[0].level;
     if (nm <= 0)
-      f({
-        rule: 'cabinet-song-hidden',
-        severity: 'warning',
-        message: `${modeNames(mode).label}: the game lists a song only when its NM has a level, and ${plan.target.dir} has none there`,
-      });
+      f(
+        'cabinet-song-hidden',
+        'warning',
+        said('cabinet.song-hidden', { mode: modeNames(mode).label, song: plan.target.dir }),
+      );
   }
   if (o.names) {
     const missing = [...o.names.entries()].filter(([, n]) => n.missing);
-    if (missing.length)
-      f({
-        rule: 'cabinet-missing-sound',
-        severity: 'warning',
-        message: `${plural(missing.length, 'keysound')} ${missing.length === 1 ? 'has' : 'have'} no file (${missing
-          .slice(0, 5)
-          .map(([i]) => plan.registry.defs[i]!.src)
-          .join(
-            ', ',
-          )}${missing.length > 5 ? '...' : ''}): listed, and silent, as the game's own missing sounds are`,
-      });
+    if (missing.length) {
+      const names = missing
+        .slice(0, 5)
+        .map(([i]) => plan.registry.defs[i]!.src)
+        .join(', ');
+      f(
+        'cabinet-missing-sound',
+        'warning',
+        said('cabinet.missing-sound', {
+          n: missing.length,
+          names: `${names}${missing.length > 5 ? '...' : ''}`,
+        }),
+      );
+    }
   }
-  if (o.converted)
-    f({
-      rule: 'cabinet-convert',
-      severity: 'info',
-      message: `${plural(o.converted, 'keysound')} converted to 16-bit 44.1 kHz stereo (the rest go as they are)`,
-    });
+  if (o.converted) f('cabinet-convert', 'info', said('cabinet.convert', { n: o.converted }));
   return found;
 }

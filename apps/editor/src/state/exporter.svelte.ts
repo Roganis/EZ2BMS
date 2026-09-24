@@ -12,6 +12,7 @@ import {
   type Game,
 } from '@ez2bms/chart-core';
 import { dirName, joinPath, type ExportBackup, type ExportReport } from '../bridge';
+import { t } from '../i18n/i18n.svelte';
 import { prepareBms, writeBmsFolder, type BmsChoices, type BmsReview } from '../port/bms';
 import { prepareCabinet, writeCabinet, type CabinetReview } from '../port/cabinet';
 import type { App } from './app.svelte';
@@ -127,9 +128,7 @@ export class Exporter {
       this.gameRoot = root;
       this.stale = false;
       const targets = cabinetTargets(game);
-      if (!targets.length)
-        this.gameError =
-          game.problems[0] ?? 'No songs found: is this the folder with sound/ and system/ in it?';
+      if (!targets.length) this.gameError = game.problems[0] ?? t('import.game.noSongs');
       const keep = this.target && targets.find((t) => ciEq(t.dir, this.target!.dir));
       this.target = keep ?? this.defaultTarget(game);
     } catch (e) {
@@ -204,7 +203,7 @@ export class Exporter {
     const slots = p.charts.filter((c) => !this.skip[c.file]);
     const n = ++this.seq;
     if (!slots.length) {
-      this.cabinet = { kind: 'failed', message: 'Choose a chart to export' };
+      this.cabinet = { kind: 'failed', message: t('export.noChart') };
       return;
     }
     this.cabinet = { kind: 'preparing' };
@@ -223,10 +222,9 @@ export class Exporter {
   /** Why Export is not available now, or undefined. */
   blocked(r: CabinetReview): string | undefined {
     const errors = r.findings.filter((f) => f.severity === 'error');
-    if (errors.length)
-      return `${errors.length} error${errors.length === 1 ? '' : 's'} to fix first`;
-    if (!r.plan.charts.length) return 'No chart can go into this song';
-    if (r.dest.kind === 'folder' && !this.folder.trim()) return 'Choose the new folder';
+    if (errors.length) return t('export.blocked.errors', { n: errors.length });
+    if (!r.plan.charts.length) return t('export.blocked.noChart');
+    if (r.dest.kind === 'folder' && !this.folder.trim()) return t('export.blocked.noFolder');
     return undefined;
   }
 
@@ -246,7 +244,7 @@ export class Exporter {
     } catch (e) {
       this.cabinet = {
         kind: 'failed',
-        message: `Export failed: ${e instanceof Error ? e.message : String(e)}`,
+        message: t('export.failed', { error: e instanceof Error ? e.message : String(e) }),
       };
     } finally {
       this.progress = null;
@@ -260,7 +258,7 @@ export class Exporter {
     this.backupsError = null;
     if (!root) {
       this.backups = [];
-      this.backupsError = 'Set your EZ2AC data folder on the EZ2PORT panel first';
+      this.backupsError = t('import.game.noRoot');
       return;
     }
     try {
@@ -280,20 +278,24 @@ export class Exporter {
       this.stale = true;
       const done = r.restored.length + r.removed.length;
       if (r.conflicts.length) {
-        ask(
-          `${r.conflicts.length} file${r.conflicts.length === 1 ? ' has' : 's have'} changed since the export (${r.conflicts.slice(0, 3).join(', ')}${r.conflicts.length > 3 ? '...' : ''}): restoring would lose that.`,
-          { label: 'Restore anyway', run: () => void this.restore(stamp, true) },
-        );
+        const files = r.conflicts.slice(0, 3).join(', ') + (r.conflicts.length > 3 ? '...' : '');
+        ask(t('export.restore.conflicts', { n: r.conflicts.length, files }), {
+          label: t('export.restore.anyway'),
+          run: () => void this.restore(stamp, true),
+        });
       } else
         toast(
           done
-            ? `Restored: ${r.restored.length} put back, ${r.removed.length} removed`
-            : 'Nothing to restore: the game already has its own files',
+            ? t('export.restore.done', { restored: r.restored.length, removed: r.removed.length })
+            : t('export.restore.nothing'),
           'ok',
         );
       await this.loadBackups();
     } catch (e) {
-      toast(`Restore failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
+      toast(
+        t('export.restore.failed', { error: e instanceof Error ? e.message : String(e) }),
+        'error',
+      );
     }
   }
 
@@ -304,7 +306,7 @@ export class Exporter {
     const p = this.app.project;
     if (!p || !this.open || this.tab !== 'bms') return {};
     const slots = p.charts.filter((c) => !this.bmsSkip[c.file]);
-    if (!slots.length) return { error: 'Choose a chart to export' };
+    if (!slots.length) return { error: t('export.noChart') };
     // Every chart's edits are read (rev), so the review follows them.
     for (const s of slots) void s.rev;
     try {
@@ -326,7 +328,7 @@ export class Exporter {
     } catch (e) {
       this.bmsStage = {
         kind: 'failed',
-        message: `Export failed: ${e instanceof Error ? e.message : String(e)}`,
+        message: t('export.failed', { error: e instanceof Error ? e.message : String(e) }),
       };
     } finally {
       this.progress = null;

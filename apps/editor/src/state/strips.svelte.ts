@@ -35,6 +35,7 @@ import {
 } from '@ez2bms/chart-core';
 import { AnalysisCache } from '../audio/analysis';
 import { PeakTiles } from '../audio/peaktiles';
+import { t, type MessageKey } from '../i18n/i18n.svelte';
 import type { StripSpec } from '../render/striprows';
 import type { App } from './app.svelte';
 import { toast } from './toasts.svelte';
@@ -140,29 +141,30 @@ export class StripsState {
     return this.focus && list.includes(this.focus) ? this.focus : list[0];
   }
 
-  private refused(what: string, r: { ok: boolean; reason?: string }): boolean {
-    if (!r.ok) toast(`Can't ${what}: ${r.reason}`, 'warn');
+  /** Say why chart-core refused, in `msg` (which takes the `{reason}`). */
+  private refused(msg: MessageKey, r: { ok: boolean; reason?: string }): boolean {
+    if (!r.ok) toast(t(msg, { reason: r.reason }), 'warn');
     return r.ok;
   }
 
   /** Cut `src` at y. */
   split(doc: ChartDoc, src: string, y: number): boolean {
-    return this.refused('cut there', sliceSplit(doc, src, y, this.env()));
+    return this.refused('slice.cantCut', sliceSplit(doc, src, y, this.env()));
   }
 
   /** Join a cut's slice to the one before. */
   heal(doc: ChartDoc, id: NoteId): boolean {
-    return this.refused('heal that cut', sliceHeal(doc, id, this.env()));
+    return this.refused('slice.cantHeal', sliceHeal(doc, id, this.env()));
   }
 
   move(doc: ChartDoc, id: NoteId, y: number): boolean {
-    return this.refused('move that cut', sliceMove(doc, id, y, this.env()));
+    return this.refused('slice.cantMove', sliceMove(doc, id, y, this.env()));
   }
 
   /** Slices onto lane x at their own spots (BGM: back to the background). */
   key(doc: ChartDoc, ids: NoteId[], x: number): boolean {
     const r = sliceKey(doc, ids, x, this.env());
-    return this.refused(x === BGM ? 'send that to the background' : 'key that there', r);
+    return this.refused(x === BGM ? 'slice.cantToBackground' : 'slice.cantKey', r);
   }
 
   /**
@@ -175,10 +177,10 @@ export class StripsState {
     const env = { ...this.env(), brush: this.app.view.brush };
     const cand = splitCandidates(doc, y, env).find((c) => !c.bad);
     if (!cand) {
-      toast('Nothing sounds there to cut', 'warn');
+      toast(t('slice.nothingToCut'), 'warn');
       return false;
     }
-    return this.refused('cut there', classicSplit(doc, y, cand, env));
+    return this.refused('slice.cantCut', classicSplit(doc, y, cand, env));
   }
 
   /**
@@ -261,12 +263,12 @@ export class StripsState {
   chop(doc: ChartDoc, src: string, step: number): boolean {
     const cuts = this.chopPlan(doc, src, step);
     if (!cuts.length) {
-      toast('Nothing to chop there: it is cut on that grid already', 'info');
+      toast(t('chop.nothing'), 'info');
       return false;
     }
-    const r = applyCuts(doc, cuts, this.env(), 'Chop to grid');
-    if (r.ok) toast(`${r.ids!.length} cuts`, 'ok');
-    return this.refused('chop there', r);
+    const r = applyCuts(doc, cuts, this.env(), t('undo.chop'));
+    if (r.ok) toast(t('chop.done', { n: r.ids!.length }), 'ok');
+    return this.refused('slice.cantChop', r);
   }
 
   /** Where the file's onsets would cut it (on the grid `step`, or exact). */
@@ -287,17 +289,17 @@ export class StripsState {
   cutAtOnsets(doc: ChartDoc, src: string, step: number): boolean {
     const s = this.suggestions(doc, src, step);
     if (!s.length) {
-      toast('No onsets to cut at: lower the sensitivity, or it is cut there already', 'info');
+      toast(t('strip.noOnsets'), 'info');
       return false;
     }
     const r = applyCuts(
       doc,
       s.map((x) => x.cut),
       this.env(),
-      'Cut at onsets',
+      t('undo.cutOnsets'),
     );
-    if (r.ok) toast(`${r.ids!.length} cuts at onsets`, 'ok');
-    return this.refused('cut at the onsets', r);
+    if (r.ok) toast(t('strip.onsetsDone', { n: r.ids!.length }), 'ok');
+    return this.refused('slice.cantOnsets', r);
   }
 
   /** Keysounds the chart makes now (each slice of a file is one). */
@@ -346,7 +348,7 @@ export class StripsState {
       const ready = loaded && loaded.id !== null ? loaded : undefined;
       const a = ready ? this.analyses.get(ready) : undefined;
       const tempo = a?.tempo[0];
-      const secs = ready ? `${ready.seconds.toFixed(1)} s` : 'not loaded';
+      const secs = ready ? `${ready.seconds.toFixed(1)} s` : t('strip.notLoaded');
       return {
         src,
         label: [src.replace(/\.[^.]+$/, ''), secs, tempo ? `${tempo.bpm.toFixed(1)} BPM` : '']

@@ -9,6 +9,7 @@
 // Paths are kept as the file spells them (backslashes, `.bmp` for what ships
 // as `.abm`, relative to the panel directory unless they start `system\`).
 
+import { said, sayText } from '../i18n/say';
 import { atoi, ciEq, ctrim } from './initext';
 
 export interface PviColor {
@@ -371,6 +372,7 @@ function fontKv(f: PviFont, k: string, v: string): void {
   else if (ciEq(k, 'AlphaFunc')) [f.src, f.dst] = pair(v);
 }
 
+/** Why a .pvi cannot be read, in the language chosen. */
 export class PviError extends Error {}
 
 /** Parse a .pvi's text. Throws PviError when there is no [General] section (not a .pvi). */
@@ -461,7 +463,7 @@ export function parsePvi(text: string): Pvi {
     }
     apply(o, sec, idx, block ? `${block}.${key}` : key, val);
   }
-  if (!seenGeneral) throw new PviError('not a .pvi (no [General] section)');
+  if (!seenGeneral) throw new PviError(sayText(said('data.pvi.no-general')));
   return o;
 }
 

@@ -1,6 +1,7 @@
 // Publish and Test in EZ2PORT.
 
 import { chartBaseName, modeNames } from '@ez2bms/chart-core';
+import { t, tEn } from '../i18n/i18n.svelte';
 import { buildPackage } from '../port/package';
 import { songFindings } from '../port/lint';
 import type { App } from '../state/app.svelte';
@@ -17,13 +18,11 @@ export function registerPortCommands(app: App): void {
     const errors = songFindings(app).filter((f) => f.severity === 'error' && f.chart === slot.file);
     if (errors.length) {
       app.view.right = 'issues';
-      throw new Error(
-        `${errors.length} problem${errors.length === 1 ? '' : 's'} in ${slot.label} to fix first (see Issues)`,
-      );
+      throw new Error(t('run.errors', { n: errors.length, chart: slot.label }));
     }
     if (!s.data.ez2play || !s.data.gameRoot) {
       app.view.right = 'port';
-      throw new Error('Set your game folder (and ez2play) in the EZ2PORT tab first');
+      throw new Error(t('run.noGame'));
     }
     if (port.runId !== null) await app.backend.port.stop(port.runId).catch(() => {});
     if (app.play.active) await app.play.stop(false);
@@ -34,13 +33,13 @@ export function registerPortCommands(app: App): void {
     const fromCursor = !!port.probe?.start_at && app.view.cursor > 0;
     port.log = [];
     port.logOpen = true;
+    const testing = { chart: slot.label, auto, speed: app.view.speed };
     port.say(
-      `Testing ${slot.label} in EZ2PORT${auto ? ' (autoplay)' : ''} at ${app.view.speed}%` +
-        (fromCursor
-          ? ' from the cursor'
-          : app.view.cursor > 0
-            ? ' from the start - this ez2play has no --start yet'
-            : ''),
+      fromCursor
+        ? t('run.testingFromCursor', testing)
+        : app.view.cursor > 0
+          ? t('run.testingFromStart', testing)
+          : t('run.testing', testing),
     );
     port.runId = await app.backend.port.test(
       {
@@ -68,7 +67,7 @@ export function registerPortCommands(app: App): void {
   app.commands.register(
     {
       id: 'port.publish',
-      title: 'Publish to EZ2PORT',
+      title: tEn('cmd.port.publish'),
       group: 'EZ2PORT',
       keys: ['Mod+Shift+P'],
       global: true,
@@ -78,7 +77,7 @@ export function registerPortCommands(app: App): void {
     },
     {
       id: 'port.test',
-      title: 'Test in EZ2PORT',
+      title: tEn('cmd.port.test'),
       group: 'EZ2PORT',
       keys: ['F5'],
       global: true,
@@ -87,7 +86,7 @@ export function registerPortCommands(app: App): void {
     },
     {
       id: 'port.testAuto',
-      title: 'Watch in EZ2PORT (autoplay)',
+      title: tEn('cmd.port.testAuto'),
       group: 'EZ2PORT',
       keys: ['Shift+F5'],
       global: true,
@@ -96,20 +95,20 @@ export function registerPortCommands(app: App): void {
     },
     {
       id: 'port.stop',
-      title: 'Stop the EZ2PORT test',
+      title: tEn('cmd.port.stop'),
       group: 'EZ2PORT',
       enabled: () => port.runId !== null,
       run: () => app.backend.port.stop(port.runId!),
     },
     {
       id: 'view.port',
-      title: 'EZ2PORT settings',
+      title: tEn('cmd.view.port'),
       group: 'View',
       run: () => (app.view.right = app.view.right === 'port' ? null : 'port'),
     },
     {
       id: 'view.issues',
-      title: 'Issues (pre-flight check)',
+      title: tEn('cmd.view.issues'),
       group: 'View',
       keys: ['Mod+Shift+I'],
       global: true,
@@ -117,7 +116,7 @@ export function registerPortCommands(app: App): void {
     },
     {
       id: 'view.log',
-      title: 'EZ2PORT log',
+      title: tEn('cmd.view.log'),
       group: 'View',
       run: () => (port.logOpen = !port.logOpen),
     },

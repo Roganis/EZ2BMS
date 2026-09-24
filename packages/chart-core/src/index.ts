@@ -99,3 +99,4 @@ export * from './timing/scroll';
 export * from './io/ez/kept';
 export * from './i18n/translate';
 export * from './i18n/core';
+export * from './i18n/say';

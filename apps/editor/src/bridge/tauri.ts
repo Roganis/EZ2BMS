@@ -1,9 +1,17 @@
 // The desktop Backend: Tauri commands (src-tauri/src/lib.rs).
 
-import { Channel, convertFileSrc, invoke } from '@tauri-apps/api/core';
+import {
+  Channel,
+  convertFileSrc,
+  invoke as tauriInvoke,
+  type InvokeArgs,
+  type InvokeOptions,
+} from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
+import { hasMessage, t } from '../i18n/i18n.svelte';
+import { hostError } from './hosterror';
 import type {
   AppInfo,
   UpdateInfo,
@@ -37,6 +45,16 @@ import type {
   TestSpec,
   Trigger,
 } from './types';
+
+/** Every command, its refusal said in the editor's language (hosterror.ts). */
+function invoke<T>(cmd: string, args?: InvokeArgs, options?: InvokeOptions): Promise<T> {
+  return tauriInvoke<T>(cmd, args, options).catch((e: unknown): never => {
+    throw hostError(e, (kind, params) => {
+      const key = `host.${kind}`;
+      return hasMessage(key) ? t(key, params) : undefined;
+    });
+  });
+}
 
 const bytesOf = (r: unknown): Uint8Array =>
   r instanceof ArrayBuffer ? new Uint8Array(r) : new Uint8Array(r as number[]);

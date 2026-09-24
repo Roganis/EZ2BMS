@@ -2,6 +2,7 @@
 // The work is port/publish.ts's; this only holds where the dialog is.
 
 import type { Finding } from '@ez2bms/chart-core';
+import { t } from '../i18n/i18n.svelte';
 import {
   preparePublish,
   publishErrors,
@@ -67,7 +68,7 @@ export class PublishState {
 
   /** Choose the songs folder, then prepare. */
   async pickRoot(): Promise<void> {
-    const dir = await this.app.backend.pickFolder('Where EZ2PORT keeps its songs');
+    const dir = await this.app.backend.pickFolder(t('publish.pickRoot'));
     if (!dir) return;
     this.app.settings.set('songsRoot', dir);
     await this.start();
@@ -78,9 +79,8 @@ export class PublishState {
     const why = refusal(r);
     if (why) return why;
     if (r.owner === 'foreign' && this.confirmKey.trim() !== r.key)
-      return `Type ${r.key} to replace another song's package`;
-    if (r.owner === 'legacy' && !this.confirmLegacy)
-      return 'Confirm replacing the earlier EZ2BMS package';
+      return t('publish.blockedForeign', { key: r.key });
+    if (r.owner === 'legacy' && !this.confirmLegacy) return t('publish.blockedLegacy');
     return undefined;
   }
 
@@ -97,7 +97,7 @@ export class PublishState {
     } catch (e) {
       this.stage = {
         kind: 'failed',
-        message: `Publish failed: ${e instanceof Error ? e.message : String(e)}`,
+        message: t('publish.failed', { error: e instanceof Error ? e.message : String(e) }),
         review,
       };
     }
@@ -110,7 +110,7 @@ export class PublishState {
     const { key, songIni } = s.written.retire;
     try {
       await this.app.backend.port.retire(s.review.root, key, songIni);
-      toast(`Removed ${key} (kept in .ez2bms-backup)`, 'ok');
+      toast(t('publish.retired', { key }), 'ok');
       this.stage = { ...s, written: { ...s.written, retire: undefined } };
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'error');

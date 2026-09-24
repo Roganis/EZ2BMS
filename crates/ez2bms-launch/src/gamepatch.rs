@@ -264,11 +264,11 @@ pub fn apply(
         return Err(invalid(format!("a backup name of letters and digits, not {:?}", spec.stamp)));
     }
     if !root.is_dir() {
-        return Err(invalid(format!("{} is not a folder", root.display())));
+        return Err(LaunchError::NotAFolder(root.to_path_buf()));
     }
     let backup = root.join(BACKUP).join(&spec.stamp);
     if backup.exists() {
-        return Err(invalid(format!("a backup named {} is already there", spec.stamp)));
+        return Err(LaunchError::BackupExists(spec.stamp.clone()));
     }
 
     // 1. Check.
@@ -285,19 +285,14 @@ pub fn apply(
             Expect::Fnv(h) => exists && fnv1a64(&std::fs::read(&p).map_err(io(&p))?) == h,
         };
         if !ok {
-            return Err(invalid(format!(
-                "{} is not what it was when the export was planned: plan it again",
-                e.rel
-            )));
+            return Err(LaunchError::Stale(e.rel.clone()));
         }
         targets.push((p, exists));
     }
     for (rel, h) in &spec.keep {
         let (p, exists) = resolve_ci(root, rel)?;
         if !exists || fnv1a64(&std::fs::read(&p).map_err(io(&p))?) != *h {
-            return Err(invalid(format!(
-                "{rel}, which the export uses as it is, has changed or gone: plan it again"
-            )));
+            return Err(LaunchError::Stale(rel.clone()));
         }
     }
     let total = spec.entries.len() * 2;
@@ -462,7 +457,7 @@ fn current(p: &Path) -> Option<Sum> {
 /// since are conflicts: with any, nothing is done unless `force`.
 pub fn restore(root: &Path, stamp: &str, force: bool) -> Result<RestoreReport> {
     if !valid_stamp(stamp) {
-        return Err(invalid(format!("no backup named {stamp:?}")));
+        return Err(LaunchError::NoBackup(stamp.to_string()));
     }
     let dir = root.join(BACKUP).join(stamp);
     let mut manifest = read_manifest(&dir)?;
@@ -547,7 +542,7 @@ pub fn write_tree(
     if dest.exists() {
         let empty = std::fs::read_dir(dest).map_err(io(dest))?.next().is_none();
         if !dest.is_dir() || !empty {
-            return Err(invalid(format!("{} is not empty", dest.display())));
+            return Err(LaunchError::NotEmpty(dest.to_path_buf()));
         }
     }
     for (rel, _) in entries {

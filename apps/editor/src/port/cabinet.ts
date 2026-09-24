@@ -31,6 +31,7 @@ import {
 import { soundPath } from '../audio/paths';
 import type { ExportJob, ExportProbeResult, ExportReport } from '../bridge';
 import { joinPath } from '../bridge';
+import { t } from '../i18n/i18n.svelte';
 import type { App } from '../state/app.svelte';
 import type { ChartSlot } from '../state/project.svelte';
 
@@ -71,13 +72,15 @@ export async function prepareCabinet(
 ): Promise<CabinetReview> {
   const p = app.project;
   const root = app.settings.data.gameRoot;
-  if (!p) throw new Error('no song is open');
-  if (!root) throw new Error('Set your EZ2AC data folder on the EZ2PORT panel first');
+  if (!p) throw new Error(t('export.noSong'));
+  if (!root) throw new Error(t('import.game.noRoot'));
   const tables = game.tables;
   // The original reads only encrypted charts, and only the executable has the keys.
   if (!tables)
     throw new Error(
-      `The game's charts are encrypted with keys from its executable, and there are none: ${game.tablesError ?? 'set the executable on the EZ2PORT panel'}`,
+      game.tablesError != null
+        ? t('export.cabinet.noTables', { why: game.tablesError })
+        : t('export.cabinet.noExe'),
     );
   const samples = app.audio.lengths();
   const listing = await game.fs.list(`sound/${target.dir}`);
@@ -122,7 +125,7 @@ export async function prepareCabinet(
     for (const k of ['ez', 'ezi', 'ini'] as const) {
       if (!cp.exists[k]) continue;
       const b = await game.fs.read(cp.paths[k]);
-      if (!b) throw new Error(`${cp.paths[k]} could not be read`);
+      if (!b) throw new Error(t('export.cabinet.unreadable', { file: cp.paths[k] }));
       before.set(cp.paths[k], b);
     }
   for (const f of Object.values(game.songdbFiles)) if (f) before.set(f.path, f.bytes);
@@ -140,15 +143,18 @@ export async function prepareCabinet(
     ['cut', 'decode'].includes(probe.get(s.def)?.how ?? ''),
   ).length;
   const findings = lintCabinet(plan, { out, names, samples, converted });
-  if (unreadable.length)
+  if (unreadable.length) {
+    const files =
+      unreadable
+        .slice(0, 3)
+        .map((i) => `${defs[i]!.src} (${probe.get(i)!.error})`)
+        .join(', ') + (unreadable.length > 3 ? '...' : '');
     findings.unshift({
       rule: 'cabinet-sound-unreadable',
       severity: 'error',
-      message: `${unreadable.length} keysound${unreadable.length === 1 ? '' : 's'} cannot be read: ${unreadable
-        .slice(0, 3)
-        .map((i) => `${defs[i]!.src} (${probe.get(i)!.error})`)
-        .join(', ')}${unreadable.length > 3 ? '...' : ''}`,
+      message: t('export.cabinet.soundsUnreadable', { n: unreadable.length, files }),
     });
+  }
 
   const inGame = o.dest.kind === 'game';
   const sound = (s: { def: number; path: string }) => {
@@ -216,11 +222,15 @@ export async function prepareCabinet(
 }
 
 function songTitle(app: App, target: CabinetTarget): string {
-  const t = app.project?.charts[0]?.doc.data.info.title;
-  return t || target.title?.title || target.dir;
+  const title = app.project?.charts[0]?.doc.data.info.title;
+  return title || target.title?.title || target.dir;
 }
 
-/** What a folder export holds and where each file goes (the folder's EZ2BMS-EXPORT.txt). */
+/**
+ * What a folder export holds and where each file goes (the folder's
+ * EZ2BMS-EXPORT.txt). In the editor's language: the person exporting is the
+ * one who reads it, copying the folder onto the cabinet.
+ */
 function folderNote(
   title: string,
   root: string,
@@ -229,20 +239,24 @@ function folderNote(
   includeUnchanged?: boolean,
 ): string {
   const lines = [
-    `EZ2BMS cabinet export: ${title} into sound/${plan.target.dir}`,
-    `Made ${new Date().toISOString()} against the game folder ${root}.`,
+    t('export.note.title', { title, dir: plan.target.dir }),
+    t('export.note.made', { when: new Date().toISOString(), root }),
     '',
-    "Copy the folders here onto the cabinet's game folder. Each file:",
+    t('export.note.copy'),
   ];
-  for (const f of out.files)
-    lines.push(
-      `  ${f.path}  (${f.kind === 'songdb' ? "replaces the game's whole table for this mode: copy it only onto the same game version" : f.replaces ? 'replaces the game file' : 'new'})`,
-    );
-  for (const s of out.sounds) lines.push(`  ${s.path}  (new keysound)`);
+  for (const f of out.files) {
+    const what =
+      f.kind === 'songdb'
+        ? 'export.note.songdb'
+        : f.replaces
+          ? 'export.note.replaces'
+          : 'export.note.new';
+    lines.push(`  ${t(what, { file: f.path })}`);
+  }
+  for (const s of out.sounds) lines.push(`  ${t('export.note.sound', { file: s.path })}`);
   if (includeUnchanged)
-    for (const r of out.reused) lines.push(`  ${r}  (the game's own, unchanged)`);
-  else if (out.reused.length)
-    lines.push(`  and ${out.reused.length} keysounds the game already has, used as they are`);
+    for (const r of out.reused) lines.push(`  ${t('export.note.own', { file: r })}`);
+  else if (out.reused.length) lines.push(`  ${t('export.note.reused', { n: out.reused.length })}`);
   lines.push('');
   return lines.join('\r\n');
 }

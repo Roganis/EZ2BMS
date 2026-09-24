@@ -6,16 +6,24 @@
   // page does; in a browser, the DOM's.
   import { BMS_FILE } from '@ez2bms/chart-core';
   import { dirName } from '../bridge';
+  import { t, tParts } from '../i18n/i18n.svelte';
   import { app } from '../state/app.svelte';
   import type { Project } from '../state/project.svelte';
 
   let { project }: { project: Project } = $props();
   let over = $state(false);
-  const added = $derived(app.slot ? ` and added to ${app.slot.label}` : '');
   const images = $derived(
     app.view.songManager && (app.view.songTab === 'plate' || app.view.songTab === 'art'),
   );
   const movies = $derived(app.view.songManager && app.view.songTab === 'bga');
+  // What happens to what is dropped, with the song's name set in <em>.
+  const says = $derived(
+    tParts(
+      images ? 'drop.images' : movies ? 'drop.movie' : app.slot ? 'drop.soundsTo' : 'drop.sounds',
+      { song: project.name, chart: app.slot?.label ?? '' },
+      ['song'],
+    ),
+  );
 
   $effect(() =>
     app.backend.onFileDrop((d) => {
@@ -36,18 +44,9 @@
 {#if over}
   <div class="drop" data-testid="drop-zone">
     <div class="card">
-      <b>Drop to import</b>
+      <b>{t('drop.title')}</b>
       <span>
-        {#if images}
-          Images (PNG, JPEG, BMP) are copied into <em>{project.name}</em> for the disc and the eyecatch.
-          Nothing in the folder is overwritten.
-        {:else if movies}
-          A movie is copied into <em>{project.name}</em> and becomes the BGA. Nothing in the folder is
-          overwritten.
-        {:else}
-          Sound files, or folders of them, are copied into <em>{project.name}</em>{added}. Nothing
-          in the folder is overwritten.
-        {/if}
+        {#each says as p, i (i)}{#if 'slot' in p}<em>{project.name}</em>{:else}{p.text}{/if}{/each}
       </span>
     </div>
   </div>

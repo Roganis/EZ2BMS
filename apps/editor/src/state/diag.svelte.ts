@@ -6,6 +6,7 @@
 import type { AppInfo } from '../bridge';
 import type { App } from './app.svelte';
 import { isoTime } from './autosave';
+import { HostError } from '../bridge/hosterror';
 import { t } from '../i18n/i18n.svelte';
 import { ask, toast } from './toasts.svelte';
 
@@ -16,6 +17,8 @@ const TOAST_EVERY_MS = 5000;
 
 /** An error's message and, when it has one, its stack. */
 export function describeError(e: unknown): { message: string; detail: string } {
+  // The log keeps the host's English, whatever language the toast was in.
+  if (e instanceof HostError) return { message: e.message, detail: `${e.kind}: ${e.english}` };
   if (e instanceof Error) {
     const message = e.message || e.name;
     return {

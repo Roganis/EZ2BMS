@@ -11,6 +11,7 @@
 // new name now answers to is allowed - that is how a missing sound is fixed -
 // and reported so the editor can say so.
 
+import { said, sayText } from '../i18n/say';
 import type { ChartData } from '../model/types';
 import { AUDIO_EXT, SoundIndex, soundStem } from './resolve';
 
@@ -24,7 +25,11 @@ export type RenamePlan =
       /** Names charts use that were missing and now find the renamed file. */
       adopts: string[];
     }
-  | { ok: false; reason: string };
+  | {
+      ok: false;
+      /** Why not, in the language chosen: the editor shows it at once ("Can't rename kick.wav: …"). */
+      reason: string;
+    };
 
 /** Characters Windows refuses in a file name (the song folders travel between machines). */
 const BAD_NAME = /[<>:"/\\|?*]/;
@@ -45,35 +50,34 @@ export function planSoundRename(
   newBase: string,
 ): RenamePlan {
   const base = newBase.trim();
-  if (!folder.includes(from)) return { ok: false, reason: `${from} is not in the song folder` };
-  if (!base) return { ok: false, reason: 'the name is empty' };
+  if (!folder.includes(from))
+    return { ok: false, reason: sayText(said('sound.rename.missing', { file: from })) };
+  if (!base) return { ok: false, reason: sayText(said('sound.rename.empty')) };
   if (
     BAD_NAME.test(base) ||
     hasControl(base) ||
     /[. ]$/.test(base) ||
     /^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(base)
   )
-    return { ok: false, reason: `"${base}" is not a file name Windows accepts` };
+    return { ok: false, reason: sayText(said('sound.rename.windows', { name: base })) };
   if (ext(base) !== ext(from))
-    return {
-      ok: false,
-      reason: `keep the ${ext(from)} extension (the file's format does not change)`,
-    };
+    return { ok: false, reason: sayText(said('sound.rename.extension', { ext: ext(from) })) };
   const slash = Math.max(from.lastIndexOf('/'), from.lastIndexOf('\\'));
   const to = from.slice(0, slash + 1) + base;
-  if (to === from) return { ok: false, reason: 'that is its name already' };
+  if (to === from) return { ok: false, reason: sayText(said('sound.rename.same')) };
   const index = new SoundIndex(folder);
   const toLower = to.toLowerCase();
   const toStem = soundStem(to);
   const fromStem = soundStem(from);
   for (const f of folder) {
     if (f === from) continue;
-    if (f.toLowerCase() === toLower) return { ok: false, reason: `${f} is already in the folder` };
+    if (f.toLowerCase() === toLower)
+      return { ok: false, reason: sayText(said('sound.rename.taken', { file: f })) };
     // Another sound with the new stem: a chart spelling "<stem>.xyz" for it
     // would start finding the renamed file instead (or the other way round).
     // A same-stem sibling of the OLD name is fine only when the stem stays.
     if (AUDIO_EXT.test(f) && soundStem(f) === toStem && toStem !== fromStem)
-      return { ok: false, reason: `${f} has the same name before the extension` };
+      return { ok: false, reason: sayText(said('sound.rename.same-stem', { file: f })) };
   }
   const renames = new Map<string, Map<string, string>>();
   const adopts = new Set<string>();

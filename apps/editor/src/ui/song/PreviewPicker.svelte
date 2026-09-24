@@ -11,6 +11,7 @@
     defaultPreviewStart,
   } from '@ez2bms/chart-core';
   import { onDestroy } from 'svelte';
+  import { t, tParts } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import type { Project } from '../../state/project.svelte';
 
@@ -199,22 +200,23 @@
     const s = ms / 1000;
     return `${Math.floor(s / 60)}:${(s % 60).toFixed(2).padStart(5, '0')}`;
   };
-  const picked = $derived(
-    settings.startMs === undefined && !fromFile ? "EZ2PORT's importer's pick" : '',
+  const picked = $derived(settings.startMs === undefined && !fromFile);
+  const at = $derived(
+    tParts('preview.at', { fade: (win.fadeMs / 1000).toFixed(1) }, ['start', 'length']),
   );
   function reset() {
     void app.preview.set({ startMs: undefined, lengthMs: undefined, fadeMs: undefined });
   }
 </script>
 
-<section class="picker" data-testid="preview-picker" aria-label="Preview">
+<section class="picker" data-testid="preview-picker" aria-label={t('preview.label')}>
   <div class="source ez-form">
-    <div class="ez-seg" role="group" aria-label="What the preview is cut from">
+    <div class="ez-seg" role="group" aria-label={t('preview.source')}>
       <button
         class:on={!fromFile}
         data-testid="preview-from-chart"
         onclick={() => void app.preview.set({ file: undefined, startMs: undefined })}
-        >A chart's mix</button
+        >{t('preview.fromChart')}</button
       >
       <button
         class:on={fromFile}
@@ -222,13 +224,13 @@
         disabled={!audioFiles.length}
         onclick={() =>
           void app.preview.set({ file: settings.file ?? audioFiles[0], startMs: undefined })}
-        >An audio file</button
+        >{t('preview.fromFile')}</button
       >
     </div>
     {#if !fromFile}
       <select
         data-testid="preview-chart"
-        aria-label="Chart"
+        aria-label={t('preview.chart')}
         value={slot?.file ?? ''}
         onchange={(e) => void app.preview.set({ chart: e.currentTarget.value, startMs: undefined })}
       >
@@ -237,7 +239,7 @@
     {:else}
       <select
         data-testid="preview-file"
-        aria-label="Audio file"
+        aria-label={t('preview.file')}
         value={settings.file}
         onchange={(e) => void app.preview.set({ file: e.currentTarget.value, startMs: undefined })}
       >
@@ -255,13 +257,13 @@
     onpointerdown={place}
   >
     <canvas bind:this={canvas} style:width="{width}px" style:height="{H}px"></canvas>
-    {#if loading && !peaks}<span class="loading">Mixing the song…</span>{/if}
+    {#if loading && !peaks}<span class="loading">{t('preview.mixing')}</span>{/if}
     <div
       class="window"
       data-testid="preview-window"
       tabindex="0"
       role="slider"
-      aria-label="Preview window: drag to move, arrow keys to nudge"
+      aria-label={t('preview.window')}
       aria-valuenow={shown.startMs}
       style:left="{xOf(shown.startMs)}px"
       style:width="{xOf(shown.lengthMs)}px"
@@ -289,15 +291,19 @@
 
   <div class="bar">
     <button class="play ez-btn" data-testid="preview-play" onclick={() => void toggle()}>
-      {app.preview.playing ? '■ Stop' : '▶ Play the loop'}
+      {t(app.preview.playing ? 'preview.stop' : 'preview.play')}
     </button>
     <span class="at" data-testid="preview-at">
-      from <b>{fmt(shown.startMs)}</b>, <b>{(shown.lengthMs / 1000).toFixed(1)} s</b>, fades
-      {(win.fadeMs / 1000).toFixed(1)} s
-      {#if picked}<span class="dim">- {picked}</span>{/if}
+      {#each at as p, i (i)}{#if 'slot' in p}<b
+            >{p.slot === 'start'
+              ? fmt(shown.startMs)
+              : t('preview.seconds', { s: (shown.lengthMs / 1000).toFixed(1) })}</b
+          >{:else}{p.text}{/if}{/each}
+      {#if picked}<span class="dim">- {t('preview.picked')}</span>{/if}
     </span>
     <label class="fadeset"
-      >Fades <input
+      >{t('preview.fades')}
+      <input
         type="range"
         min="0"
         max="3000"
@@ -308,17 +314,16 @@
       /></label
     >
     {#if settings.startMs !== undefined || settings.lengthMs !== undefined || settings.fadeMs !== undefined}
-      <button class="ez-btn" data-testid="preview-reset" onclick={reset}>Reset</button>
+      <button class="ez-btn" data-testid="preview-reset" onclick={reset}
+        >{t('preview.reset')}</button
+      >
     {/if}
   </div>
   <p class="hint">
-    The wheel loops this while the song is chosen, restarting it hard at its end, so its fades are
-    part of the file. {#if !fromFile}It is mixed as EZ2PORT plays the chart - every keysound at its
-      velocity and pan - then brought down to a peak of 32000 if it is louder, as the port's own
-      importer does. A click on the song moves the window there; its start keeps to a note unless
-      Alt is held.{/if}
+    {t('preview.hint')}
+    {#if !fromFile}{t('preview.hintChart')}{/if}
     {#if !fromFile && notes.length}
-      EZ2PORT's importer would start at {fmt(defaultPreviewStart(notes))}.
+      {t('preview.importerStart', { time: fmt(defaultPreviewStart(notes)) })}
     {/if}
   </p>
 </section>

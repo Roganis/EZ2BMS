@@ -19,9 +19,9 @@ import {
   type PlateSpec,
 } from '@ez2bms/chart-core';
 import { baseName, joinPath, type ArtPixels, type PlatePixels } from '../bridge';
+import { t } from '../i18n/i18n.svelte';
 import type { App } from './app.svelte';
 import type { Project } from './project.svelte';
-import { plural } from './songwide';
 import { toast } from './toasts.svelte';
 
 export type ArtKind = 'disc' | 'eyecatch';
@@ -96,10 +96,7 @@ export class ArtState {
 
   /** The file chooser, then `import`. */
   async pickAndImport(): Promise<string[]> {
-    const paths = await this.app.backend.pickFiles(
-      'Images for the disc and eyecatch',
-      IMAGE_EXTENSIONS,
-    );
+    const paths = await this.app.backend.pickFiles(t('art.pick'), IMAGE_EXTENSIONS);
     return this.import(paths);
   }
 
@@ -118,19 +115,22 @@ export class ArtState {
       const copied = res.filter((r) => r.name && !r.reused).length;
       const skipped = res.filter((r) => r.error);
       await p.rescan();
-      const parts = [
-        copied
-          ? `Imported ${plural(copied, 'image')}`
+      // A message for each outcome, so a translation words what was and was
+      // not imported as one sentence.
+      const files = skipped.map((r) => baseName(r.from)).join(', ');
+      const error = skipped[0]?.error;
+      let text = '';
+      if (skipped.length)
+        text = copied
+          ? t('art.importedSkipped', { n: copied, files, error })
           : names.length
-            ? 'Already in the folder'
-            : '',
-        skipped.length
-          ? `skipped ${skipped.map((r) => baseName(r.from)).join(', ')} (${skipped[0]!.error})`
-          : '',
-      ].filter(Boolean);
-      if (parts.length) toast(parts.join('; '), skipped.length ? 'warn' : 'ok');
+            ? t('art.alreadySkipped', { files, error })
+            : t('art.skipped', { files, error });
+      else if (copied) text = t('art.imported', { n: copied });
+      else if (names.length) text = t('art.already');
+      if (text) toast(text, skipped.length ? 'warn' : 'ok');
     } catch (e) {
-      toast(`Import failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
+      toast(t('song.importFailed', { error: e instanceof Error ? e.message : String(e) }), 'error');
       return [];
     }
     const first = names[0];
@@ -197,7 +197,7 @@ export class ArtState {
         const path = findImage(p.images, s.image);
         if (!path) {
           report({ missing: [], image: { src: s.image, path } });
-          throw new PublishError(`The title plate image ${s.image} is not in the song folder`);
+          throw new PublishError(t('art.plateMissing', { file: s.image }));
         }
         const px = await this.pixels(p, path, { kind: 'plate' });
         report({ missing: [], image: { src: s.image, path } });
@@ -221,15 +221,22 @@ export class ArtState {
     const art = p.art;
     const plate = await this.renderPlate(p).catch((e: unknown) => {
       if (e instanceof PublishError) throw e;
-      throw new PublishError(`The title plate: ${e instanceof Error ? e.message : String(e)}`);
+      throw new PublishError(
+        t('plate.failed', { error: e instanceof Error ? e.message : String(e) }),
+      );
     });
     const out: PackageArt = { songnameAbm: encodeAbm(plate.rgb, plate.w, plate.h) };
     for (const kind of ['disc', 'eyecatch'] as const) {
       const a = art[kind];
       if (!a) continue;
-      if (!a.path) throw new PublishError(`The ${kind} image ${a.src} is not in the song folder`);
+      const disc = kind === 'disc';
+      if (!a.path)
+        throw new PublishError(
+          t(disc ? 'art.disc.missing' : 'art.eyecatch.missing', { file: a.src }),
+        );
       const px = await this.pixels(p, a.path, a.job).catch((e: unknown) => {
-        throw new PublishError(`The ${kind}: ${e instanceof Error ? e.message : String(e)}`);
+        const error = e instanceof Error ? e.message : String(e);
+        throw new PublishError(t(disc ? 'art.disc.failed' : 'art.eyecatch.failed', { error }));
       });
       out[kind === 'disc' ? 'discAbm' : 'eyecatchAbm'] = encodeAbm(px.rgb, px.w, px.h);
     }

@@ -12,6 +12,7 @@
 // The head is judged like a tap for every kind. The tail is never judged
 // (docs/judge-timing.md: "a port must not tally a release").
 
+import { said, type Said } from '../i18n/say';
 import { HOLD_BIAS } from '../io/ez/ezff';
 import type { ChartData, NoteRec } from '../model/types';
 import { TickConverter, TICKS_PER_BEAT } from '../timing/ticks';
@@ -76,23 +77,45 @@ export function holdPreview(
   };
 }
 
+/** A hold kind and what it pays while held. */
+export interface HoldKindInfo {
+  kind: number;
+  /** In English; `said` in the language chosen (i18n/say.ts). */
+  label: string;
+  said: Said;
+  /** Whether K cycles through it. */
+  common: boolean;
+}
+
 /**
  * EZ2 hold kinds and what each does (EZ2PORT ez2/score.h, docs/PORT-DELTAS.md
  * findings 1 and 12). 0 is what nearly every shipped chart uses; `common`
- * are the ones K cycles through.
+ * are the ones K cycles through. The table is made when the module loads,
+ * before a language is chosen, so each kind carries its message as data for
+ * the editor to say in the language chosen later.
  */
-export const HOLD_KIND_INFO: readonly { kind: number; label: string; common: boolean }[] = [
-  { kind: 0, label: 'every 1/4 beat (default)', common: true },
-  { kind: 1, label: 'every 1/2 beat', common: true },
-  { kind: 2, label: 'every 1/8 beat', common: true },
-  { kind: 3, label: 'every 1/16 beat', common: true },
-  { kind: 4, label: 'once, after the end (counted as 1/32s: never 100%)', common: true },
-  { kind: 5, label: 'once, after the end (counted as 1/4s: never 100%)', common: false },
-  { kind: 6, label: 'once at the end, if still KOOL', common: false },
-  { kind: 7, label: 'nothing while held', common: true },
-  { kind: 8, label: 'nothing while held', common: false },
-  { kind: 9, label: 'nothing; the head is not counted', common: false },
-  { kind: 10, label: 'nothing; the head is not counted', common: false },
-  { kind: 11, label: 'nothing; the head is not counted', common: false },
-  { kind: 12, label: 'nothing; the head is not counted', common: false },
+export const HOLD_KIND_INFO: readonly HoldKindInfo[] = [
+  { kind: 0, label: 'every 1/4 beat (default)', said: said('hold.kind.0'), common: true },
+  { kind: 1, label: 'every 1/2 beat', said: said('hold.kind.1'), common: true },
+  { kind: 2, label: 'every 1/8 beat', said: said('hold.kind.2'), common: true },
+  { kind: 3, label: 'every 1/16 beat', said: said('hold.kind.3'), common: true },
+  {
+    kind: 4,
+    label: 'once, after the end (counted as 1/32s: never 100%)',
+    said: said('hold.kind.4'),
+    common: true,
+  },
+  {
+    kind: 5,
+    label: 'once, after the end (counted as 1/4s: never 100%)',
+    said: said('hold.kind.5'),
+    common: false,
+  },
+  { kind: 6, label: 'once at the end, if still KOOL', said: said('hold.kind.6'), common: false },
+  { kind: 7, label: 'nothing while held', said: said('hold.kind.7'), common: true },
+  { kind: 8, label: 'nothing while held', said: said('hold.kind.7'), common: false },
+  { kind: 9, label: 'nothing; the head is not counted', said: said('hold.kind.9'), common: false },
+  { kind: 10, label: 'nothing; the head is not counted', said: said('hold.kind.9'), common: false },
+  { kind: 11, label: 'nothing; the head is not counted', said: said('hold.kind.9'), common: false },
+  { kind: 12, label: 'nothing; the head is not counted', said: said('hold.kind.9'), common: false },
 ];

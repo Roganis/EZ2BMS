@@ -4,9 +4,9 @@
 //   the English (catalogProblems).
 // - A command's English title is its catalog message, so the palette's two
 //   languages and docs/keybindings.md say the same thing.
-// - The markup scan: a converted screen has no words written into its
-//   markup, where no language switch can reach them. Brand names and key
-//   caps (<kbd>) are words in every language.
+// - The markup scan: no screen has words written into its markup, where no
+//   language switch can reach them. Brand names and key caps (<kbd>) are
+//   words in every language.
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
@@ -23,20 +23,6 @@ import { editorCatalogs, i18n, t, tEn, tParts } from './i18n.svelte';
 import { writtenText } from './scan';
 
 const SRC = resolve(import.meta.dirname, '..');
-
-/** Screens already in the catalog: the scan is strict for these (M9.5 makes it every screen). */
-const STRICT = [
-  'ui/App.svelte',
-  'ui/AboutDialog.svelte',
-  'ui/CommandPalette.svelte',
-  'ui/PrefsDialog.svelte',
-  'ui/StartScreen.svelte',
-  'ui/StatusBar.svelte',
-  'ui/TopBar.svelte',
-  'ui/UpdateDialog.svelte',
-  'ui/drawers/Drawer.svelte',
-  'ui/drawers/RightDrawer.svelte',
-];
 
 function svelteFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
@@ -99,6 +85,9 @@ describe('the catalogs', () => {
       expect(ids, `${key} names no command`).toContain(id);
       expect(app.commands.get(id)!.title).toBe(tEn(key as never));
     }
+    // Every command's title is in the catalog: the palette can say each one.
+    const untranslated = app.commands.all().filter((c) => app.commands.localize(c) === undefined);
+    expect(untranslated.map((c) => c.id)).toEqual([]);
     // The palette finds a translated command by its English title too.
     try {
       i18n.apply('ja');
@@ -122,17 +111,12 @@ describe('the markup scan', () => {
     expect(writtenText(src)).toEqual(['2: Hello', '3: title="Undo (Ctrl+Z)"', '5: Loading…']);
   });
 
-  it('finds none in the screens already converted', () => {
+  it('finds none in any screen', () => {
     const left: string[] = [];
-    for (const f of STRICT) {
-      const text = writtenText(readFileSync(join(SRC, f), 'utf8'));
-      left.push(...text.map((s) => `${f}:${s}`));
+    for (const f of svelteFiles(join(SRC, 'ui'))) {
+      const text = writtenText(readFileSync(f, 'utf8'));
+      left.push(...text.map((s) => `${relative(SRC, f)}:${s}`));
     }
     expect(left).toEqual([]);
-  });
-
-  it('knows every screen (so M9.5 can make it strict everywhere)', () => {
-    const all = svelteFiles(join(SRC, 'ui')).map((f) => relative(SRC, f));
-    for (const f of STRICT) expect(all).toContain(f);
   });
 });

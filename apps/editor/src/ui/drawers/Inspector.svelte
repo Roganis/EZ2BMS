@@ -17,6 +17,7 @@
     setVelPan,
     type NoteRec,
   } from '@ez2bms/chart-core';
+  import { t, tParts, tSaid } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import type { ChartSlot } from '../../state/project.svelte';
   import { toast } from '../../state/toasts.svelte';
@@ -61,84 +62,109 @@
   const db = (v: number) => (dsLevel(MIX_UNITY, MIX_UNITY, MIX_UNITY, v) / 100).toFixed(1);
   const panText = (p: number) => {
     const ds = dsPan(PAN_CENTRE, p);
-    return ds === 0 ? 'centre' : `${ds < 0 ? 'L' : 'R'} ${(Math.abs(ds) / 100).toFixed(1)} dB`;
+    return ds === 0
+      ? t('inspector.panCentre')
+      : t('inspector.panSide', {
+          side: ds < 0 ? 'left' : 'right',
+          db: (Math.abs(ds) / 100).toFixed(1),
+        });
   };
+  /** The key caps the hints name, by their slot in the messages. */
+  const KEYS: Record<string, string> = {
+    shift: 'Shift',
+    alt: 'Alt',
+    l: 'L',
+    k: 'K',
+    m: 'M',
+    lanes: 'Alt ← →',
+    snap: '[ ]',
+    b: 'B',
+    tab: 'Tab',
+    palette: 'Ctrl K',
+  };
+  const dragHint = $derived(tParts('inspector.hintDrag', {}, Object.keys(KEYS)));
+  const keysHint = $derived(tParts('inspector.hintKeys', {}, Object.keys(KEYS)));
+  const summary = $derived(
+    tParts('inspector.summary', { n: notes.length, lanes, bgm }, ['count', 'pos']),
+  );
 </script>
 
 <div class="ez-form">
   {#if !notes.length}
     <p class="hint">
-      Click a lane to place a note with the sound picked on the left; drag up to make a hold.<br />
-      Drag notes to move them, their end to resize. Right-drag erases, <kbd>Shift</kbd>-drag
-      selects, <kbd>Alt</kbd>-click picks up a note's sound.
+      {t('inspector.hintPlace')}<br />
+      {#each dragHint as p, i (i)}{#if 'slot' in p}<kbd>{KEYS[p.slot]}</kbd
+          >{:else}{p.text}{/if}{/each}
     </p>
     <p class="hint">
-      <kbd>L</kbd> hold · <kbd>K</kbd> hold kind · <kbd>M</kbd> mirror · <kbd>Alt ← →</kbd> lanes ·
-      <kbd>[ ]</kbd>
-      snap ·
-      <kbd>B</kbd> BPM · <kbd>Tab</kbd> play view · <kbd>Ctrl K</kbd> everything else
+      {#each keysHint as p, i (i)}{#if 'slot' in p}<kbd>{KEYS[p.slot]}</kbd
+          >{:else}{p.text}{/if}{/each}
     </p>
   {:else}
     <div class="row">
-      <span class="lbl">Selection</span>
+      <span class="lbl">{t('inspector.selection')}</span>
       <div class="sum">
-        <b>{notes.length}</b> note{notes.length === 1 ? '' : 's'} · {lanes} lane{lanes === 1
-          ? ''
-          : 's'}{bgm ? ` · ${bgm} background` : ''}
-        · from <code>{formatPosition(positionOf(first, d.resolution))}</code>
+        {#each summary as p, i (i)}{#if 'slot' in p}{#if p.slot === 'count'}<b>{notes.length}</b
+              >{:else}<code>{formatPosition(positionOf(first, d.resolution))}</code
+              >{/if}{:else}{p.text}{/if}{/each}
       </div>
     </div>
     <div class="row">
-      <label for="ins-ch">Sound</label>
+      <label for="ins-ch">{t('inspector.sound')}</label>
       <select
         id="ins-ch"
         value={ch ?? ''}
         onchange={(e) => setChannel(d, ids, Number(e.currentTarget.value))}
       >
-        {#if ch === undefined}<option value="" disabled>(several)</option>{/if}
+        {#if ch === undefined}<option value="" disabled>{t('inspector.several')}</option>{/if}
         {#each d.data.channels as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
       </select>
     </div>
     <div class="cols">
       <div class="row">
-        <label for="ins-len">Hold, beats</label>
+        <label for="ins-len">{t('inspector.holdBeats')}</label>
         <input
           id="ins-len"
           type="number"
           min="0"
           step={4 / app.view.snap}
           value={beats ?? ''}
-          placeholder={holds.length ? 'mixed' : 'tap'}
+          placeholder={holds.length ? t('inspector.lengthMixed') : t('inspector.lengthTap')}
           onchange={(e) => {
             const b = Number(e.currentTarget.value);
-            if (!setLength(d, ids, b * d.resolution))
-              toast('That length would cover another note', 'warn');
+            if (!setLength(d, ids, b * d.resolution)) toast(t('inspector.lengthCovers'), 'warn');
           }}
         />
       </div>
       <div class="row">
-        <label for="ins-kind">Hold kind</label>
+        <label for="ins-kind">{t('inspector.holdKind')}</label>
         <select
           id="ins-kind"
           value={kind ?? ''}
           onchange={(e) => setHoldKind(d, ids, Number(e.currentTarget.value))}
         >
-          {#if kind === undefined}<option value="" disabled>(several)</option>{/if}
-          {#if kind !== undefined && kind > 12}<option value={kind}>{kind} (as 0)</option>{/if}
-          {#each HOLD_KINDS as k (k.kind)}<option value={k.kind}>{k.kind}: {k.label}</option>{/each}
+          {#if kind === undefined}<option value="" disabled>{t('inspector.several')}</option>{/if}
+          {#if kind !== undefined && kind > 12}<option value={kind}
+              >{t('inspector.kindUnknown', { kind })}</option
+            >{/if}
+          {#each HOLD_KINDS as k (k.kind)}<option value={k.kind}>{k.kind}: {tSaid(k.said)}</option
+            >{/each}
         </select>
       </div>
     </div>
     {#if holdSums}
       <p class="hint" data-testid="hold-counts" class:warn={holdSums.short}>
-        Judged {holdSums.judged}× (heads and instalments), counted as {holdSums.counts}{holdSums.short
-          ? '. A perfect play cannot score exactly 100%.'
-          : '.'}
+        {t(holdSums.short ? 'inspector.holdCountsShort' : 'inspector.holdCounts', {
+          judged: holdSums.judged,
+          counts: holdSums.counts,
+        })}
       </p>
     {/if}
     <div class="row">
       <label for="ins-vel"
-        >Velocity <span class="num">{vel ?? '—'}{vel !== undefined ? ` · ${db(vel)} dB` : ''}</span
+        >{t('inspector.velocity')}
+        <span class="num"
+          >{vel !== undefined ? t('inspector.velocityDb', { vel, db: db(vel) }) : '—'}</span
         ></label
       >
       <input
@@ -152,7 +178,8 @@
     </div>
     <div class="row">
       <label for="ins-pan"
-        >Pan <span class="num">{pan !== undefined ? panText(pan) : '—'}</span></label
+        >{t('inspector.pan')}
+        <span class="num">{pan !== undefined ? panText(pan) : '—'}</span></label
       >
       <input
         id="ins-pan"
@@ -165,12 +192,14 @@
     </div>
     <div class="cols">
       <button class="ez-btn" onclick={() => app.commands.run('notes.hold')}
-        >Hold <kbd>L</kbd></button
+        >{t('inspector.hold')} <kbd>L</kbd></button
       >
       <button class="ez-btn" onclick={() => app.commands.run('notes.mirror')}
-        >Mirror <kbd>M</kbd></button
+        >{t('inspector.mirror')} <kbd>M</kbd></button
       >
-      <button class="ez-btn danger" onclick={() => app.commands.run('edit.delete')}>Delete</button>
+      <button class="ez-btn danger" onclick={() => app.commands.run('edit.delete')}
+        >{t('inspector.delete')}</button
+      >
     </div>
   {/if}
 </div>

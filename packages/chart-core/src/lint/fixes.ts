@@ -5,6 +5,7 @@
 // where it still sounds, rather than being deleted. Song fixes change the
 // song file, and the editor applies them.
 
+import { said, sayEnglish, type Said } from '../i18n/say';
 import { BGM } from '../edit/commands';
 import type { ChartDoc, Tx } from '../edit/doc';
 import type { ChartData, NoteRec } from '../model/types';
@@ -32,7 +33,9 @@ export type SongFixId = 'derive-key' | 'category-custom';
 
 export interface Fix {
   id: ChartFixId | SongFixId;
+  /** In English; `said` in the language chosen (i18n/say.ts). */
   label: string;
+  said: Said;
 }
 
 export const isChartFix = (id: Fix['id']): id is ChartFixId =>
@@ -133,23 +136,14 @@ export function unusedSounds(d: ChartData): ChartData['channels'] {
   return d.channels.filter((c) => !used.has(c.id));
 }
 
-const LABEL: Record<ChartFixId, string> = {
-  'snap-off-grid': 'Snap them to the nearest EZ2 tick',
-  'lane-duplicates-to-bgm': 'Move the extra notes to the background',
-  'drop-bgm-copies': 'Remove the background copies',
-  'shorten-holds': 'Shorten each hold to end before the note',
-  'align-start-bpm': 'Make the start BPM match',
-  'clamp-level': 'Bring the level into 1-20',
-  'title-semicolon': "Write ',' for ';'",
-  'off-mode-to-bgm': 'Move them to the background',
-  'clear-up': 'Make them ordinary notes',
-  'remove-unused-sounds': 'Remove the unused sounds',
-  'lines-4-4': "Use EZ2's 4/4 bar lines",
-  'scroll-legacy': "Make them the chart's scroll changes",
-};
-
 export function chartFix(id: ChartFixId): Fix {
-  return { id, label: LABEL[id] };
+  const s = said(`fix.${id}`);
+  return { id, label: sayEnglish(s), said: s };
+}
+
+export function songFix(id: SongFixId): Fix {
+  const s = said(`fix.${id}`);
+  return { id, label: sayEnglish(s), said: s };
 }
 
 /**
@@ -162,7 +156,7 @@ export function fixChart(doc: ChartDoc, mode: ModeId, id: ChartFixId): boolean {
   const lanes = new Set(modeDef(mode).columns.map((c) => c.x));
   let changed = false;
   const run = (fn: (tx: Tx) => void) => {
-    doc.transact(`Fix: ${LABEL[id]}`, fn);
+    doc.transact(`Fix: ${chartFix(id).label}`, fn);
     changed = true;
   };
   switch (id) {

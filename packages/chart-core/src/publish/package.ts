@@ -14,6 +14,7 @@
 import type { ChartData, Tier } from '../model/types';
 import { JUDGEMENT_PRESETS, LIFE_PRESETS } from '../model/defaults';
 import { encodeUtf8 } from '../io/text';
+import { said, sayText } from '../i18n/say';
 import { writeEzff } from '../io/ez/ezff';
 import { chartBaseName, isValidSongKey } from '../modes/filenames';
 import { modeNames, type ModeId } from '../modes/ids';
@@ -78,6 +79,7 @@ export interface PackagePlan {
   registry: KeysoundRegistry;
 }
 
+/** Why a song cannot be published: said in the language chosen, for showing as it is thrown. */
 export class PublishError extends Error {}
 
 export interface PublishOptions {
@@ -90,18 +92,18 @@ export function compileSong(
   charts: SongChart[],
   opts: PublishOptions = {},
 ): PackagePlan {
-  if (!isValidSongKey(meta.key)) {
-    throw new PublishError(`song key "${meta.key}" must be 1-15 lowercase letters or digits`);
-  }
-  if (!charts.length) throw new PublishError('a song needs at least one chart');
+  if (!isValidSongKey(meta.key))
+    throw new PublishError(sayText(said('publish.song-key', { key: meta.key })));
+  if (!charts.length) throw new PublishError(sayText(said('publish.no-charts')));
   const seen = new Set<string>();
   for (const c of charts) {
     const k = `${c.mode}.${c.tier}`;
-    if (seen.has(k)) throw new PublishError(`two charts are ${modeNames(c.mode).label} ${c.tier}`);
+    const mode = modeNames(c.mode).label;
+    if (seen.has(k))
+      throw new PublishError(sayText(said('publish.duplicate-chart', { mode, tier: c.tier })));
     seen.add(k);
-    if (!modeNames(c.mode).portPlayable) {
-      throw new PublishError(`${modeNames(c.mode).label} cannot be published to EZ2PORT yet`);
-    }
+    if (!modeNames(c.mode).portPlayable)
+      throw new PublishError(sayText(said('publish.mode-unsupported', { mode })));
   }
   const eol = opts.eol ?? '\n';
   const registry = new KeysoundRegistry();

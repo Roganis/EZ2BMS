@@ -4,6 +4,7 @@
   // is used, unused or missing. Only the rows on screen exist in the DOM, and
   // only their cards ask for waveforms - a song can have 1500 sounds.
   import { AUDIO_EXT, type SoundInfo } from '@ez2bms/chart-core';
+  import { t, tParts } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import type { Project } from '../../state/project.svelte';
   import Card from './Card.svelte';
@@ -107,9 +108,9 @@
 
 <svelte:window onkeydown={onkey} />
 
-<section class="bench" data-testid="workbench" aria-label="Keysound workbench">
+<section class="bench" data-testid="workbench" aria-label={t('workbench.label')}>
   <header>
-    <h2>Sounds</h2>
+    <h2>{t('workbench.title')}</h2>
     <div class="filters" role="tablist">
       {#each FILTERS as f (f.id)}
         <button
@@ -117,35 +118,36 @@
           aria-selected={filter === f.id}
           class:on={filter === f.id}
           data-filter={f.id}
-          onclick={() => (filter = f.id)}>{f.label} <b>{counts[f.id]}</b></button
+          onclick={() => (filter = f.id)}>{t(f.label)} <b>{counts[f.id]}</b></button
         >
       {/each}
     </div>
     <input
       class="q"
       bind:value={query}
-      placeholder="Find a sound"
+      placeholder={t('workbench.find')}
       spellcheck="false"
       data-testid="workbench-search"
     />
-    <select bind:value={sort} title="Order">
-      <option value="group">By group</option>
-      <option value="name">By name</option>
-      <option value="usage">Most used</option>
-      <option value="length">Longest</option>
+    <select bind:value={sort} title={t('workbench.order')}>
+      <option value="group">{t('workbench.byGroup')}</option>
+      <option value="name">{t('workbench.byName')}</option>
+      <option value="usage">{t('workbench.mostUsed')}</option>
+      <option value="length">{t('workbench.longest')}</option>
     </select>
     <button
       class="ez-btn"
-      title="Copy sound files into the song (or drop them on the window)"
-      onclick={() => app.commands.run('sounds.import')}>Import…</button
+      title={t('workbench.importTitle')}
+      onclick={() => app.commands.run('sounds.import')}>{t('workbench.import')}</button
     >
     <button
       class="ez-btn"
       disabled={!song.unusedChannels.length}
-      title="Remove every sound that plays no note, from each chart's list (files stay on disk)"
-      onclick={() => app.sounds.removeUnused()}>Remove unused ({song.unusedChannels.length})</button
+      title={t('workbench.removeUnusedTitle')}
+      onclick={() => app.sounds.removeUnused()}
+      >{t('workbench.removeUnused', { n: song.unusedChannels.length })}</button
     >
-    <button class="x" title="Close (Esc)" onclick={close}>×</button>
+    <button class="x" title={t('workbench.close')} onclick={close}>×</button>
   </header>
   <div
     class="grid"
@@ -195,24 +197,32 @@
     </div>
     {#if !shownCount}
       <p class="none">
-        {query
-          ? 'No sound matches'
-          : filter === 'all'
-            ? 'This song has no sounds yet'
-            : 'Nothing here'}
+        {t(
+          query
+            ? 'workbench.noMatch'
+            : filter === 'all'
+              ? 'workbench.noSounds'
+              : 'workbench.nothing',
+        )}
       </p>
     {/if}
   </div>
   {#if replacing}
     {@const from = replacing}
-    <div class="pick" role="dialog" aria-label="Replace {from.name}" data-testid="replace-dialog">
-      <h3>Play instead of <b>{from.name}</b></h3>
-      <p>
-        Every note of it in {from.charts.length} chart{from.charts.length === 1 ? '' : 's'} will play
-        the file you pick. Undo is one step per chart.
-      </p>
+    <div
+      class="pick"
+      role="dialog"
+      aria-label={t('workbench.replaceLabel', { sound: from.name })}
+      data-testid="replace-dialog"
+    >
+      <h3>
+        {#each tParts('workbench.playInstead', { sound: from.name }, ['sound']) as p, i (i)}
+          {#if 'slot' in p}<b>{from.name}</b>{:else}{p.text}{/if}
+        {/each}
+      </h3>
+      <p>{t('workbench.replaceHint', { n: from.charts.length })}</p>
       <!-- svelte-ignore a11y_autofocus -->
-      <input bind:value={pick} placeholder="Find a file" spellcheck="false" autofocus />
+      <input bind:value={pick} placeholder={t('workbench.findFile')} spellcheck="false" autofocus />
       <ul>
         {#each choices.slice(0, 300) as c (c)}
           <li>
@@ -225,10 +235,10 @@
             >
           </li>
         {:else}
-          <li class="none">No other file</li>
+          <li class="none">{t('workbench.noOtherFile')}</li>
         {/each}
       </ul>
-      <button class="ez-btn" onclick={() => (replacing = null)}>Cancel</button>
+      <button class="ez-btn" onclick={() => (replacing = null)}>{t('workbench.cancel')}</button>
     </div>
   {/if}
 </section>

@@ -4,6 +4,7 @@
 import { drawers } from './drawers';
 import { edit } from './edit';
 import { help } from './help';
+import { host } from './host';
 import { play } from './play';
 import { port } from './port';
 import { shell } from './shell';
@@ -13,6 +14,7 @@ import { transfer } from './transfer';
 export const en = {
   ...shell,
   ...help,
+  ...host,
   ...drawers,
   ...edit,
   ...play,

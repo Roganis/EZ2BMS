@@ -31,6 +31,7 @@ import {
   type TakeStats,
   type TakeTarget,
 } from '@ez2bms/chart-core';
+import { t } from '../i18n/i18n.svelte';
 import type { App } from '../state/app.svelte';
 import type { ChartSlot } from '../state/project.svelte';
 import { DEFAULT_RECORD, type RecordOptions } from '../state/settings.svelte';
@@ -112,8 +113,7 @@ export class Recorder {
     if (app.play.active) await app.play.stop(false);
     if (app.view.playing) await app.audio.stop();
     const classic = app.classic.on;
-    if (!classic && app.view.brush === null)
-      return toast('Pick a sound to record with first (or turn Classic mode on)', 'warn');
+    if (!classic && app.view.brush === null) return toast(t('record.noBrush'), 'warn');
     const o = this.options();
     this.slot = slot;
     this.classic = classic;
@@ -263,7 +263,7 @@ export class Recorder {
     if (!notes.length) {
       this.state = 'idle';
       this.ghosts = [];
-      toast('Nothing was recorded', 'info');
+      toast(t('record.nothing'), 'info');
       return;
     }
     this.review = {
@@ -295,15 +295,10 @@ export class Recorder {
     const r = this.review;
     const slot = this.slot;
     if (this.state !== 'review' || !r || !slot) return;
-    const res = applyTake(slot.doc, r.notes, this.target());
+    const res = applyTake(slot.doc, r.notes, this.target(), t('record.undoStep'));
     if (res.splits.length) this.app.classic.remember(slot.doc, res.splits);
-    const parts = [`${res.placed} note${res.placed === 1 ? '' : 's'}`];
-    if (res.clash) parts.push(`${res.clash} on notes already there`);
-    if (res.silent) parts.push(`${res.silent} with nothing to key`);
-    if (res.refused) parts.push(`${res.refused} that would have changed the sound`);
-    if (res.shortened)
-      parts.push(`${res.shortened} hold${res.shortened === 1 ? '' : 's'} made taps`);
-    toast(`Take kept: ${parts.join(', ')}`, res.placed ? 'ok' : 'warn');
+    const { placed, clash, silent, refused, shortened } = res;
+    toast(t('record.kept', { placed, clash, silent, refused, shortened }), placed ? 'ok' : 'warn');
     this.clear();
   }
 
@@ -315,7 +310,7 @@ export class Recorder {
   }
 
   discard(): void {
-    if (this.state === 'review') toast('Take discarded', 'info');
+    if (this.state === 'review') toast(t('record.discarded'), 'info');
     this.clear();
   }
 

@@ -7,6 +7,8 @@
 // every surface - ez2/abm.c ez2_image_punch_key, game path). The encoder
 // writes the Final EX variant, 24-bit, bottom-up, as ez2_abm_write does.
 
+import { said, sayText, type Said } from '../i18n/say';
+
 export interface AbmImage {
   width: number;
   height: number;
@@ -19,6 +21,7 @@ export interface AbmImage {
   bpp: number;
 }
 
+/** Why an .abm cannot be read, in the language chosen (an encoder's misuse stays in English). */
 export class AbmError extends Error {}
 
 const OFF_DATASTART = 0x0a;
@@ -62,23 +65,23 @@ function detectVersion(dv: DataView): number {
 }
 
 export function decodeAbm(data: Uint8Array, opts: { colorKey?: boolean } = {}): AbmImage {
-  if (data.length < HEADER) throw new AbmError('too short to hold a header');
-  if (data[0] !== 0x41 || data[1] !== 0x57) throw new AbmError('not an .abm (no AW magic)');
+  const fail = (s: Said) => new AbmError(sayText(s));
+  if (data.length < HEADER) throw fail(said('data.abm.short'));
+  if (data[0] !== 0x41 || data[1] !== 0x57) throw fail(said('data.abm.magic'));
   const dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const version = detectVersion(dv);
-  if (!version) throw new AbmError('no known XOR table decodes this header');
+  if (!version) throw fail(said('data.abm.version'));
   const k = XOR[version - 1]!;
   const w = (dv.getUint32(OFF_WIDTH, true) ^ k[1]) | 0;
   const h = (dv.getUint32(OFF_HEIGHT, true) ^ k[2]) | 0;
   let bpp = (dv.getUint32(OFF_BPP, true) ^ k[3]) & 0xffff;
-  if (!legalBpp(bpp)) throw new AbmError(`unsupported bits per pixel ${bpp}`);
-  if (w <= 0 || w > 8192 || h === 0 || h < -8192 || h > 8192) {
-    throw new AbmError(`implausible dimensions ${w}x${h}`);
-  }
+  if (!legalBpp(bpp)) throw fail(said('data.abm.bpp', { bpp }));
+  if (w <= 0 || w > 8192 || h === 0 || h < -8192 || h > 8192)
+    throw fail(said('data.abm.size', { w, h }));
   const topDown = h < 0;
   const rows = topDown ? -h : h;
   const off = (dv.getUint32(OFF_DATASTART, true) ^ k[0]) >>> 0;
-  if (off > data.length) throw new AbmError('pixel data starts past the end');
+  if (off > data.length) throw fail(said('data.abm.data'));
   const palette = data.subarray(HEADER, off);
   const palEntries = Math.floor((off - HEADER) / 4);
   const px = data.subarray(off);

@@ -15,8 +15,10 @@
     plateTint,
     songMeta,
     type CjkForms,
+    type PlateTint,
   } from '@ez2bms/chart-core';
   import type { PlatePixels } from '../../bridge';
+  import { t, tParts, tSaid, type MessageKey } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import type { Project } from '../../state/project.svelte';
 
@@ -62,6 +64,7 @@
     return () => clearTimeout(t);
   });
   const missing = $derived(plate?.missing ?? []);
+  const missingNote = $derived(tParts('plate.missing', { n: missing.length }, ['chars']));
 
   // ---- the preview: the plate added onto a wheel row, 3x and 1x
   let big = $state<HTMLCanvasElement>();
@@ -115,12 +118,14 @@
         glow: undefined,
       });
   }
-  const FORMS: { id: CjkForms; label: string }[] = [
-    { id: 'kr', label: 'Korean' },
-    { id: 'jp', label: 'Japanese' },
-    { id: 'sc', label: 'Chinese (Simplified)' },
-    { id: 'tc', label: 'Chinese (Traditional, Taiwan)' },
-    { id: 'hk', label: 'Chinese (Traditional, Hong Kong)' },
+  // chart-core names its tints; a custom one is its colours, with no name to say.
+  const tintName = (x: PlateTint) => (x.said ? tSaid(x.said) : x.label);
+  const FORMS: { id: CjkForms; label: MessageKey }[] = [
+    { id: 'kr', label: 'plate.cjk.kr' },
+    { id: 'jp', label: 'plate.cjk.jp' },
+    { id: 'sc', label: 'plate.cjk.sc' },
+    { id: 'tc', label: 'plate.cjk.tc' },
+    { id: 'hk', label: 'plate.cjk.hk' },
   ];
   const guessed = $derived(
     FORMS.find((f) => f.id === guessCjkForms(words.title + words.subtitle))!,
@@ -135,7 +140,7 @@
   }
 </script>
 
-<section class="designer" data-testid="plate-designer" aria-label="Title plate">
+<section class="designer" data-testid="plate-designer" aria-label={t('plate.label')}>
   <div class="stage">
     <canvas
       bind:this={big}
@@ -146,34 +151,34 @@
     ></canvas>
     <div class="actual">
       <canvas bind:this={small} width={PLATE_W} height={PLATE_H}></canvas>
-      <span>actual size - the title the song wheel and the result screen show</span>
+      <span>{t('plate.actualSize')}</span>
     </div>
     {#if error}
       <p class="err" data-testid="plate-error">{error}</p>
     {/if}
     {#if missing.length}
       <p class="warn" data-testid="plate-missing">
-        The fonts have no <b>{missing.join(' ')}</b>: {missing.length === 1
-          ? 'it comes'
-          : 'they come'} out as a box.
+        {#each missingNote as p, i (i)}{#if 'slot' in p}<b>{missing.join(' ')}</b
+            >{:else}{p.text}{/if}{/each}
       </p>
     {/if}
   </div>
 
   <div class="form ez-form">
-    <div class="ez-seg" role="group" aria-label="What the plate shows">
+    <div class="ez-seg" role="group" aria-label={t('plate.shows')}>
       <button class:on={!imageMode} data-testid="plate-mode-text" onclick={() => setMode(false)}
-        >Text</button
+        >{t('plate.text')}</button
       >
       <button class:on={imageMode} data-testid="plate-mode-image" onclick={() => setMode(true)}
-        >Your own image</button
+        >{t('plate.image')}</button
       >
     </div>
 
     {#if !imageMode}
       <div class="row">
         <label for="pl-title"
-          >Title {#if settings.title !== undefined}<span class="n">differs from the song's</span
+          >{t('plate.title')}
+          {#if settings.title !== undefined}<span class="n">{t('plate.titleDiffers')}</span
             >{/if}</label
         >
         <input
@@ -187,39 +192,39 @@
         />
       </div>
       <div class="row">
-        <label for="pl-sub">Subtitle <span class="n">a second, smaller line in grey</span></label>
+        <label for="pl-sub"
+          >{t('plate.subtitle')} <span class="n">{t('plate.subtitleHint')}</span></label
+        >
         <input
           id="pl-sub"
           data-testid="plate-subtitle"
           value={words.subtitle}
-          placeholder="none"
+          placeholder={t('plate.subtitleNone')}
           spellcheck="false"
           onchange={(e) => setSubtitle(e.currentTarget.value)}
           onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
         />
       </div>
       <div class="row">
-        <span class="lbl"
-          >Colour <span class="n">as the game's plates carry their version</span></span
-        >
-        <div class="tints" role="radiogroup" aria-label="Plate colour">
-          {#each [...PLATE_TINTS, { id: 'custom', label: 'Custom', ink: tint.ink, glow: tint.glow }] as t (t.id)}
+        <span class="lbl">{t('plate.colour')} <span class="n">{t('plate.colourHint')}</span></span>
+        <div class="tints" role="radiogroup" aria-label={t('plate.colours')}>
+          {#each [...PLATE_TINTS, { id: 'custom', label: 'Custom', ink: tint.ink, glow: tint.glow }] as x (x.id)}
             <button
               class="tint"
-              class:on={tint.id === t.id}
+              class:on={tint.id === x.id}
               role="radio"
-              aria-checked={tint.id === t.id}
-              data-testid="plate-tint-{t.id}"
-              title={t.label}
-              onclick={() => pickTint(t.id)}
+              aria-checked={tint.id === x.id}
+              data-testid="plate-tint-{x.id}"
+              title={tintName(x)}
+              onclick={() => pickTint(x.id)}
             >
               <span
                 class="chip"
-                style:color="#{t.ink}"
-                style:text-shadow={t.glow ? `0 0 3px #${t.glow}, 0 0 3px #${t.glow}` : 'none'}
-                >{t.id === 'custom' ? '?' : 'Aa'}</span
+                style:color="#{x.ink}"
+                style:text-shadow={x.glow ? `0 0 3px #${x.glow}, 0 0 3px #${x.glow}` : 'none'}
+                >{x.id === 'custom' ? '?' : 'Aa'}</span
               >
-              <span class="name">{t.label}</span>
+              <span class="name">{tintName(x)}</span>
             </button>
           {/each}
         </div>
@@ -227,7 +232,8 @@
       {#if tint.id === 'custom'}
         <div class="cols">
           <label class="check"
-            >Letters <input
+            >{t('plate.ink')}
+            <input
               type="color"
               data-testid="plate-ink"
               value="#{tint.ink}"
@@ -240,7 +246,7 @@
               checked={!!tint.glow}
               onchange={(e) =>
                 void app.art.setPlate({ glow: e.currentTarget.checked ? 'eb4800' : undefined })}
-            />Halo
+            />{t('plate.glow')}
             {#if tint.glow}<input
                 type="color"
                 data-testid="plate-glow"
@@ -252,28 +258,24 @@
       {/if}
       {#if cjkWords || settings.cjk}
         <div class="row">
-          <label for="pl-cjk"
-            >CJK forms <span class="n">how shared ideographs are drawn</span></label
-          >
+          <label for="pl-cjk">{t('plate.cjk')} <span class="n">{t('plate.cjkHint')}</span></label>
           <select
             id="pl-cjk"
             data-testid="plate-cjk"
             value={settings.cjk ?? ''}
             onchange={(e) => void app.art.setPlate({ cjk: e.currentTarget.value || undefined })}
           >
-            <option value="">Automatic ({guessed.label})</option>
-            {#each FORMS as f (f.id)}<option value={f.id}>{f.label}</option>{/each}
+            <option value="">{t('plate.cjkAuto', { forms: t(guessed.label) })}</option>
+            {#each FORMS as f (f.id)}<option value={f.id}>{t(f.label)}</option>{/each}
           </select>
         </div>
       {/if}
-      <p class="hint">
-        Set as the game's own titles are: right-aligned to column 246 on row 22, capitals nine
-        pixels tall (a title with a subtitle sits higher and smaller), condensed when it would not
-        fit - rendered exactly as EZ2PORT renders its plates.
-      </p>
+      <p class="hint">{t('plate.textHint')}</p>
     {:else}
       <div class="row">
-        <label for="pl-img">Image <span class="n">fit to 256x32; black is see-through</span></label>
+        <label for="pl-img"
+          >{t('plate.imageLabel')} <span class="n">{t('plate.imageHint')}</span></label
+        >
         <div class="imgrow">
           <select
             id="pl-img"
@@ -281,21 +283,18 @@
             value={settings.image ?? ''}
             onchange={(e) => void app.art.setPlate({ image: e.currentTarget.value })}
           >
-            {#if !settings.image}<option value="">Choose an image</option>{/if}
+            {#if !settings.image}<option value="">{t('plate.choose')}</option>{/if}
             {#each project.images as im (im)}<option value={im}>{im}</option>{/each}
             {#if settings.image && !project.images.includes(settings.image)}
-              <option value={settings.image}>{settings.image} (missing)</option>
+              <option value={settings.image}>{t('song.missing', { file: settings.image })}</option>
             {/if}
           </select>
           <button class="ez-btn" data-testid="plate-import" onclick={() => void importImage()}
-            >Import…</button
+            >{t('song.import')}</button
           >
         </div>
       </div>
-      <p class="hint">
-        A 256x32 image is used as it is; any other size is squeezed to it. Leave the background
-        black: the wheel adds the plate onto its row, so black shows the row through.
-      </p>
+      <p class="hint">{t('plate.imageInfo')}</p>
     {/if}
   </div>
 </section>

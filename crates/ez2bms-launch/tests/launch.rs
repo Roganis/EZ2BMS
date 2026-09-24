@@ -226,7 +226,7 @@ fn a_publish_refuses_a_folder_that_changed_since_it_was_checked() {
     write_package(&songs, "abc", &[("song.ini".into(), ini("theirs"))]).unwrap();
     let stale = WriteOptions { expect: Some(None), ..Default::default() };
     let e = write_package_with(&songs, "abc", &[("song.ini".into(), ini("me"))], &stale);
-    assert!(matches!(e, Err(LaunchError::Invalid(ref m)) if m.contains("changed since")));
+    assert!(matches!(e, Err(LaunchError::Changed(_))));
     assert_eq!(std::fs::read(songs.join("abc/song.ini")).unwrap(), ini("theirs"));
     // Once the caller has seen it, it may replace it.
     let seen = WriteOptions { expect: Some(Some(ini("theirs"))), ..Default::default() };

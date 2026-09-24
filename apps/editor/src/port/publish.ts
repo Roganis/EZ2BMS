@@ -24,13 +24,12 @@ import {
   type Tier,
 } from '@ez2bms/chart-core';
 import { joinPath, type Inspection, type PackageSpec } from '../bridge';
+import { t } from '../i18n/i18n.svelte';
 import type { App } from '../state/app.svelte';
 import { buildPackage } from './package';
 import { songFindings } from './lint';
 
 const PUBLISH_RATE = 44100;
-
-export const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
 /** A package picture, decoded from the very bytes Publish writes. */
 export interface Thumb {
@@ -166,8 +165,7 @@ export function publishErrors(app: App): Finding[] {
 
 /** Why this review cannot be written as it stands, or undefined. */
 export function refusal(r: Review): string | undefined {
-  if (r.seen.shipped)
-    return `"${r.key}" is the key of a song the game ships: EZ2PORT would play this package in its place everywhere. Choose another key.`;
+  if (r.seen.shipped) return t('publish.shipped', { key: r.key });
   return undefined;
 }
 
@@ -214,11 +212,9 @@ export async function writePublish(app: App, r: Review): Promise<Written> {
 
 /** What a finished publish says: files, and what became of the scores. */
 export function writtenText(key: string, w: Written): string {
-  const scores = [
-    w.kept ? `kept ${plural(w.kept, 'ranking table')}` : '',
-    w.reset ? `reset ${w.reset} for changed charts` : '',
-  ]
-    .filter(Boolean)
-    .join(', ');
-  return `Published ${key}: ${w.files} files in ${w.dir}${scores ? ` (${scores})` : ''}`;
+  const p = { key, files: w.files, dir: w.dir, kept: w.kept, reset: w.reset };
+  if (w.kept && w.reset) return t('publish.writtenKeptReset', p);
+  if (w.kept) return t('publish.writtenKept', p);
+  if (w.reset) return t('publish.writtenReset', p);
+  return t('publish.written', p);
 }

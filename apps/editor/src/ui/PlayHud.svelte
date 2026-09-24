@@ -2,6 +2,7 @@
   // Over the field while playing: the last judgement, the combo, the score
   // and the gauge, placed on the field's own geometry.
   import { J, J_NAMES } from '@ez2bms/chart-core';
+  import { t } from '../i18n/i18n.svelte';
   import type { Hud } from '../play/controller.svelte';
 
   let {
@@ -21,10 +22,10 @@
   aria-live="polite"
 >
   <div class="top">
-    <span class="tag">{hud.kind === 'auto' ? 'AUTO PLAY' : 'TEST PLAY'}</span>
+    <span class="tag">{t(hud.kind === 'auto' ? 'play.kindAuto' : 'play.kindTest')}</span>
     <span class="score" data-testid="hud-score">{String(hud.score).padStart(7, '0')}</span>
   </div>
-  <div class="gauge" title="Gauge {hud.gauge.toFixed(1)}">
+  <div class="gauge" title={t('hud.gauge', { value: hud.gauge.toFixed(1) })}>
     <div class="fill" class:low={gaugePct < 30} style:width="{gaugePct}%"></div>
   </div>
   {#if hud.judge && active}
@@ -32,7 +33,7 @@
       <div class="judge j{hud.judge.j}" data-testid="hud-judge">
         {J_NAMES[hud.judge.j]}
         {#if hud.judge.early !== undefined && hud.judge.j !== J.KOOL}<small
-            >{hud.judge.early ? 'FAST' : 'SLOW'}</small
+            >{t(hud.judge.early ? 'hud.fast' : 'hud.slow')}</small
           >{/if}
       </div>
     {/key}

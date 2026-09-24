@@ -17,6 +17,7 @@ import {
   toBytes,
   type Keyconf,
 } from '@ez2bms/chart-core';
+import { t } from '../i18n/i18n.svelte';
 import { controlsIni, normControls } from '../input/hub.svelte';
 import type { App } from './app.svelte';
 import { toast } from './toasts.svelte';
@@ -81,14 +82,14 @@ export class ControlsState {
     this.binding = row;
     const analog = typeof row === 'string';
     for (;;) {
-      const t = await this.app.input.capture(analog);
-      if (t === null) {
+      const token = await this.app.input.capture(analog);
+      if (token === null) {
         if (this.binding === row) this.binding = null;
         return;
       }
-      if (analog && parseBindspec(t)?.kind !== 'axis') continue;
+      if (analog && parseBindspec(token)?.kind !== 'axis') continue;
       this.binding = null;
-      this.add(row, toBytes(t));
+      this.add(row, toBytes(token));
       return;
     }
   }
@@ -103,9 +104,8 @@ export class ControlsState {
       this.conf.analog[row === 'tt0' ? 0 : 1] = token;
     } else {
       const names = this.conf.names[row]!;
-      if (names.includes(token)) return toast(`${this.label(token)} is bound there already`);
-      if (names.length >= KEY_ALTS)
-        return toast(`A channel takes ${KEY_ALTS} bindings; remove one first`, 'warn');
+      if (names.includes(token)) return toast(t('controls.already', { token: this.label(token) }));
+      if (names.length >= KEY_ALTS) return toast(t('controls.full', { n: KEY_ALTS }), 'warn');
       names.push(token);
     }
     this.commit();
@@ -142,21 +142,17 @@ export class ControlsState {
     this.conf = keyconfDefaults();
     this.debounceMs = DEFAULT_DEBOUNCE_MS;
     this.commit();
-    toast("EZ2PORT's default bindings", 'ok');
+    toast(t('controls.defaultsSet'), 'ok');
   }
 
   /** Take EZ2PORT's keys.ini (and settings.ini Debounce) again. */
   async importPort(): Promise<void> {
     const p = await this.app.input.readPort();
-    if (!p?.keysPath)
-      return toast(
-        "No keys.ini of EZ2PORT's found (its data folder, or its settings folder)",
-        'warn',
-      );
+    if (!p?.keysPath) return toast(t('controls.noPortKeys'), 'warn');
     this.conf = p.conf;
     if (p.debounceMs !== null) this.debounceMs = p.debounceMs;
     this.commit();
-    toast(`Bindings from ${p.keysPath}`, 'ok');
+    toast(t('controls.imported', { path: p.keysPath }), 'ok');
   }
 
   /** The bindings as EZ2PORT's keys.ini. */
@@ -167,9 +163,9 @@ export class ControlsState {
   async copy(): Promise<void> {
     try {
       await navigator.clipboard.writeText(this.keysIni());
-      toast("Copied as keys.ini - paste it into EZ2PORT's keys.ini", 'ok');
+      toast(t('controls.copied'), 'ok');
     } catch {
-      toast('The clipboard is not available here', 'warn');
+      toast(t('controls.noClipboard'), 'warn');
     }
   }
 }

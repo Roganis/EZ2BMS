@@ -17,6 +17,7 @@ import { analysis, type Analysis } from '../edit/analysis';
 import { classicCheck, classicHeal, type ClassicEnv, type Verdict } from '../edit/classic';
 import { BGM, movedConflict, placementConflict } from '../edit/commands';
 import type { ChartDoc, TransactOptions } from '../edit/doc';
+import { said, sayText } from '../i18n/say';
 import type { ChannelId, NoteId, NoteRec } from '../model/types';
 import { OUT_RATE } from '../publish/keysounds';
 import { TICKS_PER_BEAT } from '../timing/ticks';
@@ -98,10 +99,10 @@ export function applyCuts(
   doc: ChartDoc,
   cuts: readonly Cut[],
   env: SliceEnv = {},
-  label = 'Cut stem',
+  label = sayText(said('undo.cut-stem')),
   opts: TransactOptions = {},
 ): SliceResult {
-  if (!cuts.length) return { ok: false, reason: 'nothing to cut there' };
+  if (!cuts.length) return { ok: false, reason: sayText(said('slice.nothing-to-cut')) };
   let keep = [...cuts];
   let v = classicCheck(doc, { insert: keep }, env);
   if (!v.ok && keep.length > 1) {
@@ -136,11 +137,11 @@ export function sliceSplit(doc: ChartDoc, src: string, y: number, env: SliceEnv 
       .some((c) => doc.index.channel(c.id).some((n) => n.y === y));
     return {
       ok: false,
-      reason: at ? 'it is already cut there' : `${src} is not playing there`,
+      reason: sayText(at ? said('slice.already-cut') : said('slice.not-playing', { src })),
       atMs: t,
     };
   }
-  return applyCuts(doc, cuts, env, 'Cut stem');
+  return applyCuts(doc, cuts, env);
 }
 
 /** Heal (remove) a cut in the background, joining its slice to the one before. */
@@ -155,16 +156,15 @@ export function sliceHeal(doc: ChartDoc, id: NoteId, env: SliceEnv = {}): Verdic
  */
 export function sliceMove(doc: ChartDoc, id: NoteId, y: number, env: SliceEnv = {}): Verdict {
   const n = doc.index.get(id);
-  if (!n) return { ok: false, reason: 'that note is gone' };
+  if (!n) return { ok: false, reason: sayText(said('edit.note-gone')) };
   if (y === n.y) return { ok: true };
   const chain = doc.index.channel(n.ch);
   const i = chain.findIndex((m) => m.id === id);
-  if (!n.c || i <= 0)
-    return { ok: false, reason: 'that is where the sound starts - only cuts move' };
+  if (!n.c || i <= 0) return { ok: false, reason: sayText(said('slice.sound-starts')) };
   const prev = chain[i - 1]!;
   const next = chain[i + 1];
   if (!Number.isInteger(y) || y <= prev.y || (next && y >= next.y))
-    return { ok: false, reason: 'a cut stays between the cuts either side of it' };
+    return { ok: false, reason: sayText(said('slice.between-cuts')) };
   if (n.x !== BGM) {
     const why = placementConflict(doc, n.x, y, n.l, new Set([id]));
     if (why) return { ok: false, reason: why };
@@ -172,7 +172,7 @@ export function sliceMove(doc: ChartDoc, id: NoteId, y: number, env: SliceEnv = 
   const patch = [{ id, patch: { y } }];
   const v = classicCheck(doc, { patch }, env);
   if (!v.ok) return v;
-  doc.transact('Move cut', (tx) => tx.patchNotes(patch));
+  doc.transact(sayText(said('undo.move-cut')), (tx) => tx.patchNotes(patch));
   return { ok: true };
 }
 
@@ -187,21 +187,15 @@ export function sliceKey(
   env: SliceEnv = {},
 ): Verdict {
   const notes = ids.map((id) => doc.index.get(id));
-  if (!notes.length || notes.some((n) => !n)) return { ok: false, reason: 'that note is gone' };
+  if (!notes.length || notes.some((n) => !n))
+    return { ok: false, reason: sayText(said('edit.note-gone')) };
   const moved = notes.map((n) => ({ id: n!.id, x, y: n!.y, l: x === BGM ? 0 : n!.l }));
-  if (movedConflict(doc, moved)) return { ok: false, reason: 'the lane is taken there' };
+  if (movedConflict(doc, moved)) return { ok: false, reason: sayText(said('slice.lane-taken')) };
   const patch = moved.map((m) => ({ id: m.id, patch: { x: m.x, l: m.l } }));
   const v = classicCheck(doc, { patch }, env);
   if (!v.ok) return v;
-  const label =
-    x === BGM
-      ? ids.length === 1
-        ? 'Slice to background'
-        : 'Slices to background'
-      : ids.length === 1
-        ? 'Key slice'
-        : 'Key slices';
-  doc.transact(label, (tx) => {
+  const label = said(x === BGM ? 'undo.slice-to-background' : 'undo.key-slice', { n: ids.length });
+  doc.transact(sayText(label), (tx) => {
     tx.patchNotes(patch);
     tx.select(ids, ids[0]);
   });
@@ -257,8 +251,8 @@ export function chopToGrid(
   o: ChopOptions = {},
 ): SliceResult {
   const cuts = chopPlan(doc, src, from, to, step, env, o);
-  if (!cuts.length) return { ok: false, reason: 'nothing to cut there' };
-  return applyCuts(doc, cuts, env, 'Chop to grid');
+  if (!cuts.length) return { ok: false, reason: sayText(said('slice.nothing-to-cut')) };
+  return applyCuts(doc, cuts, env, sayText(said('undo.chop')));
 }
 
 // ---- at onsets --------------------------------------------------------------------

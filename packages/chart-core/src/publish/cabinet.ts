@@ -18,6 +18,7 @@
 //   place (ez2data/songdb.ts patchSongdb: only the changed bytes differ).
 
 import { ez2Encrypt } from '../ez2data/crypt';
+import { said, sayEnglish, type Said } from '../i18n/say';
 import type { Gds } from '../ez2data/gds';
 import { ciEq } from '../ez2data/initext';
 import {
@@ -134,8 +135,8 @@ export interface CabinetPlan {
   dir: string;
   registry: KeysoundRegistry;
   charts: CabinetChartPlan[];
-  /** Charts that cannot go, and why. */
-  refused: { chart: CabinetChart; reason: string }[];
+  /** Charts that cannot go, and why: in English, and `said` in the language chosen (i18n/say.ts). */
+  refused: { chart: CabinetChart; reason: string; said: Said }[];
   songdb: { mode: ModeId; edits: SongdbEdit[] }[];
 }
 
@@ -158,19 +159,18 @@ export function planCabinet(i: CabinetInput): CabinetPlan {
   const out: CabinetPlan = { target, dir, registry, charts: [], refused: [], songdb: [] };
   const taken = new Set<string>();
   const edits = new Map<ModeId, SongdbEdit[]>();
+  const refuse = (chart: CabinetChart, s: Said) =>
+    out.refused.push({ chart, reason: sayEnglish(s), said: s });
   for (const chart of i.charts) {
     const names = modeNames(chart.mode);
     const entry = target.entries[chart.mode];
     if (!entry) {
-      out.refused.push({
-        chart,
-        reason: `the game's ${names.portName} table does not list ${target.dir} (a cabinet export can only replace what the game has)`,
-      });
+      refuse(chart, said('export.not-listed', { table: names.portName, song: target.dir }));
       continue;
     }
     const slot = `${chart.mode} ${chart.tier}`;
     if (taken.has(slot)) {
-      out.refused.push({ chart, reason: `a second ${names.label} ${chart.tier} chart` });
+      refuse(chart, said('export.second-chart', { mode: names.label, tier: chart.tier }));
       continue;
     }
     taken.add(slot);

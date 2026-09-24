@@ -20,6 +20,7 @@
     type ArtJob,
   } from '@ez2bms/chart-core';
   import { joinPath, type ArtPixels } from '../../bridge';
+  import { t, tParts } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import { imageSize, imageUrl, type ArtKind } from '../../state/art.svelte';
   import type { Project } from '../../state/project.svelte';
@@ -277,12 +278,16 @@
       : app.art.setEyecatch(defaultEyecatch(source.src, img.w, img.h)));
   }
 
-  /** What is shown from the source, for the "upscaled" note. */
+  /** The "upscaled" note, when less of the source is shown than the file has pixels. */
   const upscaled = $derived.by(() => {
     if (!img) return '';
-    if (disc) return crop && crop.w < DISC_SIZE ? `${crop.w} px across` : '';
-    if (stretch) return img.w < EYECATCH_W || img.h < EYECATCH_H ? `${img.w}x${img.h}` : '';
-    return crop && crop.w < VISIBLE_W ? `${crop.w} px across` : '';
+    const across = (w: number) => t('art.upscaledWidth', { w });
+    if (disc) return crop && crop.w < DISC_SIZE ? across(crop.w) : '';
+    if (stretch)
+      return img.w < EYECATCH_W || img.h < EYECATCH_H
+        ? t('art.upscaledSize', { w: img.w, h: img.h })
+        : '';
+    return crop && crop.w < VISIBLE_W ? across(crop.w) : '';
   });
   const circle = $derived(
     frame && disc
@@ -300,33 +305,37 @@
   );
 </script>
 
-<section class="art" data-testid="art-{kind}" aria-label={disc ? 'Disc' : 'Eyecatch'}>
+<section
+  class="art"
+  data-testid="art-{kind}"
+  aria-label={t(disc ? 'art.disc.name' : 'art.eyecatch.name')}
+>
   <header>
-    <h3>{disc ? 'Disc' : 'Eyecatch'}</h3>
+    <h3>{t(disc ? 'art.disc.name' : 'art.eyecatch.name')}</h3>
     <span class="what">
       {disc
-        ? `${DISC_SIZE}x${DISC_SIZE} - spins on the song wheel`
-        : `${EYECATCH_W}x${EYECATCH_H} - fills the screen when the song is chosen`}
+        ? t('art.disc.what', { w: DISC_SIZE, h: DISC_SIZE })
+        : t('art.eyecatch.what', { w: EYECATCH_W, h: EYECATCH_H })}
     </span>
     <div class="tools ez-form">
       <select
         data-testid="art-source"
-        aria-label="{disc ? 'Disc' : 'Eyecatch'} image"
+        aria-label={t(disc ? 'art.disc.image' : 'art.eyecatch.image')}
         value={choice}
         onchange={(e) => void pick(e.currentTarget.value)}
       >
-        <option value="">Automatic - as EZ2PORT's importer</option>
-        <option value={NONE}>None</option>
+        <option value="">{t('art.auto')}</option>
+        <option value={NONE}>{t('art.none')}</option>
         {#each project.images as im (im)}
           <option value={im}>{im}</option>
         {/each}
         {#if setting && !project.images.includes(setting.src)}
-          <option value={setting.src}>{setting.src} (missing)</option>
+          <option value={setting.src}>{t('song.missing', { file: setting.src })}</option>
         {/if}
       </select>
     </div>
     <button class="ez-btn" data-testid="art-import" onclick={() => void importHere()}
-      >Import…</button
+      >{t('song.import')}</button
     >
   </header>
 
@@ -375,9 +384,7 @@
             data-testid="art-frame"
             tabindex="0"
             role="slider"
-            aria-label="{disc
-              ? 'Disc'
-              : 'Eyecatch'} crop: drag to move, arrow keys to nudge, + and - to zoom"
+            aria-label={t(disc ? 'art.disc.crop' : 'art.eyecatch.crop')}
             aria-valuenow={crop?.w ?? 0}
             style:left="{frame.x}px"
             style:top="{frame.y}px"
@@ -408,17 +415,15 @@
           ></div>
         {/if}
       {:else if source && !source.path}
-        <p class="empty err">{source.src} is not in the song folder.</p>
+        <p class="empty err">{t('song.notInFolder', { file: source.src })}</p>
       {:else if loadError}
         <p class="empty err">{loadError}</p>
       {:else if !source}
         <p class="empty">
           {#if setting === null}
-            No {kind}: turned off for this song.
-          {:else if disc}
-            No disc yet: the wheel shows a blank one. Choose an image above, or drop one here.
+            {t(disc ? 'art.disc.off' : 'art.eyecatch.off')}
           {:else}
-            No eyecatch yet. Choose an image above, or drop one here.
+            {t(disc ? 'art.disc.empty' : 'art.eyecatch.empty')}
           {/if}
         </p>
       {/if}
@@ -449,7 +454,7 @@
           <div
             class="offscreen right"
             style:left="{(VISIBLE_W / EYECATCH_W) * 100}%"
-            title="Past the right edge of the screen"
+            title={t('art.offscreen')}
           ></div>
           <div
             class="offscreen bottom"
@@ -466,34 +471,38 @@
     {#if source}
       <span class="from">
         {#if source.from === 'chart'}
-          <span>From the charts' <code>{source.field}</code>, as EZ2PORT's importer picks it</span>
+          <span
+            >{#each tParts('art.fromCharts', {}, ['field']) as p, i (i)}{#if 'slot' in p}<code
+                  >{source.field}</code
+                >{:else}{p.text}{/if}{/each}</span
+          >
         {:else}
           <span>{source.src}</span>
         {/if}
-        {#if img}<span class="dim">{img.w}x{img.h}</span>{/if}
+        {#if img}<span class="dim">{`${img.w}x${img.h}`}</span>{/if}
       </span>
       {#if upscaled}
-        <span class="warn">Upscaled from {upscaled}: it will look soft</span>
+        <span class="warn">{upscaled}</span>
       {/if}
       <span class="spacer"></span>
       {#if !disc && img}
-        <div class="ez-seg mode" role="group" aria-label="Eyecatch framing">
+        <div class="ez-seg mode" role="group" aria-label={t('art.framing')}>
           <button
             class:on={!stretch}
             data-testid="art-mode-visible"
-            title="Your 4:3 crop fills the screen; the image carries on past its edges"
-            onclick={() => void setMode('visible')}>Screen 4:3</button
+            title={t('art.visibleTitle')}
+            onclick={() => void setMode('visible')}>{t('art.visible')}</button
           >
           <button
             class:on={stretch}
             data-testid="art-mode-stretch"
-            title="The whole image squeezed to 1024x512, as EZ2PORT's importer does"
-            onclick={() => void setMode('stretch')}>Whole image</button
+            title={t('art.stretchTitle')}
+            onclick={() => void setMode('stretch')}>{t('art.stretch')}</button
           >
         </div>
       {/if}
       {#if resettable}
-        <button class="ez-btn" data-testid="art-reset" onclick={reset}>Reset</button>
+        <button class="ez-btn" data-testid="art-reset" onclick={reset}>{t('art.reset')}</button>
       {/if}
     {/if}
   </footer>

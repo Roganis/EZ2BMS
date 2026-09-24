@@ -2,6 +2,7 @@
 // of ez2play can do, and the test run in progress.
 
 import type { Located, Probe, RunEvent } from '../bridge';
+import { t } from '../i18n/i18n.svelte';
 import type { App } from './app.svelte';
 
 export interface LogLine {
@@ -53,14 +54,17 @@ export class PortState {
     if (e.kind === 'line') this.log.push({ stream: e.stream, text: e.text });
     else {
       this.lastExit = e.outcome;
+      const outcome = t('run.outcome', { outcome: e.outcome });
       this.say(
         e.outcome === 'finished'
-          ? 'EZ2PORT closed normally.'
+          ? t('run.finished')
           : e.outcome === 'usage'
-            ? 'EZ2PORT did not understand the command line (exit 2): this build may be older or newer than EZ2BMS expects.'
+            ? t('run.usage')
             : e.outcome === 'skipped'
-              ? 'EZ2PORT could not find the game data it needs (exit 77).'
-              : `EZ2PORT ended: ${e.outcome}${e.code !== null ? ` (exit ${e.code})` : ''}.`,
+              ? t('run.skipped')
+              : e.code !== null
+                ? t('run.endedCode', { outcome, code: e.code })
+                : t('run.ended', { outcome }),
       );
       this.runId = null;
     }

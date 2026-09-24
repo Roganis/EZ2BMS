@@ -13,6 +13,7 @@
     type ChartBga,
     type MovieInfo,
   } from '@ez2bms/chart-core';
+  import { t, tCore, tParts } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import type { Project } from '../../state/project.svelte';
   import { songFindings } from '../../port/lint';
@@ -144,30 +145,30 @@
   });
 </script>
 
-<section class="bga" data-testid="bga-panel" aria-label="BGA">
+<section class="bga" data-testid="bga-panel" aria-label={t('bga.label')}>
   <div class="side ez-form">
-    <div class="ez-seg" role="group" aria-label="Which movie">
+    <div class="ez-seg" role="group" aria-label={t('bga.which')}>
       <button class:on={source === 'none'} data-testid="bga-none" onclick={() => pickSource('none')}
-        >None</button
+        >{t('bga.none')}</button
       >
       <button
         class:on={source === 'charts'}
         data-testid="bga-charts"
         disabled={!fromCharts}
-        title={fromCharts ? '' : 'No chart names a movie'}
-        onclick={() => pickSource('charts')}>The charts'</button
+        title={fromCharts ? '' : t('bga.noChartMovie')}
+        onclick={() => pickSource('charts')}>{t('bga.charts')}</button
       >
       <button
         class:on={source === 'file'}
         data-testid="bga-file"
         disabled={!project.movies.length}
-        onclick={() => pickSource('file')}>A movie</button
+        onclick={() => pickSource('file')}>{t('bga.file')}</button
       >
     </div>
     {#if source === 'file'}
       <select
         data-testid="bga-movie"
-        aria-label="Movie"
+        aria-label={t('bga.movie')}
         value={settings?.file}
         onchange={(e) => void app.bga.patch({ file: e.currentTarget.value, startMs: undefined })}
       >
@@ -175,40 +176,51 @@
       </select>
     {:else if source === 'charts' && fromCharts}
       <p class="hint">
-        <code>{fromCharts.bga.src}</code>, named by <code>{fromCharts.file}</code>'s first BGA event
-        - as EZ2PORT's importer would take it.
+        {#each tParts('bga.fromCharts', {}, ['movie', 'chart']) as p, i (i)}{#if 'slot' in p}<code
+              >{p.slot === 'movie' ? fromCharts.bga.src : fromCharts.file}</code
+            >{:else}{p.text}{/if}{/each}
       </p>
     {/if}
     <button class="ez-btn" data-testid="bga-import" onclick={() => void app.bga.pickAndImport()}
-      >Import a movie…</button
+      >{t('bga.import')}</button
     >
 
     {#if bga}
       <div class="facts" data-testid="bga-facts">
         {#if !bga.movie}
           <p class="warn">
-            <code>{bga.src}</code> is not a movie: EZ2PORT shows no BGA for it.
+            {#each tParts('bga.notMovie', {}, ['file']) as p, i (i)}{#if 'slot' in p}<code
+                  >{bga.src}</code
+                >{:else}{p.text}{/if}{/each}
           </p>
         {:else if !bga.path}
-          <p class="err"><code>{bga.src}</code> is not in the song folder.</p>
+          <p class="err">
+            {#each tParts('song.notInFolder', {}, ['file']) as p, i (i)}{#if 'slot' in p}<code
+                  >{bga.src}</code
+                >{:else}{p.text}{/if}{/each}
+          </p>
         {:else if !probe}
-          <p class="hint">Reading <code>{bga.path}</code>…</p>
+          <p class="hint">
+            {#each tParts('bga.reading', {}, ['file']) as p, i (i)}{#if 'slot' in p}<code
+                  >{bga.path}</code
+                >{:else}{p.text}{/if}{/each}
+          </p>
         {:else if 'error' in probe}
           <p class="err">{probe.error}</p>
         {:else}
           <dl>
-            <dt>File</dt>
+            <dt>{t('bga.fileLabel')}</dt>
             <dd><code>{bga.path}</code></dd>
-            <dt>Container</dt>
+            <dt>{t('bga.container')}</dt>
             <dd>{containerName(probe.container)}</dd>
-            <dt>Video</dt>
-            <dd data-testid="bga-codec">{probe.codec ?? 'none found'}</dd>
-            <dt>Size</dt>
+            <dt>{t('bga.video')}</dt>
+            <dd data-testid="bga-codec">{probe.codec ?? t('bga.noCodec')}</dd>
+            <dt>{t('bga.size')}</dt>
             <dd data-testid="bga-size">
-              {probe.width && probe.height ? `${probe.width}x${probe.height}` : 'unknown'}
+              {probe.width && probe.height ? `${probe.width}x${probe.height}` : t('bga.unknown')}
             </dd>
-            <dt>Length</dt>
-            <dd>{probe.durationMs !== null ? clock(probe.durationMs) : 'unknown'}</dd>
+            <dt>{t('bga.length')}</dt>
+            <dd>{probe.durationMs !== null ? clock(probe.durationMs) : t('bga.unknown')}</dd>
           </dl>
           <p
             class="verdict"
@@ -216,13 +228,13 @@
             data-testid="bga-verdict"
             data-ok={verdict ? 'false' : 'true'}
           >
-            {verdict ? `EZ2PORT will not play it: ${verdict}` : "EZ2PORT's Windows build plays it."}
+            {verdict ? t('bga.cannotPlay', { reason: verdict }) : t('bga.plays')}
           </p>
         {/if}
       </div>
 
       <div class="row">
-        <label for="bga-start">Frame 0 at (chart ms)</label>
+        <label for="bga-start">{t('bga.start')}</label>
         <div class="start">
           <input
             id="bga-start"
@@ -240,11 +252,11 @@
             data-testid="bga-start-event"
             disabled={settings?.startMs === undefined}
             onclick={() => startAt(undefined)}
-            title="The chart's first BGA event, as the importer times it">The chart's event</button
+            title={t('bga.eventTitle')}>{t('bga.event')}</button
           >
-          <button class="ez-btn" onclick={() => startAt(0)}>At 0</button>
+          <button class="ez-btn" onclick={() => startAt(0)}>{t('bga.atZero')}</button>
           <button class="ez-btn" data-testid="bga-start-cursor" onclick={() => startAt(cursorMs)}
-            >At the cursor</button
+            >{t('bga.atCursor')}</button
           >
         </div>
       </div>
@@ -252,13 +264,12 @@
 
     {#each findings as f (f.rule + f.message)}
       <p class={f.severity === 'error' ? 'err' : f.severity === 'warning' ? 'warn' : 'hint'}>
-        {f.message}
+        {tCore(f)}
       </p>
     {/each}
     <p class="hint">
-      EZ2PORT draws the movie behind the play field, stretched to 640x480, from its frame 0 at the
-      start above; it is black before that and after the movie ends - it never loops - and its sound
-      is not played. It is copied into the package as <code>bga</code> plus its extension.
+      {#each tParts('bga.hint', {}, ['file']) as p, i (i)}{#if 'slot' in p}<code>bga</code
+          >{:else}{p.text}{/if}{/each}
     </p>
   </div>
 
@@ -272,25 +283,24 @@
           preload="auto"
           playsinline
           class:hidden={shown !== 'movie'}
-          onerror={() =>
-            (videoError =
-              'This webview cannot show this movie. What EZ2PORT can play is its own decoder’s call, above.')}
+          onerror={() => (videoError = t('bga.cannotShow'))}
           onloadeddata={() => (videoError = '')}
         ></video>
       {/if}
       {#if shown === 'before'}<span class="note"
-          >black: the movie starts at {clock(bga!.startMs)}</span
-        >{:else if shown === 'after'}<span class="note">black: the movie has ended</span
-        >{:else if !bga}<span class="note">no BGA</span>{/if}
+          >{t('bga.before', { time: clock(bga!.startMs) })}</span
+        >{:else if shown === 'after'}<span class="note">{t('bga.after')}</span>{:else if !bga}<span
+          class="note">{t('bga.noBga')}</span
+        >{/if}
     </div>
     {#if videoError}<p class="hint" data-testid="bga-video-error">{videoError}</p>{/if}
     <div class="transport">
       <button class="ez-btn" data-testid="bga-play" disabled={!slot} onclick={() => void toggle()}
-        >{app.view.playing ? 'Stop' : 'Play from here'}</button
+        >{t(app.view.playing ? 'bga.stop' : 'bga.play')}</button
       >
       <input
         type="range"
-        aria-label="Song position"
+        aria-label={t('bga.position')}
         data-testid="bga-scrub"
         min="0"
         max={Math.max(1000, Math.ceil(endMs))}

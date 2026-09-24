@@ -1,16 +1,27 @@
-// The editor in Japanese. Typed against the English: a key English does not
-// have is an error; one not translated yet falls back to English.
-// Drafted by an AI, for a native speaker to review (AI-DISCLOSURE.md).
+// The editor in Japanese, one file per area as the English. Typed against
+// the English: a key English does not have is an error; one not translated
+// yet falls back to English. Drafted by an AI, for a native speaker to
+// review (AI-DISCLOSURE.md); the words chosen are in docs/i18n-glossary.md.
 
 import type { MessageKey } from '../en';
+import { drawers } from './drawers';
+import { edit } from './edit';
+import { help } from './help';
+import { host } from './host';
+import { play } from './play';
+import { port } from './port';
+import { shell } from './shell';
+import { song } from './song';
+import { transfer } from './transfer';
 
 export const ja: Partial<Record<MessageKey, string>> = {
-  'cmd.app.preferences': '環境設定（言語、アップデート）',
-  'cmd.help.about': 'EZ2BMS について',
-  'prefs.label': '環境設定',
-  'prefs.language': '言語',
-  'prefs.languageAuto': 'システムに合わせる（{name}）',
-  'prefs.languageHint': '日本語訳は AI による下訳です。誤りがあればお知らせください。',
-  'prefs.updates': '起動時に新しいバージョンを確認する（1日1回）',
-  'prefs.close': '閉じる',
+  ...shell,
+  ...help,
+  ...host,
+  ...drawers,
+  ...edit,
+  ...play,
+  ...port,
+  ...song,
+  ...transfer,
 };

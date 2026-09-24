@@ -2,6 +2,7 @@
   // Where EZ2PORT is, what this build of ez2play can do, and the buttons that
   // use it.
   import type { AudioCacheInfo } from '../../bridge/types';
+  import { t, tParts } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
 
   const s = app.settings;
@@ -33,7 +34,7 @@
     cache = await app.backend.audio.cacheInfo().catch(() => null);
   };
   $effect(() => void refreshCache());
-  const mb = (bytes: number) => `${Math.round(bytes / 2 ** 20)} MB`;
+  const mb = (bytes: number) => Math.round(bytes / 2 ** 20);
   async function setCap(v: number) {
     const cap = Math.max(0, Math.min(1 << 20, Math.round(v)));
     s.set('audioCacheMB', cap);
@@ -48,12 +49,12 @@
   const caps = $derived(
     port.probe
       ? [
-          ['Private songs folder', port.probe.songs_root, true],
-          ['Log file', port.probe.log_file, true],
-          ['Test from the cursor (--start)', port.probe.start_at, false],
-          ['Skip READY (--no-ready)', port.probe.skip_ready, false],
-          ['One window, reused (--viewer)', port.probe.viewer, false],
-          ['Result back to EZ2BMS (--result)', port.probe.result_file, false],
+          [t('port.cap.songsRoot'), port.probe.songs_root, true],
+          [t('port.cap.logFile'), port.probe.log_file, true],
+          [t('port.cap.start'), port.probe.start_at, false],
+          [t('port.cap.skipReady'), port.probe.skip_ready, false],
+          [t('port.cap.viewer'), port.probe.viewer, false],
+          [t('port.cap.result'), port.probe.result_file, false],
         ]
       : [],
   );
@@ -61,93 +62,87 @@
 
 <div class="ez-form">
   {#if web}
-    <p class="warn">
-      The browser preview cannot run EZ2PORT or write to your songs folder. Use the desktop app.
-    </p>
+    <p class="warn">{t('port.web')}</p>
   {/if}
   <div class="row">
-    <span class="lbl">Game folder (with sound and system)</span>
+    <span class="lbl">{t('port.gameRoot')}</span>
     <div class="path">
-      <code>{s.data.gameRoot ?? 'not set'}</code>
-      <button
-        class="ez-btn"
-        onclick={() => pick('gameRoot', 'Your EZ2AC data folder')}
-        disabled={web}>Choose…</button
+      <code>{s.data.gameRoot ?? t('port.notSet')}</code>
+      <button class="ez-btn" onclick={() => pick('gameRoot', t('port.pickGame'))} disabled={web}
+        >{t('port.choose')}</button
       >
     </div>
   </div>
   <div class="row">
-    <span class="lbl">ez2play</span>
+    <span class="lbl">{t('port.ez2play')}</span>
     <div class="path">
-      <code>{s.data.ez2play ?? 'not found'}</code>
-      <button class="ez-btn" onclick={() => pickFile('ez2play', "EZ2PORT's ez2play")} disabled={web}
-        >Choose…</button
+      <code>{s.data.ez2play ?? t('port.notFound')}</code>
+      <button
+        class="ez-btn"
+        onclick={() => pickFile('ez2play', t('port.pickEz2play'))}
+        disabled={web}>{t('port.choose')}</button
       >
     </div>
     {#if port.probeError}<span class="warn">{port.probeError}</span>{/if}
   </div>
   <div class="row">
-    <span class="lbl">Unpacked executable (optional)</span>
+    <span class="lbl">{t('port.exe')}</span>
     <div class="path">
-      <code>{s.data.exe ?? 'let EZ2PORT find it'}</code>
-      <button
-        class="ez-btn"
-        onclick={() => pickFile('exe', 'Your unpacked EZ2AC executable')}
-        disabled={web}>Choose…</button
+      <code>{s.data.exe ?? t('port.exeAuto')}</code>
+      <button class="ez-btn" onclick={() => pickFile('exe', t('port.pickExe'))} disabled={web}
+        >{t('port.choose')}</button
       >
     </div>
   </div>
   <div class="row">
-    <span class="lbl">Publish into</span>
+    <span class="lbl">{t('port.songsRoot')}</span>
     <div class="path">
-      <code>{s.data.songsRoot ?? 'not set'}</code>
-      <button
-        class="ez-btn"
-        onclick={() => pick('songsRoot', 'EZ2PORT songs folder')}
-        disabled={web}>Choose…</button
+      <code>{s.data.songsRoot ?? t('port.notSet')}</code>
+      <button class="ez-btn" onclick={() => pick('songsRoot', t('port.pickSongs'))} disabled={web}
+        >{t('port.choose')}</button
       >
     </div>
   </div>
 
-  <h3>Play field</h3>
+  <h3>{t('port.playfield')}</h3>
   <label class="check"
     ><input
       type="checkbox"
       checked={s.data.gameSkin}
       disabled={!s.data.gameRoot}
       onchange={(e) => s.set('gameSkin', e.currentTarget.checked)}
-    /> Draw with the game's own panel</label
+    />
+    {t('port.gameSkin')}</label
   >
   <p class="hint" data-testid="skin-status">
     {#if skin.status.kind === 'ready'}
       <span class="okay">✓</span>
       {skin.status.text}{#if skin.status.missing.length}
-        · <span class="warn">{skin.status.missing.length} textures not found</span>{/if}
+        · <span class="warn">{t('skin.missing', { n: skin.status.missing.length })}</span>{/if}
     {:else if skin.status.kind === 'none' || skin.status.kind === 'error'}
-      <span class="warn">{skin.status.text}</span> - drawing the neon skin
+      {#each tParts('skin.failed', { error: skin.status.text }, ['error']) as p, i (i)}
+        {#if 'slot' in p}<span class="warn">{skin.status.text}</span>{:else}{p.text}{/if}
+      {/each}
     {:else}
       {skin.status.text}
     {/if}
   </p>
   {#if skin.status.kind === 'ready' && skin.status.missing.length}
     <details>
-      <summary>Not found</summary>
+      <summary>{t('skin.notFound')}</summary>
       <ul class="missing-list">
         {#each skin.status.missing as m (m)}<li><code>{m}</code></li>{/each}
       </ul>
     </details>
   {/if}
   {#if s.data.gameRoot}
-    <button class="ez-btn" onclick={() => skin.reload()}>Reload the panel</button>
+    <button class="ez-btn" onclick={() => skin.reload()}>{t('skin.reload')}</button>
   {/if}
 
-  <h3>Long sounds</h3>
-  <p class="hint">
-    Sounds of 20 s and more (stems) are kept decoded on disk, so a song opens and publishes without
-    decoding them again.
-  </p>
+  <h3>{t('port.cache.heading')}</h3>
+  <p class="hint">{t('port.cache.hint')}</p>
   <div class="row">
-    <span class="lbl">Disk to use (MB, 0 = off)</span>
+    <span class="lbl">{t('port.cache.cap')}</span>
     <div class="path">
       <input
         class="num"
@@ -162,46 +157,47 @@
         class="ez-btn"
         onclick={clearCache}
         disabled={!cache?.dir || !cache.entries}
-        data-testid="audio-cache-clear">Clear</button
+        data-testid="audio-cache-clear">{t('port.cache.clear')}</button
       >
     </div>
     <span class="hint" data-testid="audio-cache-info">
       {#if !cache?.dir}
-        Not in the browser preview.
+        {t('port.cache.web')}
       {:else}
-        {cache.entries}
-        {cache.entries === 1 ? 'sound' : 'sounds'}, {mb(cache.bytes)} of {mb(cache.cap)}
+        {t('port.cache.info', { n: cache.entries, used: mb(cache.bytes), cap: mb(cache.cap) })}
       {/if}
     </span>
   </div>
 
   {#if port.probe}
-    <h3>This ez2play</h3>
+    <h3>{t('port.probe.heading')}</h3>
     <p class="hint">
-      {port.probe.options.length} options{port.probe.commit ? ` · source ${port.probe.commit}` : ''}
+      {port.probe.commit
+        ? t('port.probe.optionsSource', { n: port.probe.options.length, commit: port.probe.commit })
+        : t('port.probe.options', { n: port.probe.options.length })}
     </p>
     <ul class="caps">
       {#each caps as [label, ok, needed] (label)}
         <li class:ok class:missing={!ok && needed}>
-          <span>{ok ? '✓' : '·'}</span>{label}{#if !ok && !needed}<small>
-              requested from EZ2PORT</small
+          <span>{ok ? '✓' : '·'}</span>{label}{#if !ok && !needed}<small
+              >{t('port.cap.requested')}</small
             >{/if}
         </li>
       {/each}
     </ul>
   {/if}
 
-  <h3>Go</h3>
+  <h3>{t('port.go')}</h3>
   <div class="cols">
     <button class="ez-btn" onclick={() => app.commands.run('port.test')} disabled={web}
-      >Test <kbd>F5</kbd></button
+      >{t('port.test')} <kbd>F5</kbd></button
     >
     <button class="ez-btn" onclick={() => app.commands.run('port.testAuto')} disabled={web}
-      >Auto <kbd>⇧F5</kbd></button
+      >{t('port.auto')} <kbd>⇧F5</kbd></button
     >
   </div>
   <button class="ez-btn" onclick={() => app.commands.run('port.publish')}
-    >Publish song <kbd>Ctrl ⇧ P</kbd></button
+    >{t('port.publish')} <kbd>Ctrl ⇧ P</kbd></button
   >
 </div>
 

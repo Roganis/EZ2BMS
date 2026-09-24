@@ -27,6 +27,7 @@ import {
   type PviColor,
   type Side,
 } from '@ez2bms/chart-core';
+import { t } from '../i18n/i18n.svelte';
 import { abmName, Vfs, type SkinFs, type SkinImage } from './vfs';
 
 export type { SkinFs, SkinImage } from './vfs';
@@ -102,7 +103,12 @@ export async function loadGameSkin(
   const player: 0 | 1 = side === 'P1' ? 0 : 1;
   const path = await vfs.resolve(base, `system/${name}/panel/STYLE_${name}1_${player}.pvi`);
   if (!path)
-    throw new SkinNotFound(`no STYLE_${name}1_${player}.pvi in ${root}/system/${name}/panel`);
+    throw new SkinNotFound(
+      t('skin.noPanel', {
+        file: `STYLE_${name}1_${player}.pvi`,
+        dir: `${root}/system/${name}/panel`,
+      }),
+    );
   const pvi = parsePvi(decodeCp949(await vfs.read(path)));
   const dir = path.slice(0, path.lastIndexOf('/'));
   const missing: string[] = [];

@@ -6,19 +6,35 @@
   // are new, what the cabinet plays differently. Export into a game folder
   // keeps a backup, and Past exports puts it back.
   import { modeNames, MODES, type ModeId } from '@ez2bms/chart-core';
+  import { t, tCore, tParts } from '../../i18n/i18n.svelte';
   import { formatWhen } from '../../state/autosave';
   import { app } from '../../state/app.svelte';
 
   const ex = app.exporter;
-  const TABS = [
-    { id: 'cabinet', label: 'EZ2AC cabinet' },
+  const TABS = $derived([
+    { id: 'cabinet', label: t('export.tab.cabinet') },
     { id: 'bms', label: 'BMS' },
-    { id: 'history', label: 'Past exports' },
-  ] as const;
+    { id: 'history', label: t('export.tab.history') },
+  ] as const);
   const TIERS = ['NM', 'HD', 'SHD', 'EX'] as const;
+  /** The chart table's columns; the last is the chart's .ini, named by its extension. */
+  const COLUMNS = $derived([
+    t('export.col.chart'),
+    t('export.col.becomes'),
+    t('export.col.level'),
+    t('export.col.bpm'),
+    t('export.col.size'),
+    '.ini',
+  ]);
+  const ENCODINGS = $derived([
+    { id: 'auto', label: t('export.bms.encodingAuto') },
+    { id: 'shift_jis', label: 'Shift-JIS' },
+    { id: 'euc-kr', label: t('export.bms.korean') },
+    { id: 'utf-8', label: t('export.bms.utf8') },
+  ] as const);
   const MAX = 131068;
   const sev = { error: '⛔', warning: '⚠', info: 'ℹ' } as const;
-  const kb = (n: number) => `${Math.round(n / 102.4) / 10} KB`;
+  const kb = (n: number) => Math.round(n / 102.4) / 10;
   const bpm = (n: number) => Math.round(n * 100) / 100;
   const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
   const label = (m: ModeId) => modeNames(m).label;
@@ -30,7 +46,7 @@
       .map(
         (m) =>
           `${m.label} ${
-            entries[m.id]!.steps.map((s, t) => (s.level ? `${TIERS[t]} ${s.level}` : ''))
+            entries[m.id]!.steps.map((s, i) => (s.level ? `${TIERS[i]} ${s.level}` : ''))
               .filter(Boolean)
               .join(' ') || '-'
           }`,
@@ -51,19 +67,19 @@
 
 <svelte:window onkeydown={onkey} />
 
-<section class="dialog ez-form" data-testid="export-dialog" aria-label="Export the song">
+<section class="dialog ez-form" data-testid="export-dialog" aria-label={t('export.label')}>
   <header>
-    <h2>Export</h2>
+    <h2>{t('export.title')}</h2>
     <nav class="tabs">
-      {#each TABS as t (t.id)}
+      {#each TABS as tab (tab.id)}
         <button
-          class:on={ex.tab === t.id}
-          onclick={() => void ex.enter(t.id)}
-          data-testid="export-tab-{t.id}">{t.label}</button
+          class:on={ex.tab === tab.id}
+          onclick={() => void ex.enter(tab.id)}
+          data-testid="export-tab-{tab.id}">{tab.label}</button
         >
       {/each}
     </nav>
-    <button class="x" onclick={() => ex.close()} aria-label="Close">×</button>
+    <button class="x" onclick={() => ex.close()} aria-label={t('export.close')}>×</button>
   </header>
 
   {#if ex.tab === 'cabinet'}
@@ -71,28 +87,30 @@
       <aside class="list">
         <input
           type="search"
-          placeholder="Search the game's songs"
+          placeholder={t('export.search')}
           bind:value={ex.query}
           data-testid="export-search"
         />
         {#if ex.loadingGame}
-          <p class="hint">Reading the song tables…</p>
+          <p class="hint">{t('export.reading')}</p>
         {:else if ex.gameError}
           <p class="warn">{ex.gameError}</p>
-          <button class="ez-btn" onclick={() => void ex.reloadGame()}>Read again</button>
+          <button class="ez-btn" onclick={() => void ex.reloadGame()}
+            >{t('export.readAgain')}</button
+          >
         {/if}
         <ul>
-          {#each ex.found as t (t.dir)}
+          {#each ex.found as song (song.dir)}
             <li>
               <button
                 class="song"
-                class:on={ex.target?.dir === t.dir}
-                onclick={() => ex.choose(t)}
+                class:on={ex.target?.dir === song.dir}
+                onclick={() => ex.choose(song)}
                 data-testid="export-target"
               >
-                <b>{t.title?.title ?? t.dir}</b>
-                <span class="dim">{t.dir}</span>
-                <span class="charts">{levels(t.entries)}</span>
+                <b>{song.title?.title ?? song.dir}</b>
+                <span class="dim">{song.dir}</span>
+                <span class="charts">{levels(song.entries)}</span>
               </button>
             </li>
           {/each}
@@ -100,20 +118,14 @@
       </aside>
       <div class="detail">
         {#if !ex.target}
-          <p class="hint">
-            Pick the game's song to replace. A cabinet export remixes a song the game already has:
-            your charts take its charts' places (a tier it lacks is added), its song.bin record gets
-            their levels and BPM, and new keysounds go beside its own - nothing of the game's is
-            written over but the charts, and a backup keeps those.
-          </p>
+          <p class="hint">{t('export.hint')}</p>
         {:else}
-          {@const t = ex.target}
-          <h3>{t.title?.title ?? t.dir}</h3>
-          <p class="dim">sound/{t.dir}</p>
+          {@const target = ex.target}
+          <h3>{target.title?.title ?? target.dir}</h3>
+          <p class="dim">{`sound/${target.dir}`}</p>
           {#if ex.otherSong}
             <p class="warn" data-testid="export-other-song">
-              This song came from {ex.otherSong}: exporting into {t.dir} puts your charts in place of
-              {t.dir}'s.
+              {t('export.otherSong', { from: ex.otherSong, dir: target.dir })}
             </p>
           {/if}
           {@render charts()}
@@ -134,10 +146,10 @@
   {@const r = s.kind === 'ready' || s.kind === 'writing' || s.kind === 'done' ? s.review : null}
   <table class="files">
     <thead>
-      <tr
-        ><th></th><th>Chart</th><th>Becomes</th><th>Level</th><th>BPM</th><th>Size</th><th>.ini</th
-        ></tr
-      >
+      <tr>
+        <th></th>
+        {#each COLUMNS as col, i (i)}<th>{col}</th>{/each}
+      </tr>
     </thead>
     <tbody>
       {#each project.charts as c (c.file)}
@@ -157,7 +169,9 @@
           {#if cp}
             <td
               >{base(cp.paths.ez)}
-              <span class="dim">{cp.exists.ez ? 'replaces' : 'new'}</span></td
+              <span class="dim"
+                >{cp.exists.ez ? t('export.chart.replaces') : t('export.chart.new')}</span
+              ></td
             >
             <td data-testid="export-level"
               >{cp.before.level === cp.level
@@ -170,13 +184,15 @@
                 : `${bpm(cp.before.b)} → ${bpm(cp.bpm)}`}</td
             >
             <td class:bad={!!ez && ez.bytes.length > MAX}
-              >{ez ? `${kb(ez.bytes.length)} of 128 KB` : ''}</td
+              >{ez ? t('export.chart.size', { size: kb(ez.bytes.length) }) : ''}</td
             >
             <td class="dim">{r!.out.ini[i]}</td>
           {:else if refused}
-            <td colspan="5" class="warn">{refused.reason}</td>
+            <td colspan="5" class="warn"
+              >{tCore({ message: refused.reason, said: refused.said })}</td
+            >
           {:else}
-            <td colspan="5" class="dim">{ex.skip[c.file] ? 'left out' : ''}</td>
+            <td colspan="5" class="dim">{ex.skip[c.file] ? t('export.chart.skipped') : ''}</td>
           {/if}
         </tr>
       {/each}
@@ -194,8 +210,9 @@
         onchange={() => ex.setDest('game')}
         data-testid="export-dest-game"
       />
-      Into the game folder <span class="dim">{app.settings.data.gameRoot}</span> - a backup keeps every
-      file it replaces</label
+      {#each tParts('export.dest.game', {}, ['root']) as p, i (i)}
+        {#if 'slot' in p}<span class="dim">{app.settings.data.gameRoot}</span>{:else}{p.text}{/if}
+      {/each}</label
     >
     <label class="check"
       ><input
@@ -204,16 +221,17 @@
         checked={ex.destKind === 'folder'}
         onchange={() => ex.setDest('folder')}
         data-testid="export-dest-folder"
-      /> Into a new folder shaped like the game, to copy onto the cabinet</label
+      />
+      {t('export.dest.folder')}</label
     >
     {#if ex.destKind === 'folder'}
       <div class="line">
-        <span class="lbl">New folder</span>
+        <span class="lbl">{t('export.dest.new')}</span>
         <input class="path" bind:value={ex.folder} data-testid="export-folder" />
         <button
           class="ez-btn"
-          onclick={() => pickFolder((d) => (ex.folder = d), 'An empty folder for the export')}
-          >Choose…</button
+          onclick={() => pickFolder((d) => (ex.folder = d), t('export.dest.pick'))}
+          >{t('export.choose')}</button
         >
       </div>
       <label class="check"
@@ -221,13 +239,10 @@
           type="checkbox"
           checked={ex.includeUnchanged}
           onchange={(e) => ex.setIncludeUnchanged(e.currentTarget.checked)}
-        /> Also copy the keysounds the game already has</label
+        />
+        {t('export.dest.unchanged')}</label
       >
-      <p class="warn">
-        song.bin is this game's whole table for the mode: copy it only onto a cabinet with the same
-        game version, or its other songs' levels change with it. EZ2BMS-EXPORT.txt in the folder
-        says what each file replaces.
-      </p>
+      <p class="warn">{t('export.dest.songdb')}</p>
     {/if}
   </fieldset>
 {/snippet}
@@ -235,22 +250,21 @@
 {#snippet review()}
   {@const s = ex.cabinet}
   {#if s.kind === 'preparing'}
-    <p class="hint">Working out the export…</p>
+    <p class="hint">{t('export.preparing')}</p>
   {:else if s.kind === 'failed'}
     <p class="warn" data-testid="export-failed">{s.message}</p>
   {:else if s.kind !== 'idle'}
     {@const r = s.review}
     <div class="summary">
       <p data-testid="export-sounds">
-        Keysounds: <b>{r.sounds.write}</b> new, {r.sounds.reused} already in the folder{r.sounds
-          .missing
-          ? `, ${r.sounds.missing} missing`
-          : ''}{r.sounds.converted ? ` (${r.sounds.converted} converted)` : ''}
+        {#each tParts('export.sounds', r.sounds, ['write']) as p, i (i)}
+          {#if 'slot' in p}<b>{r.sounds.write}</b>{:else}{p.text}{/if}
+        {/each}
       </p>
       {#each r.plan.songdb as db (db.mode)}
         {@const changed = r.out.songdbChanged[db.mode]?.length ?? 0}
         <p data-testid="export-songdb">
-          {modeNames(db.mode).portName} song.bin:
+          {t('export.songdb', { mode: modeNames(db.mode).portName })}
           {#if changed}
             {db.edits
               .map((e) => {
@@ -258,22 +272,22 @@
                 return `${TIERS[e.tier]} ${before.level === e.level ? e.level : `${before.level || '-'} → ${e.level}`}`;
               })
               .join(', ')}
-            <span class="dim">({changed} bytes change)</span>
+            <span class="dim">{t('export.songdb.bytes', { n: changed })}</span>
           {:else}
-            <span class="dim">unchanged</span>
+            <span class="dim">{t('export.songdb.unchanged')}</span>
           {/if}
         </p>
       {/each}
     </div>
     {#if r.findings.length}
       <details class="notes" open={r.findings.some((f) => f.severity !== 'info')}>
-        <summary>{r.findings.length} thing{r.findings.length === 1 ? '' : 's'} to know</summary>
+        <summary>{t('export.findings', { n: r.findings.length })}</summary>
         <ul data-testid="export-findings">
           {#each r.findings as f, i (i)}
             <li class={f.severity} data-rule={f.rule}>
               {sev[f.severity]}
               {#if f.chart}<b>{f.chart}:</b>{/if}
-              {f.message}
+              {tCore(f)}
             </li>
           {/each}
         </ul>
@@ -282,17 +296,20 @@
     {#if s.kind === 'done'}
       <div class="result" data-testid="export-result">
         {#if s.report}
+          {@const report = s.report}
+          {@const counts = { replaced: report.replaced.length, added: report.created.length }}
           <p>
-            Exported into the game: {s.report.replaced.length} replaced, {s.report.created.length} added.
-            The backup is <code>{s.report.stamp}</code>.
+            {#each tParts('export.done', counts, ['stamp']) as p, i (i)}
+              {#if 'slot' in p}<code>{report.stamp}</code>{:else}{p.text}{/if}
+            {/each}
           </p>
           <button
             class="ez-btn"
-            onclick={() => void ex.restore(s.report!.stamp)}
-            data-testid="export-undo">Undo this export</button
+            onclick={() => void ex.restore(report.stamp)}
+            data-testid="export-undo">{t('export.undo')}</button
           >
         {:else if s.folder}
-          <p>Wrote {s.folder.files} files into {s.folder.dir}.</p>
+          <p>{t('export.wrote', { files: s.folder.files, dir: s.folder.dir })}</p>
         {/if}
       </div>
     {:else}
@@ -302,7 +319,8 @@
           class="ez-btn primary"
           disabled={!!why || s.kind === 'writing'}
           onclick={() => void ex.writeCabinet()}
-          data-testid="export-go">{s.kind === 'writing' ? 'Exporting…' : 'Export'}</button
+          data-testid="export-go"
+          >{s.kind === 'writing' ? t('export.going') : t('export.go')}</button
         >
         {#if why}<span class="warn">{why}</span>{/if}
         {#if ex.progress}<span class="dim">{ex.progress[0]} / {ex.progress[1]}</span>{/if}
@@ -313,12 +331,15 @@
 
 {#snippet bmsTab()}
   {@const b = ex.bms}
-  <p class="hint">
-    One BMS (or BME, when it uses keys 6-7) per chart, and every sound beside them: WAV and OGG
-    files copied as they are, anything else - EZ2's .ssf, FLAC, MP3, a stem's slices - as WAV.
-  </p>
+  <p class="hint">{t('export.bms.hint')}</p>
   <table class="files">
-    <thead><tr><th></th><th>Chart</th><th>Writes</th><th>Notes</th></tr></thead>
+    <thead
+      ><tr
+        ><th></th><th>{t('export.col.chart')}</th><th>{t('export.bms.writes')}</th><th
+          >{t('export.bms.notes')}</th
+        ></tr
+      ></thead
+    >
     <tbody>
       {#each project.charts as c (c.file)}
         {@const w = b.review?.exp.charts.find((x) => x.file === c.file)}
@@ -338,25 +359,22 @@
     </tbody>
   </table>
   <div class="line">
-    <span class="lbl">Lanes</span>
+    <span class="lbl">{t('export.bms.lanes')}</span>
     <select bind:value={ex.bmsChoices.map} data-testid="bms-export-map">
-      <option value="ez2">EZ2 BME (scratch 16, pedal 17, effectors 18/19)</option>
-      <option value="keys">Keys in order (for IIDX/beat players)</option>
+      <option value="ez2">{t('export.bms.mapEz2')}</option>
+      <option value="keys">{t('export.bms.mapKeys')}</option>
     </select>
   </div>
   <div class="line">
-    <span class="lbl">Text</span>
+    <span class="lbl">{t('export.bms.text')}</span>
     <select bind:value={ex.bmsChoices.encoding} data-testid="bms-export-encoding">
-      <option value="auto">Auto (Shift-JIS, else Korean, else UTF-8)</option>
-      <option value="shift_jis">Shift-JIS</option>
-      <option value="euc-kr">Korean (CP949)</option>
-      <option value="utf-8">UTF-8 (beatoraja)</option>
+      {#each ENCODINGS as enc (enc.id)}<option value={enc.id}>{enc.label}</option>{/each}
     </select>
     {#if b.review}<span class="dim" data-testid="bms-export-chosen">{b.review.exp.encoding}</span
       >{/if}
   </div>
   <div class="line">
-    <span class="lbl">Sound ids</span>
+    <span class="lbl">{t('export.bms.ids')}</span>
     <select
       value={String(ex.bmsChoices.base)}
       onchange={(e) => {
@@ -364,35 +382,39 @@
         ex.bmsChoices.base = v === 'auto' ? 'auto' : (Number(v) as 36 | 62);
       }}
     >
-      <option value="auto">Auto (base 36, 62 past 1295 sounds)</option>
-      <option value="36">Base 36</option>
-      <option value="62">Base 62</option>
+      <option value="auto">{t('export.bms.idsAuto')}</option>
+      <option value="36">{t('export.bms.base', { n: 36 })}</option>
+      <option value="62">{t('export.bms.base', { n: 62 })}</option>
     </select>
   </div>
   {#if b.error}<p class="warn">{b.error}</p>{/if}
   {#if b.review}
     {@const e = b.review.exp}
     <p>
-      {e.files.length} chart{e.files.length === 1 ? '' : 's'} · {e.soundFiles.length} sounds ({e
-        .copies.length} copied, {e.sounds.length} made)
+      {t('export.bms.summary', {
+        charts: e.files.length,
+        sounds: e.soundFiles.length,
+        copied: e.copies.length,
+        made: e.sounds.length,
+      })}
     </p>
     {#if e.notes.length}
       <details class="notes" open={e.notes.some((n) => n.severity !== 'info')}>
-        <summary>{e.notes.length} thing{e.notes.length === 1 ? '' : 's'} to know</summary>
+        <summary>{t('export.findings', { n: e.notes.length })}</summary>
         <ul>
           {#each e.notes as n, i (i)}
-            <li class={n.severity}>{sev[n.severity]} {n.message}</li>
+            <li class={n.severity}>{sev[n.severity]} {tCore(n)}</li>
           {/each}
         </ul>
       </details>
     {/if}
     <div class="line">
-      <span class="lbl">New folder</span>
+      <span class="lbl">{t('export.dest.new')}</span>
       <input class="path" bind:value={ex.bmsDest} data-testid="bms-export-dest" />
       <button
         class="ez-btn"
-        onclick={() => pickFolder((d) => (ex.bmsDest = d), 'An empty folder for the BMS files')}
-        >Choose…</button
+        onclick={() => pickFolder((d) => (ex.bmsDest = d), t('export.bms.pick'))}
+        >{t('export.choose')}</button
       >
     </div>
     {@const s = ex.bmsStage}
@@ -401,12 +423,15 @@
         class="ez-btn primary"
         disabled={s.kind === 'writing' || !ex.bmsDest.trim()}
         onclick={() => void ex.writeBms()}
-        data-testid="bms-export-go">{s.kind === 'writing' ? 'Exporting…' : 'Export'}</button
+        data-testid="bms-export-go"
+        >{s.kind === 'writing' ? t('export.going') : t('export.go')}</button
       >
       {#if ex.progress}<span class="dim">{ex.progress[0]} / {ex.progress[1]}</span>{/if}
     </div>
     {#if s.kind === 'done'}
-      <p class="result" data-testid="bms-export-result">Wrote {s.files} files into {s.dir}.</p>
+      <p class="result" data-testid="bms-export-result">
+        {t('export.wrote', { files: s.files, dir: s.dir })}
+      </p>
     {:else if s.kind === 'failed'}
       <p class="warn">{s.message}</p>
     {/if}
@@ -414,24 +439,33 @@
 {/snippet}
 
 {#snippet history()}
+  {@const root = app.settings.data.gameRoot}
   <p class="hint">
-    Every export into {app.settings.data.gameRoot ?? 'the game folder'} kept the files it replaced. Restore
-    puts them back and takes away what it added - where a file is still what the export wrote.
+    {root != null ? t('export.history.hint', { root }) : t('export.history.hintNoRoot')}
   </p>
   {#if ex.backupsError}<p class="warn">{ex.backupsError}</p>{/if}
-  {#if !ex.backups.length && !ex.backupsError}<p class="dim">No exports yet.</p>{/if}
+  {#if !ex.backups.length && !ex.backupsError}<p class="dim">{t('export.history.none')}</p>{/if}
   <ul class="backups">
     {#each ex.backups as b (b.stamp)}
       <li data-testid="backup-row" data-stamp={b.stamp}>
         <div>
           <b>{b.label || b.stamp}</b>
-          <span class="dim">{formatWhen(b.created_ms)} · {b.files} files · {b.state}</span>
+          <span class="dim"
+            >{t('export.backup.row', {
+              when: formatWhen(b.created_ms),
+              files: b.files,
+              state: b.state,
+            })}</span
+          >
         </div>
         <button
           class="ez-btn"
           disabled={b.state === 'restored'}
           onclick={() => void ex.restore(b.stamp)}
-          data-testid="backup-restore">{b.state === 'restored' ? 'Restored' : 'Restore'}</button
+          data-testid="backup-restore"
+          >{b.state === 'restored'
+            ? t('export.backup.restored')
+            : t('export.backup.restore')}</button
         >
       </li>
     {/each}

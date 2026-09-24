@@ -148,10 +148,7 @@ pub fn write_package_with(
     if let Some(expect) = &opts.expect {
         let now = current.as_deref().and_then(read_song_ini);
         if !same_text(now.as_deref(), expect.as_deref()) {
-            return Err(LaunchError::Invalid(format!(
-                "{} changed since it was checked; look again before publishing",
-                songs_root.join(key).display()
-            )));
+            return Err(LaunchError::Changed(songs_root.join(key)));
         }
     }
     let staging_root = songs_root.join(STAGING);
@@ -225,10 +222,7 @@ pub fn retire_package(songs_root: &Path, key: &str, expect: &[u8]) -> Result<()>
         .filter(|p| p.is_dir())
         .ok_or_else(|| LaunchError::Invalid(format!("no package {key:?} to remove")))?;
     if !same_text(read_song_ini(&dir).as_deref(), Some(expect)) {
-        return Err(LaunchError::Invalid(format!(
-            "{} changed since it was checked; leaving it alone",
-            dir.display()
-        )));
+        return Err(LaunchError::Changed(dir));
     }
     keep_backup(songs_root, key, &dir)
 }

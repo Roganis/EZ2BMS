@@ -13,6 +13,7 @@ import {
   type GameFs,
 } from '@ez2bms/chart-core';
 import { dirName, joinPath, type Backend } from '../bridge';
+import { t } from '../i18n/i18n.svelte';
 import type { Settings } from './settings.svelte';
 
 /** The game folder as chart-core reads it: game-relative paths, forward slashes. */
@@ -61,7 +62,7 @@ export async function findExe(
  */
 export async function loadGame(backend: Backend, settings: Settings): Promise<Game> {
   const root = settings.data.gameRoot;
-  if (!root) throw new Error('Set your EZ2AC data folder on the EZ2PORT panel first');
+  if (!root) throw new Error(t('import.game.noRoot'));
   const exe = await findExe(backend, settings, root);
   // The port's song titles: text/ beside ez2play, else in the game folder.
   const play = settings.data.ez2play;

@@ -301,22 +301,64 @@ engine events beside the chart's.
   kept in `x_ez_records`; the renderer tags them in the gutter and the
   Timing panel lists them. A change of resolution moves them with the notes.
 
+## Polish and distribution (M9)
+
+- **Languages.** English, Korean and Japanese, chosen in Preferences or
+  following the system. Every word the editor shows comes from a catalog
+  in ICU MessageFormat (`intl-messageformat`): the editor's in
+  `apps/editor/src/i18n/{en,ko,ja}/` (one file per area), chart-core's in
+  `packages/chart-core/src/i18n/`. English is the source; a translation is
+  typed against it and a message it lacks falls back to English.
+  - `t(key, params)` reads the language as Svelte state, so switching
+    re-renders every screen; command titles are `cmd.<id>` keys, and the
+    palette also searches the English ones.
+  - chart-core's findings and notes carry a `said` (`{key, params}`) beside
+    their English `message`, and the editor shows them with `tCore`, so a
+    lint finding or an import note stored in a song file is said in the
+    language chosen now, not the one it was made in. A note from an older
+    song file has only its English.
+  - The host sends each error as `{kind, message, params}`
+    (`src-tauri/src/error.rs`); the bridge words it from `host.<kind>`
+    (`bridge/hosterror.ts`). The OS's own error text is passed through, and
+    the log keeps the English.
+  - Tests: every message parses and each translation takes the English
+    parameters (`catalogProblems`); no screen has words written into its
+    markup (`i18n/scan.ts`); every command's title is in the catalog; the
+    host's error kinds each have a sentence. `?pseudo` marks every catalog
+    message (⟦Øpén⟧) to find what is still hard-coded. The words chosen are
+    in [`i18n-glossary.md`](i18n-glossary.md).
+- **The log** (`src-tauri/src/diag.rs`): `tauri-plugin-log` writes a
+  rotating `ez2bms.log` in the app's log folder; a panic hook and the
+  editor's uncaught errors land there. A session marker left behind by a
+  run that did not close is offered at the next start; About copies a
+  report (the version, this run's errors and the log's end). Nothing is
+  sent anywhere.
+- **Files from the system** (`opened.rs`): launch arguments and a second
+  launch's files (`tauri-plugin-single-instance`) wait in a queue the
+  editor drains; a bmson opens its song, a BMS file the import wizard.
+- **Updates** (`update.rs`): `tauri-plugin-updater`, registered only in a
+  build carrying the update key's public half (added by the release
+  workflow, `scripts/release-config.mjs`). The editor looks at most once a
+  day, never while playing, and installs only when asked
+  (`state/updates.svelte.ts`). See [`releasing.md`](releasing.md).
+
 ## The desktop host (`src-tauri`)
 
 The host does what a browser cannot, and nothing else; chart logic never
 crosses the bridge. Its commands, each mirrored by the web mock in
 `apps/editor/src/bridge/`:
 
-| Group    | Commands                                                                                                                                                                                           |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Files    | `fs_read` (raw bytes), `fs_read_text`, `fs_write_text` / `fs_write_bytes` (atomic, optional `.bak`), `fs_list`, `project_scan`, `fs_copy_into` (import: never overwrites), `fs_rename`             |
-| Settings | `settings_load`, `settings_save` (a JSON object the front end owns, in the app's config folder)                                                                                                    |
-| Audio    | `audio_info`, `audio_load`, `audio_peaks`, `audio_thumbs` (a screenful of waveforms in one call), `audio_set_events`, `audio_play` / `seek` / `stop`, `audio_trigger`, `audio_set_master`          |
-| Clock    | `audio_clock`, `audio_now` (for offset pings), `audio_clock_stream` (a snapshot every 8 ms over a Tauri channel)                                                                                   |
-| EZ2PORT  | `port_locate`, `port_probe`, `port_publish` (cuts keysounds, writes the package whole), `port_test` / `port_stop` (pads closed for the run), `port_config_files` (where the port keeps `keys.ini`) |
-| Import   | `import_run` (a new song folder, staged and renamed into place)                                                                                                                                    |
-| Export   | `export_probe` (which keysounds the game's folder already holds), `export_game` (into a game folder, with a backup), `export_folder`, `export_backups`, `export_restore`                           |
-| Input    | `input_devices`, `input_stream` (pad events in batches over a Tauri channel), `input_hold` (open or close the pads), `audio_clicks` (the metronome's samples)                                      |
+| Group    | Commands                                                                                                                                                                                                  |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Files    | `fs_read` (raw bytes), `fs_read_text`, `fs_write_text` / `fs_write_bytes` (atomic, optional `.bak`), `fs_list`, `project_scan`, `fs_copy_into` (import: never overwrites), `fs_rename`                    |
+| Settings | `settings_load`, `settings_save` (a JSON object the front end owns, in the app's config folder)                                                                                                           |
+| Audio    | `audio_info`, `audio_load`, `audio_peaks`, `audio_thumbs` (a screenful of waveforms in one call), `audio_set_events`, `audio_play` / `seek` / `stop`, `audio_trigger`, `audio_set_master`                 |
+| Clock    | `audio_clock`, `audio_now` (for offset pings), `audio_clock_stream` (a snapshot every 8 ms over a Tauri channel)                                                                                          |
+| EZ2PORT  | `port_locate`, `port_probe`, `port_publish` (cuts keysounds, writes the package whole), `port_test` / `port_stop` (pads closed for the run), `port_config_files` (where the port keeps `keys.ini`)        |
+| Import   | `import_run` (a new song folder, staged and renamed into place)                                                                                                                                           |
+| Export   | `export_probe` (which keysounds the game's folder already holds), `export_game` (into a game folder, with a backup), `export_folder`, `export_backups`, `export_restore`                                  |
+| Input    | `input_devices`, `input_stream` (pad events in batches over a Tauri channel), `input_hold` (open or close the pads), `audio_clicks` (the metronome's samples)                                             |
+| App      | `app_info` (version, commit, folders, a run that did not close), `diag_log`, `diag_tail`, `diag_reveal_logs`, `opened_take`, `update_check` / `update_install` / `update_restart`, `update_open_releases` |
 
 Without an output device the audio engine falls back to a silent real-time
 clock, so Play mode still runs. `port_test` publishes into a private songs

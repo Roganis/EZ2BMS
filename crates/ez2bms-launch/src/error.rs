@@ -8,6 +8,22 @@ pub enum LaunchError {
     NotEz2play(PathBuf),
     #[error("this ez2play cannot {0}; update EZ2PORT")]
     Unsupported(&'static str),
+    /// A folder that is not what the caller inspected (another program, or
+    /// another EZ2BMS, changed it in between).
+    #[error("{0} changed since it was checked: look again")]
+    Changed(PathBuf),
+    /// A game file an export replaces or keeps has changed since it was planned.
+    #[error("{0} is not what it was when the export was planned: plan it again")]
+    Stale(String),
+    #[error("{0} is not empty")]
+    NotEmpty(PathBuf),
+    #[error("{0} is not a folder")]
+    NotAFolder(PathBuf),
+    #[error("no backup named {0:?}")]
+    NoBackup(String),
+    #[error("a backup named {0} is already there")]
+    BackupExists(String),
+    /// What only a bug in the caller can cause: said in English only.
     #[error("{0}")]
     Invalid(String),
 }

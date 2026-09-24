@@ -7,6 +7,7 @@
 // without a SongTrack contributes nothing. Two keys on one lane
 // (`Key=15,16`) are the turntable's two directions.
 
+import { said, sayText } from '../i18n/say';
 import { ciEq, strtol } from './initext';
 
 export interface GdsLane {
@@ -33,6 +34,7 @@ export interface Gds {
   slots: GdsSlot[];
 }
 
+/** Why a .gds cannot be read, in the language chosen. */
 export class GdsError extends Error {}
 
 const MAX_SLOTS = 4;
@@ -99,7 +101,7 @@ export function parseGds(text: string): Gds {
       haveKey = false;
     }
   }
-  if (!out.slots.length) throw new GdsError('no [SlotN] section');
+  if (!out.slots.length) throw new GdsError(sayText(said('data.gds.no-slot')));
   return out;
 }
 

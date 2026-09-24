@@ -5,6 +5,7 @@
   // in its mode: it becomes another tier).
   import { LANES, MODES, modeDef, type ModeId, type Tier } from '@ez2bms/chart-core';
   import { KIND_CSS } from '../lanecolors';
+  import { t } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import type { ChartSlot, Project } from '../../state/project.svelte';
   import { songFindings } from '../../port/lint';
@@ -75,12 +76,13 @@
   <div class="corner">
     {#if picking}
       <span class="pickmsg"
-        >{picking.kind === 'copy' ? 'Copy' : 'Move'}
-        {picking.slot.label} to… <kbd>Esc</kbd></span
+        >{t(picking.kind === 'copy' ? 'matrix.copyTo' : 'matrix.moveTo', {
+          chart: picking.slot.label,
+        })} <kbd>Esc</kbd></span
       >
     {/if}
   </div>
-  {#each TIERS as t (t)}<div class="th tier-{t}">{t}</div>{/each}
+  {#each TIERS as tier (tier)}<div class="th tier-{tier}">{tier}</div>{/each}
   {#each modes as m (m.id)}
     {@const shown = listed(m.id)}
     <div class="mode" title={m.portName}>
@@ -92,40 +94,40 @@
       </span>
       <span class="ml">{m.label}</span>
     </div>
-    {#each TIERS as t (t)}
-      {@const s = at(m.id, t)}
+    {#each TIERS as tier (tier)}
+      {@const s = at(m.id, tier)}
       {#if s}
         {@const pr = problems(s)}
         <div
-          class="cell full tier-{t}"
+          class="cell full tier-{tier}"
           class:active={project.active === s}
           class:hidden={!shown}
           class:source={picking?.slot === s}
-          data-cell="{m.id}.{t}"
+          data-cell="{m.id}.{tier}"
         >
-          <button class="open" onclick={() => open(s)} title="Open {s.file}">
+          <button class="open" onclick={() => open(s)} title={t('matrix.open', { file: s.file })}>
             <b class="lv">{s.level}</b>
-            <span class="meta">{notes(s)} notes</span>
+            <span class="meta">{t('matrix.notes', { n: notes(s) })}</span>
             <span class="badges">
-              {#if project.unsaved(s)}<i class="dot" title="unsaved"></i>{/if}
+              {#if project.unsaved(s)}<i class="dot" title={t('matrix.unsaved')}></i>{/if}
               {#if pr.errors}<i class="err">{pr.errors}</i>{/if}
               {#if pr.warnings}<i class="warn">{pr.warnings}</i>{/if}
-              {#if !shown && t !== 'NM'}<i
+              {#if !shown && tier !== 'NM'}<i
                   class="flag"
-                  title="No {m.label} NM: EZ2PORT won't list these">not listed</i
+                  title={t('matrix.unlistedWhy', { mode: m.label })}>{t('matrix.unlisted')}</i
                 >{/if}
             </span>
           </button>
           <div class="acts">
             <button
-              title="Copy into another cell"
-              onclick={() => (picking = { slot: s, kind: 'copy' })}>Copy</button
+              title={t('matrix.copyTitle')}
+              onclick={() => (picking = { slot: s, kind: 'copy' })}>{t('matrix.copy')}</button
             >
             <button
-              title="Make it another tier"
-              onclick={() => (picking = { slot: s, kind: 'move' })}>Move</button
+              title={t('matrix.moveTitle')}
+              onclick={() => (picking = { slot: s, kind: 'move' })}>{t('matrix.move')}</button
             >
-            <button class="rm" title="Remove from the song" onclick={() => app.song.removeChart(s)}
+            <button class="rm" title={t('matrix.remove')} onclick={() => app.song.removeChart(s)}
               >×</button
             >
           </div>
@@ -133,11 +135,11 @@
       {:else}
         <button
           class="cell empty"
-          class:target={target(m.id, t)}
-          disabled={!!picking && !target(m.id, t)}
-          data-cell="{m.id}.{t}"
-          title={picking ? '' : `New ${m.label} ${t} chart`}
-          onclick={() => onEmpty(m.id, t)}>{target(m.id, t) ? 'here' : '+'}</button
+          class:target={target(m.id, tier)}
+          disabled={!!picking && !target(m.id, tier)}
+          data-cell="{m.id}.{tier}"
+          title={picking ? '' : t('matrix.new', { mode: m.label, tier })}
+          onclick={() => onEmpty(m.id, tier)}>{target(m.id, tier) ? t('matrix.here') : '+'}</button
         >
       {/if}
     {/each}

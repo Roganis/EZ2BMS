@@ -10,6 +10,7 @@ import {
   type BmsTextEncoding,
 } from '@ez2bms/chart-core';
 import { joinPath, type ExportJob } from '../bridge';
+import { t } from '../i18n/i18n.svelte';
 import type { App } from '../state/app.svelte';
 import type { ChartSlot } from '../state/project.svelte';
 
@@ -26,7 +27,7 @@ export interface BmsReview {
 
 export function prepareBms(app: App, slots: readonly ChartSlot[], c: BmsChoices): BmsReview {
   const p = app.project;
-  if (!p) throw new Error('no song is open');
+  if (!p) throw new Error(t('export.noSong'));
   // The song's art and movie, as a publish would take them.
   const eyecatch = p.art.eyecatch?.path;
   const preview = p.sidecar.preview?.file && resolveSound(p.samples, p.sidecar.preview.file);

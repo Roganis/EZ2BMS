@@ -2,6 +2,7 @@
 // chops a stem to the grid and cuts it at its onsets (the knife tool is
 // with the other tools, in notes.ts).
 
+import { t, tEn } from '../i18n/i18n.svelte';
 import type { App } from '../state/app.svelte';
 import { toast } from '../state/toasts.svelte';
 
@@ -14,7 +15,7 @@ export function registerSliceCommands(app: App): void {
   app.commands.register(
     {
       id: 'view.strips',
-      title: 'Stem strips shown / hidden',
+      title: tEn('cmd.view.strips'),
       group: 'View',
       enabled: () => !!app.doc,
       run: () => {
@@ -23,7 +24,7 @@ export function registerSliceCommands(app: App): void {
     },
     {
       id: 'strip.chop',
-      title: 'Chop the stem to the grid…',
+      title: tEn('cmd.strip.chop'),
       group: 'Edit',
       keys: ['Mod+Shift+G'],
       enabled: () => !!app.doc && app.strips.focused(app.doc) !== undefined,
@@ -34,7 +35,7 @@ export function registerSliceCommands(app: App): void {
     },
     {
       id: 'strip.onsets',
-      title: 'Cut the stem at its onsets…',
+      title: tEn('cmd.strip.onsets'),
       group: 'Edit',
       keys: ['Mod+Shift+O'],
       enabled: () => !!app.doc && app.strips.focused(app.doc) !== undefined,
@@ -46,7 +47,7 @@ export function registerSliceCommands(app: App): void {
     },
     {
       id: 'strip.pin',
-      title: 'Stem strip for the picked sound on / off',
+      title: tEn('cmd.strip.pin'),
       group: 'View',
       enabled: () => picked() !== undefined,
       run: () => {
@@ -56,7 +57,7 @@ export function registerSliceCommands(app: App): void {
         else {
           app.strips.show = true;
           app.strips.pin(d, src);
-          toast(`${src}: a strip beside the lanes`, 'info');
+          toast(t('strip.pinned', { sound: src }), 'info');
         }
       },
     },

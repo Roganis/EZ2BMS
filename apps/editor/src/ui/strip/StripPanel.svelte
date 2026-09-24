@@ -14,6 +14,7 @@
     type SnapGrid,
   } from '@ez2bms/chart-core';
   import { baseName } from '../../bridge';
+  import { t, tParts } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import { toast } from '../../state/toasts.svelte';
   import type { ChartSlot } from '../../state/project.svelte';
@@ -64,7 +65,10 @@
     void slot.rev;
     return s.keysounds(doc, slot.mode);
   });
-  /** EZ2AC's own executable loads at most this many keysounds a chart. */
+  /**
+   * EZ2AC's own executable loads at most this many keysounds a chart. Shown
+   * as it is written (2047, not 2,047), and the chart's count beside it too.
+   */
   const SLOTS = 2047;
 
   // A MIDI file of the same song: cut where its notes start.
@@ -90,14 +94,14 @@
   });
 
   async function pickMidi() {
-    const [path] = await app.backend.pickFiles('A MIDI file of the song', ['mid', 'midi', 'rmi']);
+    const [path] = await app.backend.pickFiles(t('strip.midiPickTitle'), ['mid', 'midi', 'rmi']);
     if (!path) return;
     try {
       const smf = parseSmf(await app.backend.readFile(path));
       midi = { name: baseName(path), smf };
-      midiTracks = smf.tracks.flatMap((t, i) => (t.notes ? [i] : []));
+      midiTracks = smf.tracks.flatMap((track, i) => (track.notes ? [i] : []));
     } catch (e) {
-      toast(`Not a MIDI file EZ2BMS reads: ${e instanceof Error ? e.message : String(e)}`, 'error');
+      toast(t('strip.notMidi', { error: e instanceof Error ? e.message : String(e) }), 'error');
     }
   }
 
@@ -105,9 +109,8 @@
     const p = midiPlan;
     if (!p || 'error' in p) return;
     const r = applyMidiCuts(doc, src, p, s.env());
-    if (r.ok)
-      toast(`${r.ids?.length ?? 0} cuts at ${midi!.name}'s notes (Ctrl+Z undoes them)`, 'ok');
-    else toast(`Not cut: ${r.reason}`, 'warn');
+    if (r.ok) toast(t('strip.midiDone', { n: r.ids?.length ?? 0, file: midi!.name }), 'ok');
+    else toast(t('strip.notCut', { reason: r.reason }), 'warn');
   }
 
   function close() {
@@ -131,52 +134,55 @@
   style:top="{box.top}px"
   data-testid="strip-panel"
   role="dialog"
-  aria-label="{src}: slicing"
+  aria-label={t('strip.label', { sound: src })}
 >
   <header>
     <strong>{src}</strong>
     <span class="dim">{loaded && loaded.id !== null ? `${loaded.seconds.toFixed(1)} s` : ''}</span>
-    <button class="x" onclick={close} aria-label="Close">×</button>
+    <button class="x" onclick={close} aria-label={t('strip.close')}>×</button>
   </header>
 
   <section data-testid="strip-tempo">
-    <h3>Tempo</h3>
+    <h3>{t('strip.tempo')}</h3>
     {#if analysis?.tempo.length}
       <p>
-        Sounds like
-        {#each analysis.tempo as t, i (i)}
-          <span class="bpm" class:best={i === 0}>{t.bpm.toFixed(2)}</span>
+        {#each tParts('strip.soundsLike', {}, ['bpms']) as part, k (k)}
+          {#if 'slot' in part}
+            {#each analysis.tempo as tempo, i (i)}
+              <span class="bpm" class:best={i === 0}>{tempo.bpm.toFixed(2)}</span>
+            {/each}
+          {:else}{part.text}{/if}
         {/each}
-        BPM
       </p>
       <p class="hint">
-        First beat {Math.round(analysis.tempo[0]!.first_beat * 1000)} ms into the file ·
-        {Math.round(analysis.tempo[0]!.confidence * 100)}% sure
+        {t('strip.firstBeat', {
+          ms: String(Math.round(analysis.tempo[0]!.first_beat * 1000)),
+          pct: String(Math.round(analysis.tempo[0]!.confidence * 100)),
+        })}
       </p>
       <button
         class="ez-btn"
         data-testid="strip-use-bpm"
         disabled={!oneTempo}
-        title={oneTempo ? '' : 'The chart changes tempo: set it on the Timing tab'}
+        title={oneTempo ? '' : t('strip.tempoChanges')}
         onclick={() => app.setStartBpm(analysis.tempo[0]!.bpm)}
-        >Use {analysis.tempo[0]!.bpm.toFixed(2)} BPM</button
+        >{t('strip.useBpm', { bpm: analysis.tempo[0]!.bpm.toFixed(2) })}</button
       >
     {:else if listening}
-      <p class="hint">Listening for the beat…</p>
+      <p class="hint">{t('strip.listeningBeat')}</p>
     {:else}
-      <p class="hint">No steady beat found.</p>
+      <p class="hint">{t('strip.noBeat')}</p>
     {/if}
   </section>
 
   <section>
-    <h3>Chop to the grid</h3>
+    <h3>{t('chop.title')}</h3>
     <div class="row">
-      <span class="lbl">Every</span>
+      <span class="lbl">{t('chop.every')}</span>
       <select bind:value={grid} data-testid="chop-grid">
         {#each grids as g (g.perMeasure)}<option value={g.perMeasure}>{g.label}</option>{/each}
       </select>
-      <span class="dim">{range.selection ? 'over the selected slices' : 'over the whole stem'}</span
-      >
+      <span class="dim">{t(range.selection ? 'chop.overSelection' : 'chop.overStem')}</span>
     </div>
     <label class="check"
       ><input
@@ -184,26 +190,27 @@
         data-testid="chop-silence"
         checked={s.silenceDb !== null}
         onchange={(e) => (s.silenceDb = e.currentTarget.checked ? -48 : null)}
-      /> Leave silence uncut (under -48 dB)</label
+      />
+      {t('chop.leaveSilence')}</label
     >
     <p class="hint" data-testid="chop-count">
-      {`${cuts} ${cuts === 1 ? 'cut' : 'cuts'}`} · {keysounds + cuts} keysounds in this chart
+      {t('chop.count', { n: cuts, total: String(keysounds + cuts) })}
       {#if keysounds + cuts > SLOTS}
-        <span class="warn">- more than the {SLOTS} EZ2AC's own executable loads</span>
+        <span class="warn">{t('chop.overLimit', { max: String(SLOTS) })}</span>
       {/if}
     </p>
     <button
       class="ez-btn"
       data-testid="chop-go"
       disabled={!cuts}
-      onclick={() => s.chop(doc, src, step(grid))}>Chop</button
+      onclick={() => s.chop(doc, src, step(grid))}>{t('chop.go')}</button
     >
   </section>
 
   <section>
-    <h3>Cut at onsets</h3>
+    <h3>{t('strip.onsets')}</h3>
     <label
-      >Sensitivity
+      >{t('strip.sensitivity')}
       <input
         type="range"
         min="0.02"
@@ -215,31 +222,32 @@
       /></label
     >
     <label class="check"
-      ><input type="checkbox" bind:checked={s.exact} data-testid="onset-exact" /> Exactly (to 1/48 beat),
-      not to the snap grid</label
+      ><input type="checkbox" bind:checked={s.exact} data-testid="onset-exact" />
+      {t('strip.exact')}</label
     >
     <label class="check"
-      ><input type="checkbox" bind:checked={s.suggest} data-testid="onset-show" /> Show them on the strip</label
+      ><input type="checkbox" bind:checked={s.suggest} data-testid="onset-show" />
+      {t('strip.showOnsets')}</label
     >
     <p class="hint" data-testid="onset-count">
-      {#if listening}Listening…{:else}{onsetCuts} {onsetCuts === 1 ? 'cut' : 'cuts'}{/if}
+      {listening ? t('strip.listening') : t('strip.cuts', { n: onsetCuts })}
     </p>
     <button
       class="ez-btn"
       data-testid="onsets-go"
       disabled={!onsetCuts}
-      onclick={() => s.cutAtOnsets(doc, src, step(app.view.snap))}>Cut at onsets</button
+      onclick={() => s.cutAtOnsets(doc, src, step(app.view.snap))}>{t('strip.cutAtOnsets')}</button
     >
   </section>
 
   <section data-testid="strip-midi">
-    <h3>Cut at a MIDI file's notes</h3>
+    <h3>{t('strip.midi')}</h3>
     <button class="ez-btn" onclick={pickMidi} data-testid="midi-pick"
-      >{midi ? midi.name : 'MIDI file…'}</button
+      >{midi ? midi.name : t('strip.midiPick')}</button
     >
     {#if midi}
-      {#each midi.smf.tracks as t, i (i)}
-        {#if t.notes}
+      {#each midi.smf.tracks as track, i (i)}
+        {#if track.notes}
           <label class="check"
             ><input
               type="checkbox"
@@ -249,7 +257,8 @@
                   ? [...midiTracks, i]
                   : midiTracks.filter((x) => x !== i))}
             />
-            {t.name || `Track ${i + 1}`} <span class="dim">{t.notes} notes</span></label
+            {track.name || t('strip.midiTrack', { n: i + 1 })}
+            <span class="dim">{t('strip.midiNotes', { n: track.notes })}</span></label
           >
         {/if}
       {/each}
@@ -259,7 +268,8 @@
           name="midi-tempo"
           checked={midiTempo === 'chart'}
           onchange={() => (midiTempo = 'chart')}
-        /> Keep the chart's tempo</label
+        />
+        {t('strip.midiKeepTempo')}</label
       >
       <label class="check"
         ><input
@@ -268,27 +278,25 @@
           checked={midiTempo === 'midi'}
           onchange={() => (midiTempo = 'midi')}
           data-testid="midi-tempo-midi"
-        /> Take the MIDI's tempo from the stem's first hit</label
+        />
+        {t('strip.midiTakeTempo')}</label
       >
       <label class="check"
-        ><input type="checkbox" bind:checked={midiOnGrid} /> On the snap grid, not the nearest 1/48 beat</label
+        ><input type="checkbox" bind:checked={midiOnGrid} />
+        {t('strip.midiOnGrid')}</label
       >
       <p class="hint" data-testid="midi-count">
         {#if midiPlan && 'error' in midiPlan}
           <span class="warn">{midiPlan.error}</span>
         {:else if midiPlan}
-          {`${midiCuts} ${midiCuts === 1 ? 'cut' : 'cuts'}`} · furthest {midiPlan.worstMs.toFixed(
-            1,
-          )} ms from its note
+          {t('strip.midiCount', { n: midiCuts, ms: midiPlan.worstMs.toFixed(1) })}
           {#if midiPlan.moves}
-            <span class="warn"
-              >- the new tempo moves {midiPlan.moves} other note{midiPlan.moves === 1 ? '' : 's'} in time</span
-            >
+            <span class="warn">{t('strip.midiMoves', { n: midiPlan.moves })}</span>
           {/if}
         {/if}
       </p>
       <button class="ez-btn" data-testid="midi-go" disabled={!midiCuts} onclick={cutAtMidi}
-        >Cut</button
+        >{t('strip.midiCut')}</button
       >
     {/if}
   </section>
@@ -299,7 +307,7 @@
       onclick={() => {
         s.unpin(doc, src);
         close();
-      }}>Remove the strip</button
+      }}>{t('strip.remove')}</button
     >
   </footer>
 </div>

@@ -14,6 +14,7 @@
 // tiers of {u8 level; f32 a; f32 b} packed at stride 9 from +0x32 - level 0
 // meaning the mode does not offer that tier, `b` being the BPM.
 
+import { said, sayText, type Said } from '../i18n/say';
 import { exeRead } from './keytable';
 import { ciEq } from './initext';
 
@@ -44,6 +45,10 @@ export interface SongDb {
   groups: string[][];
 }
 
+/**
+ * Why a song.bin cannot be read or patched: in the language chosen, but for
+ * the cipher tables' size, which only a caller's mistake gets wrong.
+ */
 export class SongDbError extends Error {
   constructor(
     readonly code: 'magic' | 'short' | 'tables',
@@ -52,6 +57,8 @@ export class SongDbError extends Error {
     super(message);
   }
 }
+
+const fail = (code: SongDbError['code'], s: Said) => new SongDbError(code, sayText(s));
 
 /**
  * ez2_songdb_decrypt, which is also its own inverse: every byte is XORed with
@@ -84,18 +91,13 @@ const field = (b: Uint8Array) => {
 
 /** ez2_songdb_parse: a decrypted song.bin. */
 export function parseSongdb(data: Uint8Array): SongDb {
-  if (data.length < 0x10) throw new SongDbError('short', 'song.bin is too short');
-  if (field(data.subarray(0, 4)) !== 'EZSL') {
-    throw new SongDbError(
-      'magic',
-      "song.bin does not say EZSL: the wrong executable's tables, or not a song.bin",
-    );
-  }
+  if (data.length < 0x10) throw fail('short', said('data.songdb.short'));
+  if (field(data.subarray(0, 4)) !== 'EZSL') throw fail('magic', said('data.songdb.magic'));
   const dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const count = dv.getUint16(6, true);
   const off = dv.getUint32(8, true);
   if (off > data.length || Math.floor((data.length - off) / SONGDB_RECORD) < count) {
-    throw new SongDbError('short', "song.bin's header points past its end");
+    throw fail('short', said('data.songdb.header'));
   }
   const db: SongDb = { entries: [], groups: [] };
   for (let i = 0; i < count; i++) {
@@ -138,9 +140,7 @@ export function parseSongdb(data: Uint8Array): SongDb {
  */
 export function readSongdb(bytes: Uint8Array, exe?: Uint8Array): SongDb {
   if (field(bytes.subarray(0, 4)) === 'EZSL') return parseSongdb(bytes);
-  if (!exe) {
-    throw new SongDbError('tables', 'song.bin is encrypted: set the unpacked EZ2AC executable');
-  }
+  if (!exe) throw fail('tables', said('data.songdb.encrypted'));
   return parseSongdb(songdbCrypt(bytes, exeRead(exe, SONGDB_TABLE_VA, SONGDB_TABLE_SIZE)));
 }
 
@@ -304,8 +304,7 @@ export function patchSongdb(
   edits: readonly SongdbEdit[],
 ): { bytes: Uint8Array; changed: number[] } {
   const encrypted = field(bytes.subarray(0, 4)) !== 'EZSL';
-  if (encrypted && !tables)
-    throw new SongDbError('tables', 'song.bin is encrypted: set the unpacked EZ2AC executable');
+  if (encrypted && !tables) throw fail('tables', said('data.songdb.encrypted'));
   const plain = encrypted ? songdbCrypt(bytes, tables!) : bytes.slice();
   parseSongdb(plain); // EZSL, and a header that fits
   const dv = new DataView(plain.buffer, plain.byteOffset, plain.byteLength);
@@ -313,7 +312,7 @@ export function patchSongdb(
   const put = (at: number, v: number) => dv.setFloat32(at, v, true);
   for (const e of edits) {
     const r = songdbRecordAt(plain, e.key);
-    if (r === undefined) throw new SongDbError('short', `song.bin does not list ${e.key}`);
+    if (r === undefined) throw fail('short', said('data.songdb.unlisted', { key: e.key }));
     const g = r + 0x32 + e.tier * 9;
     if (e.level !== undefined) {
       if (!Number.isInteger(e.level) || e.level < 0 || e.level > 255)

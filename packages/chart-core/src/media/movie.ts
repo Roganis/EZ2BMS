@@ -11,6 +11,8 @@
 // The media data is never touched, so probing a 500 MB movie reads a few
 // kilobytes.
 
+import { said, sayText, type Said } from '../i18n/say';
+
 export type ReadRange = (offset: number, length: number) => Promise<Uint8Array>;
 
 export type MovieContainer =
@@ -85,25 +87,28 @@ const CONTAINER_NAME: Record<MovieContainer, string> = {
   unknown: 'unknown',
 };
 
+/** A container's name to show: formats go by their own names, "unknown" in the language chosen. */
 export function containerName(c: MovieContainer): string {
-  return CONTAINER_NAME[c];
+  return c === 'unknown' ? sayText(said('media.container.unknown')) : CONTAINER_NAME[c];
 }
 
-/** Why EZ2PORT's Windows build cannot play a movie, or undefined when it can. */
+/** Why EZ2PORT's Windows build cannot play `m`, in the language chosen; undefined when it can. */
 export function portCannotPlay(m: MovieInfo): string | undefined {
-  if (m.container === 'unknown') return 'it is not a movie EZ2PORT can open';
+  const s = portCannotPlaySaid(m);
+  return s && sayText(s);
+}
+
+/** Why EZ2PORT's Windows build cannot play `m`, as a message to say later. */
+export function portCannotPlaySaid(m: MovieInfo): Said | undefined {
+  if (m.container === 'unknown') return said('movie.unknown');
   if (m.container === 'avi')
-    return (
-      "EZ2PORT's Windows build has no AVI reader" +
-      (m.codec && PORT_VIDEO_DECODERS.includes(m.codec)
-        ? ': re-wrap it as MP4 or MKV (the picture need not be encoded again)'
-        : ': convert it to H.264 in MP4, or VP9 in WebM')
+    return said(
+      m.codec && PORT_VIDEO_DECODERS.includes(m.codec) ? 'movie.avi.rewrap' : 'movie.avi.convert',
     );
   if (!PORT_CONTAINERS.includes(m.container))
-    return `EZ2PORT's Windows build cannot read ${CONTAINER_NAME[m.container]} files: convert it to H.264 in MP4, or VP9 in WebM`;
-  if (!m.codec) return 'no video track was found in it';
-  if (!PORT_VIDEO_DECODERS.includes(m.codec))
-    return `EZ2PORT's Windows build has no ${m.codec} decoder (it has H.264, MPEG-4 part 2, VP8, VP9 and WMV): convert it`;
+    return said('movie.container', { container: CONTAINER_NAME[m.container] });
+  if (!m.codec) return said('movie.no-video');
+  if (!PORT_VIDEO_DECODERS.includes(m.codec)) return said('movie.codec', { codec: m.codec });
   return undefined;
 }
 

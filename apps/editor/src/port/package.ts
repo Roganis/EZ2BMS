@@ -11,6 +11,7 @@ import {
 } from '@ez2bms/chart-core';
 import { soundPath } from '../audio/paths';
 import type { PackageSpec, PreviewJob } from '../bridge';
+import { t } from '../i18n/i18n.svelte';
 import type { App } from '../state/app.svelte';
 import type { PackageArt } from '../state/art.svelte';
 import type { ChartSlot } from '../state/project.svelte';
@@ -33,7 +34,7 @@ export function buildPackage(
   opts: { only?: ChartSlot; key?: string; art?: PackageArt; preview?: PreviewJob } = {},
 ): Built {
   const p = app.project;
-  if (!p) throw new PublishError('no song is open');
+  if (!p) throw new PublishError(t('publish.noSong'));
   const slots = opts.only ? [opts.only] : p.charts;
   const key = opts.key ?? p.sidecar.key;
   // The song's info, from all its charts even when testing one.

@@ -20,6 +20,7 @@
 
 import { analysis } from '../edit/analysis';
 import type { ChartDoc } from '../edit/doc';
+import { said, sayText } from '../i18n/say';
 import type { BpmEvent, ChartData } from '../model/types';
 import { ChartClock } from '../publish/chart-plan';
 import { PlanTimeline } from '../timing/plan-timeline';
@@ -50,7 +51,7 @@ export interface MidiCutPlan {
   merged: number;
 }
 
-/** A refusal, or the plan. */
+/** A refusal (said in the language chosen, for the MIDI panel to show), or the plan. */
 export function planMidiCuts(
   doc: ChartDoc,
   src: string,
@@ -59,10 +60,10 @@ export function planMidiCuts(
 ): MidiCutPlan | { error: string } {
   const view = stemView(doc, src);
   const first = view.slices.find((s) => s.fresh);
-  if (!first) return { error: `${src} has no hit in this chart to start the MIDI from` };
+  if (!first) return { error: sayText(said('slice.midi.no-hit', { src })) };
   const tracks = new Set(opts.tracks ?? smf.tracks.map((_, i) => i));
   const notes = smf.notes.filter((n) => tracks.has(n.track));
-  if (!notes.length) return { error: 'the tracks chosen have no notes' };
+  if (!notes.length) return { error: sayText(said('slice.midi.no-notes')) };
   const res = doc.resolution;
   const step = opts.step && opts.step > 0 ? opts.step : res / 48;
   const snap = (y: number) => Math.round(y / step) * step;
@@ -142,7 +143,7 @@ export function applyMidiCuts(
   const tempo = plan.tempo;
   if (tempo) {
     doc.transact(
-      'Tempo from MIDI',
+      sayText(said('undo.midi-tempo')),
       (tx) => {
         const before = doc.data.bpmEvents.filter((e) => e.y < tempo.start);
         const events = tempo.events.filter((e) => e.y > 0);
@@ -155,8 +156,11 @@ export function applyMidiCuts(
   }
   const cuts = planCuts(doc, src, plan.ys, env);
   const r = cuts.length
-    ? applyCuts(doc, cuts, env, 'Cut stem at MIDI notes', { merge })
-    : ({ ok: false, reason: `${src} is not playing where the MIDI's notes are` } as SliceResult);
+    ? applyCuts(doc, cuts, env, sayText(said('undo.midi-cuts')), { merge })
+    : ({
+        ok: false,
+        reason: sayText(said('slice.midi.not-playing', { src })),
+      } as SliceResult);
   if (!r.ok && tempo) doc.undo();
   return r;
 }

@@ -24,6 +24,7 @@ import {
   type SoundCmd,
 } from '@ez2bms/chart-core';
 import { SvelteSet } from 'svelte/reactivity';
+import { t } from '../i18n/i18n.svelte';
 import type { App } from '../state/app.svelte';
 import type { ChartSlot } from '../state/project.svelte';
 
@@ -173,7 +174,7 @@ export class PlayController {
         gauge: sc.gauge,
         failed: sc.failed,
         title: this.slot.doc.data.info.title ?? '',
-        label: `${this.slot.label} · level ${this.slot.level}`,
+        label: t('result.chart', { chart: this.slot.label, level: this.slot.level }),
         partial,
       };
     }

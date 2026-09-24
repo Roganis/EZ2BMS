@@ -257,7 +257,7 @@ test('ScratchMix records the frets the turntable strums, not a fret alone', asyn
     { pulse: strummed + 20, button: 1, down: false },
   ]);
   await page.keyboard.press('r');
-  await expect(page.getByTestId('record-count')).toHaveText('1 notes');
+  await expect(page.getByTestId('record-count')).toHaveText('1 note');
   await page.keyboard.press('Enter');
   const on12 = await page.evaluate(() =>
     (window as unknown as W).__ez2bms.doc.data.notes

@@ -9,14 +9,16 @@ import { modeNames, type ModeId } from '../modes/ids';
 import { chartBaseName, isValidSongKey, parseChartName } from '../modes/filenames';
 import type { SongArt } from '../song/art';
 import { categoryLabel, unreachableIn, validCategory } from '../song/categories';
-import { portCannotPlay, type MovieInfo } from '../media/movie';
+import { portCannotPlaySaid, type MovieInfo } from '../media/movie';
 import { songMeta } from '../song/meta';
 import { modeDef } from '../modes/registry';
 import { EZ_SCROLL_MAX, legacyScrollIndices, scrollEventsOf } from '../timing/scroll';
 import { TickConverter } from '../timing/ticks';
+import { said, sayEnglish, saying, type Said } from '../i18n/say';
 import {
   bgmCopies,
   chartFix,
+  songFix,
   laneDuplicates,
   oddLines,
   swallowingHolds,
@@ -29,7 +31,9 @@ export type Severity = 'error' | 'warning' | 'info';
 export interface Finding {
   rule: string;
   severity: Severity;
+  /** In English (the log, the tests); `said` says it in the language chosen (i18n/say.ts). */
   message: string;
+  said?: Said;
   /** The chart's file, for chart findings. */
   chart?: string;
   /** Where to look, in pulses. */
@@ -47,7 +51,9 @@ export interface Finding {
 export interface OpenNote {
   rule: string;
   severity: Severity;
+  /** In English; `said` says it in the language chosen (i18n/say.ts). */
   message: string;
+  said?: Said;
   /** Where to look, in pulses. */
   at?: number;
 }
@@ -129,64 +135,54 @@ const HOLD_KINDS_OFF_MAX = new Set([4, 5, 9, 10, 11, 12]);
 
 export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[] {
   const out: Finding[] = [];
-  const f = (rule: string, severity: Severity, message: string, extra: Partial<Finding> = {}) =>
-    out.push({ rule, severity, message, chart: c.file, ...extra });
+  const f = (rule: string, severity: Severity, s: Said, extra: Partial<Finding> = {}) =>
+    out.push({ rule, severity, message: sayEnglish(s), said: s, chart: c.file, ...extra });
   const d = c.data;
   const info = d.info;
   const res = info.resolution && info.resolution > 0 ? info.resolution : 240;
   for (const n of c.notes ?? [])
-    f(n.rule, n.severity, n.message, n.at !== undefined ? { at: n.at } : {});
+    out.push({ ...noteFinding(n), chart: c.file, ...(n.at !== undefined ? { at: n.at } : {}) });
 
   const level = info.level ?? 0;
   if (!(Number.isInteger(level) && level >= 1 && level <= 20)) {
-    f('level', 'error', `Level ${level} is outside 1-20, which EZ2PORT's song list uses`, {
+    f('level', 'error', said('lint.level', { level }), {
       fix: chartFix('clamp-level'),
     });
   }
 
   // ---- tempo
   const init = info.initBpm ?? 0;
-  if (!(init > 0 && init < 1000)) f('bpm', 'error', `Start BPM ${init} must be between 0 and 1000`);
+  if (!(init > 0 && init < 1000)) f('bpm', 'error', said('lint.bpm.start', { bpm: init }));
   const tc = new TickConverter(res, d.stopEvents);
   const bpmTicks = new Map<number, number>();
   for (const e of d.bpmEvents) {
     if (!(e.bpm > 0 && e.bpm < 1000))
-      f('bpm', 'error', `BPM ${e.bpm} must be between 0 and 1000`, { at: e.y });
+      f('bpm', 'error', said('lint.bpm', { bpm: e.bpm }), { at: e.y });
     if (e.y <= 0 && e.bpm !== init) {
-      f(
-        'init-bpm',
-        'error',
-        `A BPM change at the start (${e.bpm}) disagrees with the start BPM (${init})`,
-        { at: 0, fix: chartFix('align-start-bpm') },
-      );
+      f('init-bpm', 'error', said('lint.init-bpm', { bpm: e.bpm, start: init }), {
+        at: 0,
+        fix: chartFix('align-start-bpm'),
+      });
     }
     const t = tc.tick(e.y).tick;
     const prev = bpmTicks.get(t);
     if (prev !== undefined && prev !== e.bpm) {
-      f('bpm-same-tick', 'error', `Two BPM changes (${prev}, ${e.bpm}) land on the same EZ2 tick`, {
+      f('bpm-same-tick', 'error', said('lint.bpm-same-tick', { a: prev, b: e.bpm }), {
         at: e.y,
       });
     }
     bpmTicks.set(t, e.bpm);
   }
   if (d.stopEvents.some((s) => s.duration > 0)) {
-    f(
-      'stops',
-      'warning',
-      `${d.stopEvents.length} STOP${d.stopEvents.length === 1 ? '' : 's'}: EZ2 has none, so EZ2PORT gets a gap in time and the scroll does not freeze`,
-      { at: d.stopEvents[0]!.y },
-    );
+    f('stops', 'warning', said('lint.stops', { n: d.stopEvents.length }), {
+      at: d.stopEvents[0]!.y,
+    });
   }
 
   // ---- scroll changes (timing/scroll.ts)
   for (const e of d.scrollEvents)
     if (!(e.rate > 0 && Number.isFinite(e.rate)))
-      f(
-        'scroll-rate',
-        'error',
-        `A scroll change of ${e.rate}: the field would stand still or run backwards (it must be above 0)`,
-        { at: e.y },
-      );
+      f('scroll-rate', 'error', said('lint.scroll-rate', { rate: String(e.rate) }), { at: e.y });
   const scrolls = scrollEventsOf(d);
   const scrollTicks = new Map<number, number>();
   for (const e of scrolls) {
@@ -196,7 +192,7 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
       f(
         'scroll-same-tick',
         'warning',
-        `Two scroll changes (×${prev}, ×${e.rate}) land on the same EZ2 tick: EZ2PORT's sort does not say which one it keeps`,
+        said('lint.scroll-same-tick', { a: String(prev), b: String(e.rate) }),
         { at: e.y },
       );
     scrollTicks.set(t, e.rate);
@@ -205,17 +201,14 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
     f(
       'scroll-count',
       'warning',
-      `${scrolls.length} scroll changes: EZ2PORT keeps the first ${EZ_SCROLL_MAX} (in track order) and drops the rest`,
+      said('lint.scroll-count', { n: scrolls.length, max: EZ_SCROLL_MAX }),
       { at: scrolls[EZ_SCROLL_MAX]!.y },
     );
   const legacy = legacyScrollIndices(d).length;
   if (legacy)
-    f(
-      'scroll-legacy',
-      'info',
-      `${legacy} scroll change${legacy === 1 ? '' : 's'} from the game chart, kept from an older import: ${legacy === 1 ? 'it plays and publishes' : 'they play and publish'}, but cannot be edited until turned into the chart's own`,
-      { fix: chartFix('scroll-legacy') },
-    );
+    f('scroll-legacy', 'info', said('lint.scroll-legacy', { n: legacy }), {
+      fix: chartFix('scroll-legacy'),
+    });
 
   // ---- notes
   const lanes = new Set(modeDef(c.mode).columns.map((col) => col.x));
@@ -224,14 +217,14 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
     f(
       'off-mode',
       'warning',
-      `${offMode.length} note${offMode.length === 1 ? ' is' : 's are'} on lanes ${modeNames(c.mode).label} does not have; EZ2PORT plays them as background`,
+      said('lint.off-mode', { n: offMode.length, mode: modeNames(c.mode).label }),
       { at: offMode[0]!.y, notes: offMode.map((n) => n.id), fix: chartFix('off-mode-to-bgm') },
     );
   }
   const playable = d.notes.filter((n) => lanes.has(n.x));
-  if (!playable.length) f('empty', 'warning', 'No notes to play in this chart yet');
+  if (!playable.length) f('empty', 'warning', said('lint.empty'));
   if (d.notes.length > MAX_NOTES)
-    f('notes-limit', 'error', `${d.notes.length} notes: EZ2PORT holds at most ${MAX_NOTES}`);
+    f('notes-limit', 'error', said('lint.notes-limit', { n: d.notes.length, max: MAX_NOTES }));
   let worst = 0;
   const offGrid: NoteId[] = [];
   for (const n of d.notes) {
@@ -245,7 +238,7 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
     f(
       'off-grid',
       'warning',
-      `${offGrid.length} note${offGrid.length === 1 ? '' : 's'} between EZ2 ticks (1/48 beat) will be rounded, by up to ${worst.toFixed(2)} tick`,
+      said('lint.off-grid', { n: offGrid.length, worst: worst.toFixed(2) }),
       { notes: offGrid, fix: chartFix('snap-off-grid') },
     );
   }
@@ -253,12 +246,10 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
     (n) => n.l > 0 && n.kind !== undefined && HOLD_KINDS_OFF_MAX.has(n.kind),
   );
   if (oddKinds.length) {
-    f(
-      'hold-kind-max',
-      'warning',
-      `${oddKinds.length} hold${oddKinds.length === 1 ? ' uses a kind' : 's use kinds'} (4, 5, 9-12) the engine counts differently from how it pays: a perfect play will not score exactly 100%`,
-      { at: oddKinds[0]!.y, notes: oddKinds.map((n) => n.id) },
-    );
+    f('hold-kind-max', 'warning', said('lint.hold-kind-max', { n: oddKinds.length }), {
+      at: oddKinds[0]!.y,
+      notes: oddKinds.map((n) => n.id),
+    });
   }
   // Same sound twice at one position: which slice plays is ambiguous.
   const seen = new Map<string, NoteId>();
@@ -269,85 +260,58 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
     else seen.set(k, n.id);
   }
   if (dup.length) {
-    f(
-      'same-pulse-sound',
-      'warning',
-      `${dup.length} note${dup.length === 1 ? ' shares' : 's share'} a position with another note of the same sound: the slice that plays is ambiguous`,
-      { notes: dup, ...(bgmCopies(d).length ? { fix: chartFix('drop-bgm-copies') } : {}) },
-    );
+    f('same-pulse-sound', 'warning', said('lint.same-pulse-sound', { n: dup.length }), {
+      notes: dup,
+      ...(bgmCopies(d).length ? { fix: chartFix('drop-bgm-copies') } : {}),
+    });
   }
   // Two notes on one lane at one EZ2 tick: the second can never be hit.
   const doubled = laneDuplicates(d, c.mode);
   if (doubled.length)
-    f(
-      'lane-duplicates',
-      'error',
-      `${doubled.length} note${doubled.length === 1 ? ' shares' : 's share'} a lane and an EZ2 tick with another: one press cannot hit both`,
-      {
-        at: doubled[0]!.y,
-        notes: doubled.map((n) => n.id),
-        fix: chartFix('lane-duplicates-to-bgm'),
-      },
-    );
+    f('lane-duplicates', 'error', said('lint.lane-duplicates', { n: doubled.length }), {
+      at: doubled[0]!.y,
+      notes: doubled.map((n) => n.id),
+      fix: chartFix('lane-duplicates-to-bgm'),
+    });
   // The engine judges a hold to its end: a note it covers is never reached.
   const swallowed = swallowingHolds(d, c.mode);
   if (swallowed.length)
-    f(
-      'note-in-hold',
-      'error',
-      `${swallowed.length} hold${swallowed.length === 1 ? ' covers' : 's cover'} a later note on the same lane`,
-      {
-        at: swallowed[0]!.hold.y,
-        notes: swallowed.flatMap((s) => [s.hold.id, s.first.id]),
-        fix: chartFix('shorten-holds'),
-      },
-    );
+    f('note-in-hold', 'error', said('lint.note-in-hold', { n: swallowed.length }), {
+      at: swallowed[0]!.hold.y,
+      notes: swallowed.flatMap((s) => [s.hold.id, s.first.id]),
+      fix: chartFix('shorten-holds'),
+    });
   const ups = d.notes.filter((n) => n.up);
   if (ups.length)
-    f(
-      'up-notes',
-      'info',
-      `${ups.length} release (up) note${ups.length === 1 ? '' : 's'}: EZ2 has no release sound, they play as ordinary notes`,
-      { notes: ups.map((n) => n.id), fix: chartFix('clear-up') },
-    );
+    f('up-notes', 'info', said('lint.up-notes', { n: ups.length }), {
+      notes: ups.map((n) => n.id),
+      fix: chartFix('clear-up'),
+    });
   // EZ2 draws a bar every 192 ticks; bmson lines are the editor's alone.
-  if (oddLines(d))
-    f(
-      'lines',
-      'warning',
-      "The chart's bar lines are not every four beats: EZ2PORT draws a line every four beats whatever the chart says",
-      { fix: chartFix('lines-4-4') },
-    );
+  if (oddLines(d)) f('lines', 'warning', said('lint.lines'), { fix: chartFix('lines-4-4') });
   // BMS's own judge and gauge: an EZ2 chart times and fills from its deltas.
   if ((info.judgeRank ?? 100) !== 100 || (info.total ?? 100) !== 100)
     f(
       'bms-judge',
       'info',
-      `judge_rank ${info.judgeRank} and total ${info.total} are BMS settings EZ2PORT does not use: its judgement and gauge are set in Chart info`,
+      said('lint.bms-judge', { rank: String(info.judgeRank), total: String(info.total) }),
     );
 
   // ---- sounds
   if (d.channels.length > MAX_SLOTS)
-    f(
-      'slots',
-      'error',
-      `${d.channels.length} sounds: more than EZ2PORT's ${MAX_SLOTS} keysound slots`,
-    );
+    f('slots', 'error', said('lint.slots', { n: d.channels.length, max: MAX_SLOTS }));
   else if (d.channels.length > ORIGINAL_SLOTS) {
     f(
       'slots',
       'warning',
-      `${d.channels.length} sounds: the original game loads at most ${ORIGINAL_SLOTS} (EZ2PORT is fine)`,
+      said('lint.slots.original', { n: d.channels.length, max: ORIGINAL_SLOTS }),
     );
   }
   const unused = unusedSounds(d);
   if (unused.length)
-    f(
-      'unused-sounds',
-      'info',
-      `${unused.length} sound${unused.length === 1 ? ' plays' : 's play'} no note in this chart`,
-      { fix: chartFix('remove-unused-sounds') },
-    );
+    f('unused-sounds', 'info', said('lint.unused-sounds', { n: unused.length }), {
+      fix: chartFix('remove-unused-sounds'),
+    });
   if (missing?.size) {
     const used = new Set(d.notes.map((n) => n.ch));
     const bad = d.channels.filter((ch) => used.has(ch.id) && missing.has(ch.name));
@@ -355,10 +319,13 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
       f(
         'missing-sounds',
         'error',
-        `${bad.length} sound${bad.length === 1 ? '' : 's'} used by notes cannot be read: ${bad
-          .slice(0, 3)
-          .map((b) => b.name)
-          .join(', ')}${bad.length > 3 ? '…' : ''}`,
+        said('lint.missing-sounds', {
+          n: bad.length,
+          names: `${bad
+            .slice(0, 3)
+            .map((b) => b.name)
+            .join(', ')}${bad.length > 3 ? '…' : ''}`,
+        }),
       );
     }
   }
@@ -370,56 +337,38 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
     f(
       'mode-keyword',
       'warning',
-      `EZ2PORT's bmson importer would read this chart as ${modeNames(theirs.mode).label}${theirs.keyword ? ` (because of "${theirs.keyword}")` : ''}; Publish writes the package itself, so only a raw bmson dropped into the songs folder is affected`,
+      theirs.keyword
+        ? said('lint.mode-keyword.because', {
+            mode: modeNames(theirs.mode).label,
+            keyword: theirs.keyword,
+          })
+        : said('lint.mode-keyword', { mode: modeNames(theirs.mode).label }),
     );
   }
   const title = info.title ?? '';
   if (encodeUtf8(title).length > TITLE_BYTES)
-    f(
-      'title',
-      'warning',
-      `The title is over ${TITLE_BYTES} bytes; EZ2PORT's song list shows the first ${TITLE_BYTES}`,
-    );
+    f('title', 'warning', said('lint.title', { max: TITLE_BYTES }));
   if (title.includes(';'))
-    f(
-      'title-semicolon',
-      'warning',
-      "The title contains ';', which song.ini reads as a comment; Publish writes ',' instead",
-      { fix: chartFix('title-semicolon') },
-    );
+    f('title-semicolon', 'warning', said('lint.title-semicolon'), {
+      fix: chartFix('title-semicolon'),
+    });
   return out;
 }
 
-const DERIVE_KEY: Fix = { id: 'derive-key', label: 'Make one from the title' };
+const DERIVE_KEY: Fix = songFix('derive-key');
 
 export function lintSong(s: LintSong): Finding[] {
   const out: Finding[] = [];
-  const f = (rule: string, severity: Severity, message: string, fix?: Fix) =>
-    out.push({ rule, severity, message, ...(fix ? { fix } : {}) });
-  if (!s.key)
-    f(
-      'song-key',
-      'error',
-      'The song needs a key: its folder name in EZ2PORT (1-15 lowercase letters or digits)',
-      DERIVE_KEY,
-    );
+  const f = (rule: string, severity: Severity, s: Said, fix?: Fix) =>
+    out.push({ rule, severity, message: sayEnglish(s), said: s, ...(fix ? { fix } : {}) });
+  if (!s.key) f('song-key', 'error', said('lint.song-key.none'), DERIVE_KEY);
   else if (!isValidSongKey(s.key))
-    f(
-      'song-key',
-      'error',
-      `Song key "${s.key}" must be 1-15 lowercase letters or digits`,
-      DERIVE_KEY,
-    );
+    f('song-key', 'error', said('lint.song-key', { key: s.key }), DERIVE_KEY);
   // EZ2PORT imports a raw bmson found in its songs folder as its own package.
-  if (s.insideSongsRoot)
-    f(
-      'inside-songs-root',
-      'warning',
-      "The song folder is inside EZ2PORT's songs folder: the port would import its bmson files itself, beside what Publish writes",
-    );
-  if (!s.charts.length) f('no-charts', 'error', 'The song has no charts');
+  if (s.insideSongsRoot) f('inside-songs-root', 'warning', said('lint.inside-songs-root'));
+  if (!s.charts.length) f('no-charts', 'error', said('lint.no-charts'));
   if (s.charts.length > MAX_CHARTS)
-    f('chart-count', 'error', `${s.charts.length} charts: a song holds at most ${MAX_CHARTS}`);
+    f('chart-count', 'error', said('lint.chart-count', { n: s.charts.length, max: MAX_CHARTS }));
   // Each mode's song list keeps a song only when that mode's NM level is
   // above 0 (ez2/songdb.c ez2_songdb_category_view): the other tiers of a
   // mode without one cannot be reached.
@@ -427,21 +376,17 @@ export function lintSong(s: LintSong): Finding[] {
     s.charts.some((c) => c.mode === m && c.tier === 'NM' && (c.data.info.level ?? 0) >= 1);
   const modes = [...new Set(s.charts.map((c) => c.mode))];
   if (s.charts.length && !modes.some(listed)) {
-    f('song-invisible', 'error', 'EZ2PORT only lists a song with an NM chart of level 1 or more');
+    f('song-invisible', 'error', said('lint.song-invisible'));
   } else {
     for (const m of modes.filter((m) => !listed(m) && modeNames(m).portPlayable))
-      f(
-        'mode-invisible',
-        'warning',
-        `${modeNames(m).label} charts will not show: EZ2PORT lists a song in a mode only when that mode has an NM chart of level 1 or more`,
-      );
+      f('mode-invisible', 'warning', said('lint.mode-invisible', { mode: modeNames(m).label }));
   }
   if (s.category !== undefined && validCategory(s.category) === undefined)
     f(
       'category',
       'warning',
-      `Category ${JSON.stringify(s.category)} is not one EZ2PORT knows (1-48): the song goes under CUSTOM`,
-      { id: 'category-custom', label: 'Make it CUSTOM (48)' },
+      said('lint.category', { category: String(JSON.stringify(s.category)) }),
+      songFix('category-custom'),
     );
   else {
     const cat = validCategory(s.category);
@@ -451,7 +396,10 @@ export function lintSong(s: LintSong): Finding[] {
           f(
             'category-unreachable',
             'warning',
-            `${modeNames(m).label} pages past ${categoryLabel(cat)}: its charts cannot be reached there`,
+            said('lint.category-unreachable', {
+              mode: modeNames(m).label,
+              category: categoryLabel(cat),
+            }),
           );
   }
   if (s.art) {
@@ -459,49 +407,31 @@ export function lintSong(s: LintSong): Finding[] {
       ['disc', s.art.disc],
       ['eyecatch', s.art.eyecatch],
     ] as const)
-      if (a && !a.path)
-        f('art-missing', 'error', `The ${what} image ${a.src} is not in the song folder`);
+      if (a && !a.path) f('art-missing', 'error', said(`lint.art-missing.${what}`, { src: a.src }));
     // The importer says the same of a bmson with no jacket (ez2/bmson.c).
-    if (!s.art.disc)
-      f('no-disc', 'warning', 'The song has no disc art: its disc on the wheel will be blank');
+    if (!s.art.disc) f('no-disc', 'warning', said('lint.no-disc'));
   }
   if (s.plate) {
     const p = s.plate;
     if (p.image && !p.image.path)
-      f('art-missing', 'error', `The title plate image ${p.image.src} is not in the song folder`);
-    else if (p.error) f('plate-failed', 'error', `The title plate cannot be made: ${p.error}`);
+      f('art-missing', 'error', said('lint.art-missing.plate', { src: p.image.src }));
+    else if (p.error) f('plate-failed', 'error', said('lint.plate-failed', { error: p.error }));
     if (p.missing.length)
-      f(
-        'plate-glyphs',
-        'warning',
-        `The title plate's fonts have no ${p.missing.join(' ')}: they come out as boxes`,
-      );
+      f('plate-glyphs', 'warning', said('lint.plate-glyphs', { chars: p.missing.join(' ') }));
     if (p.text !== undefined && p.text !== p.songTitle)
-      f(
-        'plate-text',
-        'info',
-        `The title plate reads "${p.text}"; the song is titled "${p.songTitle}"`,
-      );
+      f('plate-text', 'info', said('lint.plate-text', { text: p.text, title: p.songTitle }));
   }
   if (s.preview) {
     const p = s.preview;
     if (p.file && !p.file.path)
-      f('art-missing', 'error', `The preview's audio file ${p.file.src} is not in the song folder`);
+      f('art-missing', 'error', said('lint.art-missing.preview', { src: p.file.src }));
     if (!p.file && p.lastNoteMs !== undefined && p.startMs > p.lastNoteMs)
-      f(
-        'preview-late',
-        'warning',
-        'The preview starts after the last note: the wheel may loop silence',
-      );
+      f('preview-late', 'warning', said('lint.preview-late'));
   }
   if (s.bga) bgaFindings(s.bga, f);
   const meta = songMeta(s.charts);
   for (const field of meta.differs)
-    f(
-      'song-meta',
-      'warning',
-      `The charts have different ${field}s; Publish uses "${meta.values[field]}" (the NM chart's)`,
-    );
+    f('song-meta', 'warning', said('lint.song-meta', { field, value: meta.values[field] }));
   // Charts named the port's way (streetmix1p-key-hd) should say what they
   // are: EZ2PORT's own bmson importer reads mode and tier from the name.
   if (isValidSongKey(s.key))
@@ -513,7 +443,7 @@ export function lintSong(s: LintSong): Finding[] {
         out.push({
           rule: 'chart-file-name',
           severity: 'warning',
-          message: `${c.file} will be saved as ${want} (its mode, key and tier)`,
+          ...saying(said('lint.chart-file-name', { file: c.file, want })),
           chart: c.file,
         });
     }
@@ -521,48 +451,62 @@ export function lintSong(s: LintSong): Finding[] {
   for (const c of s.charts) {
     const k = `${c.mode}.${c.tier}`;
     if (seen.has(k))
-      f('duplicate-chart', 'error', `Two charts are ${modeNames(c.mode).label} ${c.tier}`);
+      f(
+        'duplicate-chart',
+        'error',
+        said('lint.duplicate-chart', { mode: modeNames(c.mode).label, tier: c.tier }),
+      );
     seen.add(k);
     if (!modeNames(c.mode).portPlayable) {
       f(
         'mode-unsupported',
         'error',
-        `${modeNames(c.mode).label} cannot be published to EZ2PORT yet (cabinet export only)`,
+        said('lint.mode-unsupported', { mode: modeNames(c.mode).label }),
       );
     }
   }
-  for (const n of s.notes ?? []) f(n.rule, n.severity, n.message);
+  for (const n of s.notes ?? []) out.push(noteFinding(n));
   for (const c of s.charts) out.push(...lintChart(c, s.missingSounds));
   return out;
 }
 
 export const hasErrors = (fs: readonly Finding[]) => fs.some((x) => x.severity === 'error');
 
-function bgaFindings(b: BgaCheck, f: (rule: string, severity: Severity, message: string) => void) {
+/** An opening or import note as a finding: its message as it was made (a stored one may have no key). */
+function noteFinding(n: OpenNote): Finding {
+  return {
+    rule: n.rule,
+    severity: n.severity,
+    message: n.message,
+    ...(n.said ? { said: n.said } : {}),
+  };
+}
+
+function bgaFindings(b: BgaCheck, f: (rule: string, severity: Severity, s: Said) => void) {
   if (!b.movie) {
     // The importer's own words (bmson.c): an image or a sequence is not a package BGA.
-    f('bga-not-movie', 'warning', `The BGA ${b.src} is not a movie: EZ2PORT shows none for it`);
+    f('bga-not-movie', 'warning', said('lint.bga-not-movie', { src: b.src }));
     return;
   }
-  if (!b.path) return f('art-missing', 'error', `The BGA movie ${b.src} is not in the song folder`);
+  if (!b.path) return f('art-missing', 'error', said('lint.art-missing.bga', { src: b.src }));
   const m = b.probe;
   if (!m) return;
   if ('error' in m)
-    return f('bga-unreadable', 'error', `The BGA ${b.src} cannot be read: ${m.error}`);
-  const why = portCannotPlay(m);
-  if (why) return f('bga-codec', 'error', `The BGA ${b.src} will not play: ${why}`);
+    return f(
+      'bga-unreadable',
+      'error',
+      said('lint.bga-unreadable', { src: b.src, error: m.error }),
+    );
+  const why = portCannotPlaySaid(m);
+  if (why) return f('bga-codec', 'error', said('lint.bga-codec', { src: b.src, why }));
   const [w, h] = [m.width ?? 0, m.height ?? 0];
   // "Cat's rule's bga2.mp4 is 1280x960 H.264 and drew nothing on the
   // cabinet" (thirdparty/fetch-ffmpeg.sh); every frame is converted and
   // uploaded at its own size, and the screen shows 640x480.
   if (w > BGA_MAX_SIDE || h > BGA_MAX_SIDE)
-    f(
-      'bga-large',
-      'warning',
-      `The BGA is ${w}x${h}: a 1280x960 movie drew nothing on EZ2PORT's cabinet; 640x480 is all it shows`,
-    );
+    f('bga-large', 'warning', said('lint.bga-large', { w, h }));
   if (w && h && Math.abs(w / h - 4 / 3) > 0.02)
-    f('bga-aspect', 'info', `The BGA is ${w}x${h}: EZ2PORT stretches it to 640x480 (4:3)`);
+    f('bga-aspect', 'info', said('lint.bga-aspect', { w, h }));
   if (
     m.durationMs !== null &&
     b.songEndMs !== undefined &&
@@ -571,6 +515,8 @@ function bgaFindings(b: BgaCheck, f: (rule: string, severity: Severity, message:
     f(
       'bga-short',
       'warning',
-      `The BGA ends ${Math.round((b.songEndMs - b.startMs - m.durationMs) / 1000)} s before the song: it does not loop, the screen goes black`,
+      said('lint.bga-short', {
+        s: Math.round((b.songEndMs - b.startMs - m.durationMs) / 1000),
+      }),
     );
 }

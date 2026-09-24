@@ -3,6 +3,7 @@
   // and the review - what the take would place, where it clashes or finds
   // nothing to key, how it sat against the grid - with Keep, Retake, Discard.
   import { onMount } from 'svelte';
+  import { t, tParts } from '../i18n/i18n.svelte';
   import { normRecord } from '../play/recorder.svelte';
   import { app } from '../state/app.svelte';
   import type { RecordOptions } from '../state/settings.svelte';
@@ -15,7 +16,7 @@
     for (const s of r.review?.states ?? []) c[s]++;
     return c;
   });
-  const ms = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)} ms`;
+  const ms = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
 
   function set<K extends keyof RecordOptions>(k: K, v: RecordOptions[K]) {
     app.settings.set('record', { ...o, [k]: v });
@@ -50,66 +51,73 @@
 >
   {#if r.state === 'countin'}
     <div class="count" data-testid="record-countin">{r.countLeft}</div>
-    <div class="line"><span class="dot"></span> Recording from the cursor…</div>
+    <div class="line"><span class="dot"></span> {t('record.starting')}</div>
   {:else if r.state === 'recording'}
     <div class="line" data-testid="record-live">
-      <span class="dot on"></span> REC · {r.presses} press{r.presses === 1 ? '' : 'es'}
-      <span class="dim">R or Esc stops</span>
+      <span class="dot on"></span>
+      {t('record.live', { n: r.presses })}
+      <span class="dim">{t('record.stopHint')}</span>
     </div>
   {:else if r.state === 'review' && r.review}
     {@const s = r.review.stats}
     <div class="card" data-testid="record-review">
       <div class="head">
-        <b>Take</b>
-        <span data-testid="record-count">{r.review.notes.length} notes</span>
-        {#if r.review.classic}<span class="tag">Classic: keys what plays</span>{/if}
+        <b>{t('record.take')}</b>
+        <span data-testid="record-count">{t('record.notes', { n: r.review.notes.length })}</span>
+        {#if r.review.classic}<span class="tag">{t('record.classic')}</span>{/if}
       </div>
       <div class="states">
-        <span class="ok" data-testid="record-ok">{counts.ok} to place</span>
+        <span class="ok" data-testid="record-ok">{t('record.ok', { n: counts.ok })}</span>
         {#if counts.clash}<span class="clash" data-testid="record-clash"
-            >{counts.clash} on notes already there</span
+            >{t('record.clash', { n: counts.clash })}</span
           >{/if}
         {#if counts.silent}<span class="silent" data-testid="record-silent"
-            >{counts.silent} with nothing to key</span
+            >{t('record.silent', { n: counts.silent })}</span
           >{/if}
       </div>
-      <div class="stats" title="How the presses sat against the grid (after the input offset)">
-        mean {ms(s.meanMs)} · median {ms(s.medianMs)} · {s.early} early · {s.late} late
+      <div class="stats" title={t('record.statsTitle')}>
+        {t('record.stats', {
+          mean: ms(s.meanMs),
+          median: ms(s.medianMs),
+          early: s.early,
+          late: s.late,
+        })}
       </div>
       <div class="opts">
         <label
-          >Holds from <input
-            type="number"
-            min="0"
-            step="10"
-            value={o.holdMinMs}
-            onchange={(e) => set('holdMinMs', Number(e.currentTarget.value))}
-          /> ms</label
+          >{#each tParts('record.holdsFrom', {}, ['field']) as p, i (i)}{#if 'slot' in p}<input
+                type="number"
+                min="0"
+                step="10"
+                value={o.holdMinMs}
+                onchange={(e) => set('holdMinMs', Number(e.currentTarget.value))}
+              />{:else}{p.text}{/if}{/each}</label
         >
         <span class="ez-seg">
           <button class:on={o.quantize === 'grid'} onclick={() => set('quantize', 'grid')}
-            >Grid</button
+            >{t('record.grid')}</button
           ><button
             class:on={o.quantize === 'exact'}
             onclick={() => set('quantize', 'exact')}
-            title="EZ2's own grid: 1/48 beat">EZ2 exact</button
+            title={t('record.exactTitle')}>{t('record.exact')}</button
           >
         </span>
         <label
-          >Count-in <input
-            type="number"
-            min="0"
-            max="16"
-            value={o.countIn}
-            onchange={(e) => set('countIn', Number(e.currentTarget.value))}
-          /> beats</label
+          >{#each tParts('record.countIn', {}, ['field']) as p, i (i)}{#if 'slot' in p}<input
+                type="number"
+                min="0"
+                max="16"
+                value={o.countIn}
+                onchange={(e) => set('countIn', Number(e.currentTarget.value))}
+              />{:else}{p.text}{/if}{/each}</label
         >
         <label class="check"
           ><input
             type="checkbox"
             checked={o.metronome}
             onchange={(e) => set('metronome', e.currentTarget.checked)}
-          /> metronome</label
+          />
+          {t('record.metronome')}</label
         >
         {#if !r.review.classic}
           <label class="check"
@@ -117,19 +125,20 @@
               type="checkbox"
               checked={o.muteLanes}
               onchange={(e) => set('muteLanes', e.currentTarget.checked)}
-            /> mute the lanes while recording</label
+            />
+            {t('record.muteLanes')}</label
           >
         {/if}
       </div>
       <div class="buttons">
         <button class="ez-btn go" onclick={() => r.keep()} data-testid="record-keep"
-          >Keep <kbd>Enter</kbd></button
+          >{t('record.keep')} <kbd>Enter</kbd></button
         >
         <button class="ez-btn" onclick={() => void r.retake()} data-testid="record-retake"
-          >Retake <kbd>R</kbd></button
+          >{t('record.retake')} <kbd>R</kbd></button
         >
         <button class="ez-btn" onclick={() => r.discard()} data-testid="record-discard"
-          >Discard <kbd>Esc</kbd></button
+          >{t('record.discard')} <kbd>Esc</kbd></button
         >
       </div>
     </div>

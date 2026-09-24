@@ -11,6 +11,7 @@
     type ModeId,
     type Tier,
   } from '@ez2bms/chart-core';
+  import { t, tParts } from '../i18n/i18n.svelte';
   import { app } from '../state/app.svelte';
   import { toast } from '../state/toasts.svelte';
   import { KIND_CSS } from './lanecolors';
@@ -33,10 +34,10 @@
   const kindOf = (x: number) => LANES.find((l) => l.x === x)?.kind ?? 'white';
 
   function create() {
-    if (taken) return toast('This song already has that chart', 'warn');
+    if (taken) return toast(t('newChart.taken'), 'warn');
     const slot = app.song.createChart(mode, tier, { level, bpm, copySounds });
     if (!slot) return;
-    toast(`New chart: ${slot.file}`, 'ok');
+    toast(t('newChart.created', { file: slot.file }), 'ok');
     onclose();
   }
 
@@ -54,11 +55,11 @@
   class="dialog"
   role="dialog"
   aria-modal="true"
-  aria-label="New chart"
+  aria-label={t('newChart.title')}
   tabindex="-1"
   data-testid="new-chart"
 >
-  <h2>New chart</h2>
+  <h2>{t('newChart.title')}</h2>
   <div class="wheel">
     {#each MODES.filter((m) => m.portPlayable) as m (m.id)}
       <button
@@ -81,46 +82,52 @@
   <div class="ez-form">
     <div class="cols">
       <div class="row">
-        <span class="lbl2">Tier</span>
+        <span class="lbl2">{t('newChart.tier')}</span>
         <div class="ez-seg">
-          {#each ['NM', 'HD', 'SHD', 'EX'] as const as t (t)}<button
-              class:on={tier === t}
-              onclick={() => (tier = t)}>{t}</button
+          {#each ['NM', 'HD', 'SHD', 'EX'] as const as code (code)}<button
+              class:on={tier === code}
+              onclick={() => (tier = code)}>{code}</button
             >{/each}
         </div>
       </div>
       <div class="row">
-        <label for="nc-level">Level <b>{level}</b></label>
+        <label for="nc-level">
+          {#each tParts('newChart.level', { level }, ['level']) as p, i (i)}
+            {#if 'slot' in p}<b>{level}</b>{:else}{p.text}{/if}
+          {/each}
+        </label>
         <input id="nc-level" type="range" min="1" max="20" bind:value={level} />
       </div>
       <div class="row">
-        <label for="nc-bpm">BPM</label>
+        <label for="nc-bpm">{t('newChart.bpm')}</label>
         <input id="nc-bpm" type="number" min="1" max="999" step="any" bind:value={bpm} />
       </div>
     </div>
     <div class="cols">
       <div class="row">
-        <label for="nc-key">Song key</label>
+        <label for="nc-key">{t('newChart.songKey')}</label>
         <input id="nc-key" bind:value={p.sidecar.key} spellcheck="false" />
       </div>
       {#if base}
         <label class="check"
-          ><input type="checkbox" bind:checked={copySounds} /> Use this song's {base.channels
-            .length} sounds</label
+          ><input type="checkbox" bind:checked={copySounds} />
+          {t('newChart.copySounds', { n: base.channels.length })}</label
         >
       {/if}
     </div>
     <p class="hint">
-      File: <code>{file}</code>{#if taken}<span class="warn"> - already in this song</span>{/if}
+      {#each tParts('newChart.file', { file }, ['file']) as p, i (i)}
+        {#if 'slot' in p}<code>{file}</code>{:else}{p.text}{/if}
+      {/each}{#if taken}<span class="warn">{t('newChart.inSong')}</span>{/if}
     </p>
   </div>
   <footer>
-    <button class="ez-btn" onclick={onclose}>Cancel</button>
+    <button class="ez-btn" onclick={onclose}>{t('newChart.cancel')}</button>
     <button
       class="ez-btn go"
       onclick={create}
       disabled={taken || !isValidSongKey(key)}
-      data-testid="create-chart">Create <kbd>Enter</kbd></button
+      data-testid="create-chart">{t('newChart.create')} <kbd>Enter</kbd></button
     >
   </footer>
 </div>

@@ -11,8 +11,9 @@ import {
   songMeta,
   type Finding,
 } from '@ez2bms/chart-core';
+import { t, tSaid } from '../i18n/i18n.svelte';
 import type { App } from '../state/app.svelte';
-import { plural, songwideToast, stepOf, type SongwideStep } from '../state/songwide';
+import { songwideToast, stepOf, type SongwideStep } from '../state/songwide';
 import { toast } from '../state/toasts.svelte';
 import { songFindings } from './lint';
 
@@ -26,7 +27,7 @@ export async function applyFix(app: App, f: Finding): Promise<boolean> {
       const title = songMeta(p.charts.map((c) => ({ data: c.doc.data, tier: c.tier }))).values
         .title;
       p.sidecar.key = songKeyFor(title, p.name);
-      toast(`The song key is now "${p.sidecar.key}"`, 'ok');
+      toast(t('fix.key', { key: p.sidecar.key }), 'ok');
     } else p.sidecar.category = CUSTOM_CATEGORY;
     await p.saveSidecar();
     return true;
@@ -43,7 +44,7 @@ export async function fixAll(app: App, rule: string): Promise<void> {
   const done: SongwideStep[] = [];
   let label = '';
   for (const f of todo) {
-    label = f.fix!.label;
+    label = tSaid(f.fix!.said);
     if (!isChartFix(f.fix!.id)) {
       await applyFix(app, f);
       continue;
@@ -51,7 +52,6 @@ export async function fixAll(app: App, rule: string): Promise<void> {
     const slot = p.charts.find((c) => c.file === f.chart);
     if (slot && fixChart(slot.doc, slot.mode, f.fix!.id)) done.push(stepOf(slot));
   }
-  if (done.length > 1)
-    songwideToast(`${label}: done in ${plural(done.length, 'chart')}`, done, label);
-  else if (done.length) toast(`${label}: done (Ctrl+Z undoes it)`, 'ok');
+  if (done.length > 1) songwideToast(t('fix.doneAll', { fix: label, n: done.length }), done, label);
+  else if (done.length) toast(t('fix.done', { fix: label }), 'ok');
 }

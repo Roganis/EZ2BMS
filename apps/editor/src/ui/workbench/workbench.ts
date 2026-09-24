@@ -2,17 +2,18 @@
 // be tested: which sounds show, in what order, grouped how, and which rows of
 // a 1500-sound grid are on screen.
 
+import type { MessageKey } from '../../i18n/i18n.svelte';
 import type { SongSounds, SoundInfo } from '@ez2bms/chart-core';
 
 export type SoundFilter = 'all' | 'used' | 'unused' | 'missing' | 'channels';
 export type SoundSort = 'group' | 'name' | 'usage' | 'length';
 
-export const FILTERS: readonly { id: SoundFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'used', label: 'Used' },
-  { id: 'unused', label: 'Not used' },
-  { id: 'missing', label: 'Missing' },
-  { id: 'channels', label: 'Unused in a chart' },
+export const FILTERS: readonly { id: SoundFilter; label: MessageKey }[] = [
+  { id: 'all', label: 'workbench.all' },
+  { id: 'used', label: 'workbench.used' },
+  { id: 'unused', label: 'workbench.unused' },
+  { id: 'missing', label: 'workbench.missing' },
+  { id: 'channels', label: 'workbench.channels' },
 ];
 
 /**

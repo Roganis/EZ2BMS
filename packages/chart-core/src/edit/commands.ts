@@ -7,10 +7,14 @@
 // later note) - the engine would judge such a pair unpredictably. Background
 // (x 0) is unlimited. A command that would break a rule changes nothing and
 // returns false/undefined, so a drag simply stops at the obstacle.
+//
+// Undo steps are named in the language chosen when the edit is made: the
+// history keeps the name as text, and the status bar and the undo toast show it.
 
 import type { ChannelId, NoteId, NoteRec, ScrollEvent, SoundChannel } from '../model/types';
 import { f32Decimal } from '../util/f32';
-import { HOLD_KIND_INFO } from '../engine/holdpreview';
+import { HOLD_KIND_INFO, type HoldKindInfo } from '../engine/holdpreview';
+import { said, sayText } from '../i18n/say';
 import { columnOf, type ModeDef } from '../modes/registry';
 import type { ChartDoc, NotePatch } from './doc';
 
@@ -18,25 +22,44 @@ export const BGM = 0;
 
 // ---- rules ------------------------------------------------------------------
 
-/** Why a note cannot go at (x, y, l), or undefined when it can. */
-export function placementConflict(
+/** A placement rule a note can break; why, in words, is the message `edit.place.<rule>`. */
+export type PlacementRule = 'before-start' | 'taken' | 'in-hold' | 'covers';
+
+/**
+ * Which rule a note at (x, y, l) would break, or undefined when it can go
+ * there. The check alone, with no message made: it runs on every mouse move
+ * of a drag, for every candidate of Classic's hover and every note of a take.
+ */
+export function placementRule(
   doc: ChartDoc,
   x: number,
   y: number,
   l: number,
   ignore: ReadonlySet<NoteId> = new Set(),
-): string | undefined {
+): PlacementRule | undefined {
   if (x === BGM) return undefined;
-  if (y < 0) return 'before the start of the chart';
-  for (const n of doc.index.at(x, y)) if (!ignore.has(n.id)) return 'a note is already there';
+  if (y < 0) return 'before-start';
+  for (const n of doc.index.at(x, y)) if (!ignore.has(n.id)) return 'taken';
   const cover = doc.index.holdCovering(x, y);
-  if (cover && !ignore.has(cover.id)) return 'inside a hold';
+  if (cover && !ignore.has(cover.id)) return 'in-hold';
   if (l > 0) {
     for (const n of doc.index.inRange(x, y + 1, y + l)) {
-      if (!ignore.has(n.id) && n.y > y && n.y <= y + l) return 'the hold would cover another note';
+      if (!ignore.has(n.id) && n.y > y && n.y <= y + l) return 'covers';
     }
   }
   return undefined;
+}
+
+/** Why a note cannot go at (x, y, l), in the language chosen; undefined when it can. */
+export function placementConflict(
+  doc: ChartDoc,
+  x: number,
+  y: number,
+  l: number,
+  ignore?: ReadonlySet<NoteId>,
+): string | undefined {
+  const rule = placementRule(doc, x, y, l, ignore);
+  return rule && sayText(said(`edit.place.${rule}`));
 }
 
 /** Check a whole moved set against the rest of the chart and against itself. */
@@ -49,7 +72,7 @@ export function movedConflict(
   for (const m of moved) {
     if (m.y < 0) return true;
     if (m.x === BGM) continue;
-    if (placementConflict(doc, m.x, m.y, m.l, ignore)) return true;
+    if (placementRule(doc, m.x, m.y, m.l, ignore)) return true;
     const list = seen.get(m.x) ?? [];
     for (const o of list) {
       if (o.y === m.y) return true;
@@ -78,9 +101,9 @@ export interface PlaceSpec {
 /** Place one note. Returns its id, or undefined when the lane rules refuse it. */
 export function placeNote(doc: ChartDoc, spec: PlaceSpec, select = true): NoteId | undefined {
   const l = Math.max(0, spec.l ?? 0);
-  if (placementConflict(doc, spec.x, spec.y, l)) return undefined;
+  if (placementRule(doc, spec.x, spec.y, l)) return undefined;
   if (!doc.channel(spec.ch)) throw new Error(`no channel ${spec.ch}`);
-  return doc.transact('Place note', (tx) => {
+  return doc.transact(sayText(said('undo.place-note')), (tx) => {
     const rec: NoteRec = {
       id: doc.newNoteId(),
       ch: spec.ch,
@@ -101,9 +124,7 @@ export function placeNote(doc: ChartDoc, spec: PlaceSpec, select = true): NoteId
 export function eraseNotes(doc: ChartDoc, ids: Iterable<NoteId>): number {
   const list = [...ids].filter((id) => doc.index.has(id));
   if (!list.length) return 0;
-  doc.transact(list.length === 1 ? 'Erase note' : `Erase ${list.length} notes`, (tx) =>
-    tx.deleteNotes(list),
-  );
+  doc.transact(sayText(said('undo.erase-notes', { n: list.length })), (tx) => tx.deleteNotes(list));
   return list.length;
 }
 
@@ -119,7 +140,7 @@ export function moveNotes(
   doc: ChartDoc,
   ids: Iterable<NoteId>,
   spec: MoveSpec,
-  label = 'Move notes',
+  label = sayText(said('undo.move-notes')),
 ): boolean {
   const notes = [...ids].map((id) => doc.index.get(id)).filter((n): n is NoteRec => !!n);
   if (!notes.length) return false;
@@ -161,14 +182,19 @@ export function shiftColumns(
         return target?.x ?? x;
       },
     },
-    'Shift lanes',
+    sayText(said('undo.shift-lanes')),
   );
   return ok && res;
 }
 
 /** Send notes to background (x 0) or bring them onto a lane. */
 export function setLane(doc: ChartDoc, ids: Iterable<NoteId>, x: number): boolean {
-  return moveNotes(doc, ids, { mapX: () => x }, x === BGM ? 'Move to background' : 'Move to lane');
+  return moveNotes(
+    doc,
+    ids,
+    { mapX: () => x },
+    sayText(said(x === BGM ? 'undo.to-background' : 'undo.to-lane')),
+  );
 }
 
 export function setLength(
@@ -180,9 +206,9 @@ export function setLength(
   const notes = [...ids].map((id) => doc.index.get(id)).filter((n): n is NoteRec => !!n);
   const len = Math.max(0, Math.round(l));
   const ignore = new Set(notes.map((n) => n.id));
-  for (const n of notes) if (placementConflict(doc, n.x, n.y, len, ignore)) return false;
+  for (const n of notes) if (placementRule(doc, n.x, n.y, len, ignore)) return false;
   doc.transact(
-    'Set length',
+    sayText(said('undo.set-length')),
     (tx) => tx.patchNotes(notes.map((n) => ({ id: n.id, patch: { l: len } }))),
     {
       ...(merge ? { merge } : {}),
@@ -200,10 +226,12 @@ export function toggleHold(doc: ChartDoc, ids: Iterable<NoteId>, len: number): b
   const changes: { id: NoteId; patch: NotePatch }[] = [];
   for (const n of notes) {
     const l = makeHolds ? (n.l > 0 ? n.l : len) : 0;
-    if (placementConflict(doc, n.x, n.y, l, ignore)) return false;
+    if (placementRule(doc, n.x, n.y, l, ignore)) return false;
     changes.push({ id: n.id, patch: { l } });
   }
-  doc.transact(makeHolds ? 'Make holds' : 'Make taps', (tx) => tx.patchNotes(changes));
+  doc.transact(sayText(said(makeHolds ? 'undo.make-holds' : 'undo.make-taps')), (tx) =>
+    tx.patchNotes(changes),
+  );
   return true;
 }
 
@@ -211,12 +239,11 @@ export function toggleHold(doc: ChartDoc, ids: Iterable<NoteId>, len: number): b
  * EZ2 hold kinds and what they pay while held (EZ2PORT ez2/score.h): all of
  * 0-12, from engine/holdpreview.ts. K cycles through the common ones.
  */
-export const HOLD_KINDS: readonly { kind: number; label: string; common: boolean }[] =
-  HOLD_KIND_INFO;
+export const HOLD_KINDS: readonly HoldKindInfo[] = HOLD_KIND_INFO;
 
 export function setHoldKind(doc: ChartDoc, ids: Iterable<NoteId>, kind: number | undefined): void {
   const list = [...ids].filter((id) => doc.index.has(id));
-  doc.transact('Set hold kind', (tx) =>
+  doc.transact(sayText(said('undo.hold-kind')), (tx) =>
     tx.patchNotes(list.map((id) => ({ id, patch: { kind: kind === 0 ? undefined : kind } }))),
   );
 }
@@ -245,9 +272,11 @@ export function setVelPan(
   const patch: NotePatch = {};
   if ('vel' in v) patch.vel = v.vel === 127 ? undefined : v.vel;
   if ('pan' in v) patch.pan = v.pan === 64 ? undefined : v.pan;
-  doc.transact('Set velocity/pan', (tx) => tx.patchNotes(list.map((id) => ({ id, patch }))), {
-    ...(merge ? { merge } : {}),
-  });
+  doc.transact(
+    sayText(said('undo.vel-pan')),
+    (tx) => tx.patchNotes(list.map((id) => ({ id, patch }))),
+    { ...(merge ? { merge } : {}) },
+  );
 }
 
 /** Mirror keys inside each five-key bank (1<->5, 2<->4). Turntables, pedals and effectors stay. */
@@ -262,7 +291,7 @@ export function mirrorKeys(doc: ChartDoc, ids: Iterable<NoteId>): boolean {
         return x;
       },
     },
-    'Mirror',
+    sayText(said('undo.mirror')),
   );
 }
 
@@ -289,7 +318,7 @@ export function swapSides(doc: ChartDoc, ids: Iterable<NoteId>): boolean {
         return SIDE_SWAP[x] ?? x;
       },
     },
-    'Swap sides',
+    sayText(said('undo.swap-sides')),
   );
 }
 
@@ -298,7 +327,7 @@ export function swapSides(doc: ChartDoc, ids: Iterable<NoteId>): boolean {
 /** Set (or with `null` remove) the BPM change at y. A change at y = 0 sets init_bpm instead. */
 export function setBpmAt(doc: ChartDoc, y: number, bpm: number | null): void {
   if (bpm !== null && !(bpm > 0 && Number.isFinite(bpm))) throw new Error('BPM must be positive');
-  doc.transact(bpm === null ? 'Remove BPM change' : 'Set BPM', (tx) => {
+  doc.transact(sayText(said(bpm === null ? 'undo.bpm.remove' : 'undo.bpm.set')), (tx) => {
     if (y <= 0 && bpm !== null) {
       tx.setInfo({ initBpm: bpm });
       if (doc.data.bpmEvents.some((e) => e.y === 0)) {
@@ -313,7 +342,7 @@ export function setBpmAt(doc: ChartDoc, y: number, bpm: number | null): void {
 
 /** Set (or with `null` remove) the STOP at y, `duration` pulses long. */
 export function setStopAt(doc: ChartDoc, y: number, duration: number | null): void {
-  doc.transact(duration === null ? 'Remove STOP' : 'Set STOP', (tx) => {
+  doc.transact(sayText(said(duration === null ? 'undo.stop.remove' : 'undo.stop.set')), (tx) => {
     const rest = doc.data.stopEvents.filter((e) => e.y !== y);
     tx.setStopEvents(duration === null || duration <= 0 ? rest : [...rest, { y, duration }]);
   });
@@ -329,7 +358,7 @@ export function setScrollAt(doc: ChartDoc, y: number, rate: number | null): void
   if (rate !== null && !(rate > 0 && Number.isFinite(rate)))
     throw new Error('A scroll rate must be positive');
   const at = Math.max(0, y);
-  doc.transact(rate === null ? 'Remove scroll change' : 'Set scroll change', (tx) => {
+  doc.transact(sayText(said(rate === null ? 'undo.scroll.remove' : 'undo.scroll.set')), (tx) => {
     const was = doc.data.scrollEvents.find((e) => e.y === at);
     const rest = doc.data.scrollEvents.filter((e) => e.y !== at);
     if (rate === null) return tx.setScrollEvents(rest);
@@ -342,22 +371,22 @@ export function setScrollAt(doc: ChartDoc, y: number, rate: number | null): void
 // ---- channels ----------------------------------------------------------------
 
 export function addChannel(doc: ChartDoc, name: string): SoundChannel {
-  return doc.transact('Add sound', (tx) => tx.insertChannel({ name }));
+  return doc.transact(sayText(said('undo.add-sound')), (tx) => tx.insertChannel({ name }));
 }
 
 /** Add many sounds in one undo step (a folder drop). */
 export function addChannels(doc: ChartDoc, names: string[]): SoundChannel[] {
-  return doc.transact(`Add ${names.length} sound${names.length === 1 ? '' : 's'}`, (tx) =>
+  return doc.transact(sayText(said('undo.add-sounds', { n: names.length })), (tx) =>
     names.map((name) => tx.insertChannel({ name })),
   );
 }
 
 export function removeChannel(doc: ChartDoc, id: ChannelId): void {
-  doc.transact('Remove sound', (tx) => tx.deleteChannel(id));
+  doc.transact(sayText(said('undo.remove-sound')), (tx) => tx.deleteChannel(id));
 }
 
 export function renameChannel(doc: ChartDoc, id: ChannelId, name: string): void {
-  doc.transact('Rename sound', (tx) => tx.patchChannel(id, { name }));
+  doc.transact(sayText(said('undo.rename-sound')), (tx) => tx.patchChannel(id, { name }));
 }
 
 /**
@@ -371,7 +400,7 @@ export function replaceSound(doc: ChartDoc, ids: Iterable<ChannelId>, name: stri
     return c && c.name !== name;
   });
   if (!list.length) return 0;
-  doc.transact('Replace sound', (tx) => {
+  doc.transact(sayText(said('undo.replace-sound')), (tx) => {
     for (const id of list) tx.patchChannel(id, { name });
   });
   return list.length;
@@ -384,7 +413,7 @@ export function removeUnusedChannels(doc: ChartDoc, ids?: Iterable<ChannelId>): 
     .filter((c) => (!want || want.has(c.id)) && doc.index.channel(c.id).length === 0)
     .map((c) => c.id);
   if (gone.length)
-    doc.transact(`Remove ${gone.length} unused sound${gone.length === 1 ? '' : 's'}`, (tx) => {
+    doc.transact(sayText(said('undo.remove-unused', { n: gone.length })), (tx) => {
       for (const id of gone) tx.deleteChannel(id);
     });
   return gone;
@@ -394,7 +423,9 @@ export function removeUnusedChannels(doc: ChartDoc, ids?: Iterable<ChannelId>): 
 export function setChannel(doc: ChartDoc, ids: Iterable<NoteId>, ch: ChannelId): void {
   if (!doc.channel(ch)) throw new Error(`no channel ${ch}`);
   const list = [...ids].filter((id) => doc.index.has(id));
-  doc.transact('Change sound', (tx) => tx.patchNotes(list.map((id) => ({ id, patch: { ch } }))));
+  doc.transact(sayText(said('undo.change-sound')), (tx) =>
+    tx.patchNotes(list.map((id) => ({ id, patch: { ch } }))),
+  );
 }
 
 // ---- clipboard ---------------------------------------------------------------
@@ -472,7 +503,7 @@ export function pasteNotes(
     l: Math.round(n.l * scale),
   }));
   if (movedConflict(doc, placed)) return undefined;
-  return doc.transact('Paste', (tx) => {
+  return doc.transact(sayText(said('undo.paste')), (tx) => {
     const byName = new Map(doc.data.channels.map((c) => [c.name, c.id]));
     const chFor = (n: ClipNote): ChannelId => {
       if (doc.channel(n.ch)?.name === n.chName) return n.ch;

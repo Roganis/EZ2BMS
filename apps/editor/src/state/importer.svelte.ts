@@ -18,6 +18,7 @@ import {
   type GameSong,
 } from '@ez2bms/chart-core';
 import { baseName, dirName, joinPath, type ImportJob } from '../bridge';
+import { t } from '../i18n/i18n.svelte';
 import type { App } from './app.svelte';
 import { loadGame } from './game';
 import { SIDECAR } from './project.svelte';
@@ -85,16 +86,14 @@ export class Importer {
   async loadGame(): Promise<void> {
     this.gameError = null;
     if (!this.app.settings.data.gameRoot) {
-      this.gameError = 'Set your EZ2AC data folder on the EZ2PORT panel first';
+      this.gameError = t('import.game.noRoot');
       return;
     }
     this.loadingGame = true;
     try {
       const game = await loadGame(this.app.backend, this.app.settings);
       this.game = game;
-      if (!game.songs.length)
-        this.gameError =
-          game.problems[0] ?? 'No songs found: is this the folder with sound/ and system/ in it?';
+      if (!game.songs.length) this.gameError = game.problems[0] ?? t('import.game.noSongs');
     } catch (e) {
       this.gameError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -146,7 +145,7 @@ export class Importer {
     await walk('', 0);
     const bms = listing.filter((f) => !f.includes('/') && BMS_FILE.test(f));
     if (!bms.length) {
-      this.bmsError = 'No .bms, .bme, .bml or .pms files in that folder';
+      this.bmsError = t('import.bms.none');
       this.bmsFiles = [];
       return;
     }
@@ -179,7 +178,7 @@ export class Importer {
     if (this.busy) return false;
     const imp = this.source === 'game' ? this.gameImport : this.bmsImport;
     if (!imp || !imp.charts.length) {
-      toast('Nothing to import', 'warn');
+      toast(t('import.nothing'), 'warn');
       return false;
     }
     this.busy = true;
@@ -193,13 +192,13 @@ export class Importer {
       if (this.source === 'bms' && this.inPlace) {
         dir = this.bmsDir;
         const there = (await this.app.backend.list(dir)).map((e) => e.name.toLowerCase());
-        const clash = texts.find((t) => there.includes(t.path.toLowerCase()));
-        if (clash) throw new Error(`${clash.path} is already in ${dir}`);
-        for (const t of texts)
-          await this.app.backend.writeText(joinPath(dir, t.path), t.text, false);
+        const clash = texts.find((f) => there.includes(f.path.toLowerCase()));
+        if (clash) throw new Error(t('import.clash', { file: clash.path, dir }));
+        for (const f of texts)
+          await this.app.backend.writeText(joinPath(dir, f.path), f.text, false);
       } else {
         dir = this.dest.trim();
-        if (!dir) throw new Error('Choose where the new song goes');
+        if (!dir) throw new Error(t('import.noDest'));
         const job: ImportJob =
           this.source === 'game'
             ? {
@@ -223,23 +222,16 @@ export class Importer {
           job,
           (done, total) => (this.progress = [done, total]),
         );
-        if (r.failed.length)
-          toast(
-            `${r.failed.length} keysound${r.failed.length === 1 ? '' : 's'} could not be copied: ${r.failed[0]![0]}${r.failed.length > 1 ? '...' : ''}`,
-            'warn',
-          );
+        if (r.failed.length) {
+          const file = r.failed[0]![0] + (r.failed.length > 1 ? '...' : '');
+          toast(t('import.copyFailed', { n: r.failed.length, file }), 'warn');
+        }
       }
       this.open = false;
-      if (await this.app.openProject(dir)) {
-        const n = imp.charts.length;
-        toast(
-          `Imported ${n} chart${n === 1 ? '' : 's'} - Issues says what could not come across`,
-          'ok',
-        );
-      }
+      if (await this.app.openProject(dir)) toast(t('import.done', { n: imp.charts.length }), 'ok');
       return true;
     } catch (e) {
-      toast(`Import failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
+      toast(t('import.failed', { error: e instanceof Error ? e.message : String(e) }), 'error');
       return false;
     } finally {
       this.busy = false;

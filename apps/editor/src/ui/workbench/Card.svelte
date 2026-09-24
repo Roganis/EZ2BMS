@@ -4,6 +4,7 @@
   import type { SoundInfo } from '@ez2bms/chart-core';
   import { baseName } from '../../bridge';
   import { channelHue } from '../../colors';
+  import { t, type MessageKey } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import Thumb from './Thumb.svelte';
   import { formatLength } from './workbench';
@@ -33,14 +34,14 @@
     const b = app.view.brush;
     return b !== null && !!info.charts.find((c) => c.chart === active)?.channels.includes(b);
   });
-  const status = $derived(
+  const status = $derived<MessageKey | null>(
     !info.inFolder
-      ? 'missing'
+      ? 'workbench.tagMissing'
       : loaded?.error
-        ? "can't read"
+        ? 'workbench.tagUnreadable'
         : info.charts.length === 0
-          ? 'not used'
-          : '',
+          ? 'workbench.tagUnused'
+          : null,
   );
 </script>
 
@@ -55,12 +56,13 @@
 >
   <button
     class="wave"
-    title={loaded?.error ?? (info.inFolder ? 'Listen' : 'Not in the song folder')}
+    title={loaded?.error ?? t(info.inFolder ? 'workbench.listen' : 'workbench.notInFolder')}
     disabled={!loaded || loaded.id === null}
     onclick={() => void app.audio.audition(info.name)}
   >
     <Thumb {loaded} width={width - 2} height={40} {hue} />
-    {#if status}<span class="tag" class:bad={status !== 'not used'}>{status}</span>{/if}
+    {#if status}<span class="tag" class:bad={status !== 'workbench.tagUnused'}>{t(status)}</span
+      >{/if}
   </button>
   {#if renaming}
     <!-- svelte-ignore a11y_autofocus -->
@@ -82,7 +84,7 @@
   {/if}
   <div class="meta">
     <span>{formatLength(loaded && !loaded.error ? loaded.seconds : undefined)}</span>
-    <span>{info.notes} note{info.notes === 1 ? '' : 's'}</span>
+    <span>{t('workbench.notes', { n: info.notes })}</span>
   </div>
   <div class="uses">
     {#each info.charts.slice(0, 3) as u (u.chart)}
@@ -90,8 +92,11 @@
         class="use"
         class:here={u.chart === active}
         class:idle={u.lane + u.bgm === 0}
-        title="{labels.get(u.chart) ?? u.chart}: {u.lane} on lanes, {u.bgm} in the background"
-        >{labels.get(u.chart) ?? u.chart} <b>{u.lane + u.bgm}</b></span
+        title={t('workbench.uses', {
+          chart: labels.get(u.chart) ?? u.chart,
+          lane: u.lane,
+          bgm: u.bgm,
+        })}>{labels.get(u.chart) ?? u.chart} <b>{u.lane + u.bgm}</b></span
       >
     {/each}
     {#if info.charts.length > 3}<span class="use">+{info.charts.length - 3}</span>{/if}
@@ -99,24 +104,24 @@
   <div class="acts">
     <button
       class="act main"
-      title="Draw notes with this sound in the open chart"
+      title={t('workbench.drawTitle')}
       disabled={!app.slot}
       onclick={() => {
         app.sounds.brush(info);
         app.view.workbench = false;
-      }}>Draw</button
+      }}>{t('workbench.draw')}</button
     >
     <button
       class="act"
-      title="Rename the file, and every chart's reference to it"
+      title={t('workbench.renameTitle')}
       disabled={!info.inFolder}
-      onclick={() => onrename()}>Rename</button
+      onclick={() => onrename()}>{t('workbench.rename')}</button
     >
     <button
       class="act"
-      title="Play another file wherever this sound plays"
+      title={t('workbench.replaceTitle')}
       disabled={!info.charts.length}
-      onclick={onreplace}>Replace</button
+      onclick={onreplace}>{t('workbench.replace')}</button
     >
   </div>
 </div>

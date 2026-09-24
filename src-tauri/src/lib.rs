@@ -104,8 +104,9 @@ async fn update_install(
     progress: Channel<update::ProgressDto>,
 ) -> CmdResult<()> {
     let u = pending.0.lock().unwrap().take();
-    let u =
-        u.ok_or_else(|| CmdError::Invalid("no update to install: look for one first".into()))?;
+    let u = u.ok_or_else(|| {
+        CmdError::coded("no-update", &[], "no update to install: look for one first".into())
+    })?;
     log::info!("installing {} over {}", u.version, u.current_version);
     let mut done = 0u64;
     u.download_and_install(

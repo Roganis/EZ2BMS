@@ -5,6 +5,7 @@
 // digest. Only addresses and digests live here; "a one-way digest of the table
 // is not the table, so committing it distributes nothing" (keytable.h).
 
+import { said, sayText, type Said } from '../i18n/say';
 import { KEYTABLE_SIZE } from './crypt';
 import { fnv1a64Hex } from './abm';
 
@@ -18,6 +19,7 @@ const TABLE_HASH: Record<KeyKind, string> = {
 };
 const REGION = 2048;
 
+/** Why the executable gives no key table, in the language chosen; `code` says which way it failed. */
 export class KeyTableError extends Error {
   constructor(
     message: string,
@@ -31,26 +33,23 @@ export class KeyTableError extends Error {
 export function peVaToOffset(exe: Uint8Array, va: number, need: number): number {
   const hdr = exe.subarray(0, 4096);
   const dv = new DataView(hdr.buffer, hdr.byteOffset, hdr.byteLength);
-  const fail = (m: string) => new KeyTableError(m, 'format');
-  if (hdr.length < 0x40 || hdr[0] !== 0x4d || hdr[1] !== 0x5a)
-    throw fail('not an executable (no MZ)');
+  const fail = (s: Said) => new KeyTableError(sayText(s), 'format');
+  if (hdr.length < 0x40 || hdr[0] !== 0x4d || hdr[1] !== 0x5a) throw fail(said('data.exe.no-mz'));
   const pe = dv.getUint32(0x3c, true);
-  if (pe + 24 + 96 > hdr.length) throw fail('PE header out of range');
+  if (pe + 24 + 96 > hdr.length) throw fail(said('data.exe.pe-range'));
   if (hdr[pe] !== 0x50 || hdr[pe + 1] !== 0x45 || hdr[pe + 2] !== 0 || hdr[pe + 3] !== 0) {
-    throw fail('not a PE image');
+    throw fail(said('data.exe.not-pe'));
   }
-  if (dv.getUint16(pe + 24, true) !== 0x10b) throw fail('not a 32-bit PE image');
+  if (dv.getUint16(pe + 24, true) !== 0x10b) throw fail(said('data.exe.not-32'));
   const nsec = dv.getUint16(pe + 6, true);
   const optsize = dv.getUint16(pe + 20, true);
   const base = dv.getUint32(pe + 24 + 28, true);
   const secoff = pe + 24 + optsize;
-  const addr = new KeyTableError(
-    'key table address is not in any section (is this the PACKED executable?)',
-    'address',
-  );
-  if (va < base) throw addr;
+  // Made when thrown: the message is said in the language chosen then.
+  const addr = () => new KeyTableError(sayText(said('data.exe.packed')), 'address');
+  if (va < base) throw addr();
   const rva = va - base;
-  if (secoff + nsec * 40 > hdr.length) throw fail('section table out of range');
+  if (secoff + nsec * 40 > hdr.length) throw fail(said('data.exe.sections'));
   for (let i = 0; i < nsec; i++) {
     const s = secoff + i * 40;
     const vaddr = dv.getUint32(s + 12, true);
@@ -58,24 +57,23 @@ export function peVaToOffset(exe: Uint8Array, va: number, need: number): number 
     const raddr = dv.getUint32(s + 20, true);
     if (rva >= vaddr && rva - vaddr < rsize) {
       const d = rva - vaddr;
-      if (rsize - d < need) throw addr;
+      if (rsize - d < need) throw addr();
       return raddr + d;
     }
   }
-  throw addr;
+  throw addr();
 }
+
+const truncated = () => new KeyTableError(sayText(said('data.exe.truncated')), 'address');
 
 /** Extract and verify one key table from the bytes of the user's executable. */
 export function keyTableFromExe(exe: Uint8Array, kind: KeyKind): Uint8Array {
   const off = peVaToOffset(exe, TABLE_VA[kind], REGION);
-  if (off + REGION > exe.length) throw new KeyTableError('executable is truncated', 'address');
+  if (off + REGION > exe.length) throw truncated();
   const t = new Uint8Array(KEYTABLE_SIZE);
   for (let i = 0; i < KEYTABLE_SIZE; i++) t[i] = exe[off + i * 4]!;
   if (!verifyKeyTable(t, kind)) {
-    throw new KeyTableError(
-      'extracted data is not the expected key table (wrong or modified executable)',
-      'verify',
-    );
+    throw new KeyTableError(sayText(said('data.exe.not-table')), 'verify');
   }
   return t;
 }
@@ -94,6 +92,6 @@ export const KEY_TABLE_VA = TABLE_VA;
  */
 export function exeRead(exe: Uint8Array, va: number, n: number): Uint8Array {
   const off = peVaToOffset(exe, va, n);
-  if (off + n > exe.length) throw new KeyTableError('executable is truncated', 'address');
+  if (off + n > exe.length) throw truncated();
   return exe.slice(off, off + n);
 }

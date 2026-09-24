@@ -2,6 +2,7 @@
   // The canvas. Scroll to move through the chart, Ctrl+scroll to zoom.
   import { columnsFor, eraseNotes, laneForChannel, modeDef, placeNote } from '@ez2bms/chart-core';
   import { onMount } from 'svelte';
+  import { i18n, t } from '../i18n/i18n.svelte';
   import { PointerTool, type StripHooks, type ToolHost } from '../input/pointer';
   import { PlayfieldRenderer } from '../render/renderer';
   import { toast } from '../state/toasts.svelte';
@@ -189,9 +190,9 @@
         d,
         there.map((n) => n.id),
       );
-    else if (v.brush === null) toast('Pick a sound to draw with first', 'warn');
+    else if (v.brush === null) toast(t('field.pickSound'), 'warn');
     else if (placeNote(d, { x, y, ch: v.brush }) === undefined)
-      toast("Can't place a note there", 'warn');
+      toast(t('field.cantPlaceThere'), 'warn');
   }
 
   // Listening for step input only while it is on: otherwise the keys are the editor's.
@@ -269,6 +270,8 @@
   });
 
   $effect(() => {
+    // The words the renderer draws (a hold's `end`) are read as it draws.
+    void i18n.locale;
     renderer?.set({
       doc: slot.doc,
       rev: slot.rev,
@@ -377,9 +380,9 @@
     oncontextmenu={(e) => e.preventDefault()}
     data-testid="playfield"
     role="application"
-    aria-label="Playfield"
+    aria-label={t('field.label')}
   >
-    {#if failed}<p class="fail">The playfield needs WebGL: {failed}</p>{/if}
+    {#if failed}<p class="fail">{t('field.noWebgl', { error: failed })}</p>{/if}
     {#if keptTip}
       <div
         class="tip"
@@ -388,7 +391,9 @@
         style:top="{keptTip.y + 12}px"
       >
         {#each keptTip.lines.slice(0, 8) as line, i (i)}<p>{line}</p>{/each}
-        {#if keptTip.lines.length > 8}<p>and {keptTip.lines.length - 8} more</p>{/if}
+        {#if keptTip.lines.length > 8}<p>
+            {t('field.keptMore', { n: keptTip.lines.length - 8 })}
+          </p>{/if}
       </div>
     {/if}
   </div>

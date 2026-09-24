@@ -19,6 +19,7 @@
     type WheelArt,
     type WheelEntry,
   } from '../../render/wheel';
+  import { t, tParts } from '../../i18n/i18n.svelte';
   import { loadSelectArt, SELECT_FILES } from '../../skin/select';
   import { app } from '../../state/app.svelte';
   import type { Project } from '../../state/project.svelte';
@@ -267,6 +268,9 @@
     // Back on: the song under the cursor previews again after the dwell.
     else prevFor = -1;
   }
+  const keysHint = $derived(tParts('wheel.keys', {}, ['turn', 'tiers', 'eyecatch']));
+  const noEyecatch = $derived(tParts('wheel.noEyecatchThen', {}, ['missing']));
+
   function onkey(e: KeyboardEvent) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key;
@@ -279,10 +283,16 @@
   }
 </script>
 
-<section class="wheel" data-testid="wheel-preview" aria-label="Song select preview">
+<section class="wheel" data-testid="wheel-preview" aria-label={t('wheel.label')}>
   <!-- The screen takes the wheel's keys, as the cabinet's panel would. -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-  <div class="screen" tabindex="0" role="application" aria-label="Song select" onkeydown={onkey}>
+  <div
+    class="screen"
+    tabindex="0"
+    role="application"
+    aria-label={t('wheel.screen')}
+    onkeydown={onkey}
+  >
     <canvas
       bind:this={canvas}
       data-testid="wheel-canvas"
@@ -294,83 +304,92 @@
   </div>
 
   <div class="side ez-form">
-    <div class="ez-seg" role="group" aria-label="Screen">
+    <div class="ez-seg" role="group" aria-label={t('wheel.screens')}>
       <button
         class:on={view === 'wheel'}
         data-testid="wheel-view-wheel"
-        onclick={() => setView('wheel')}>Song select</button
+        onclick={() => setView('wheel')}>{t('wheel.select')}</button
       >
       <button
         class:on={view === 'eyecatch'}
         data-testid="wheel-view-eyecatch"
-        onclick={() => setView('eyecatch')}>Eyecatch</button
+        onclick={() => setView('eyecatch')}>{t('wheel.eyecatch')}</button
       >
     </div>
 
     {#if view === 'wheel'}
       <div class="row">
-        <span class="lbl">{mode ? modeDef(mode).portName : 'No chart'} · tier</span>
-        <div class="ez-seg" role="group" aria-label="Tier">
-          {#each TIERS as t, i (t)}
+        <span class="lbl"
+          >{mode
+            ? t('wheel.modeTier', { mode: modeDef(mode).portName })
+            : t('wheel.noChartTier')}</span
+        >
+        <div class="ez-seg" role="group" aria-label={t('wheel.tier')}>
+          {#each TIERS as x, i (x)}
             <button
-              class:on={tier === t}
-              data-testid="wheel-tier-{t}"
-              disabled={!tiers.has(t)}
-              title={tiers.has(t) ? `${t} (${i + 1})` : `No ${t} chart in this mode`}
-              onclick={() => pickTier(t)}>{t}</button
+              class:on={tier === x}
+              data-testid="wheel-tier-{x}"
+              disabled={!tiers.has(x)}
+              title={tiers.has(x) ? `${x} (${i + 1})` : t('wheel.noTier', { tier: x })}
+              onclick={() => pickTier(x)}>{x}</button
             >
           {/each}
         </div>
       </div>
       <div class="move">
-        <button class="ez-btn" data-testid="wheel-up" onclick={() => move(-1)}>▲ Previous</button>
-        <button class="ez-btn" data-testid="wheel-down" onclick={() => move(1)}>Next ▼</button>
+        <button class="ez-btn" data-testid="wheel-up" onclick={() => move(-1)}
+          >{t('wheel.previous')}</button
+        >
+        <button class="ez-btn" data-testid="wheel-down" onclick={() => move(1)}
+          >{t('wheel.next')}</button
+        >
       </div>
       <label class="check">
         <input type="checkbox" data-testid="wheel-alone" bind:checked={alone} />
-        Alone in its category (the rail repeats it)
+        {t('wheel.alone')}
       </label>
       <label class="check">
         <input type="checkbox" data-testid="wheel-sound" checked={sound} onchange={toggleSound} />
-        Play the preview when the wheel stops
+        {t('wheel.sound')}
       </label>
     {:else}
       <button class="ez-btn" data-testid="wheel-replay" onclick={() => (level = 0)}
-        >Replay the fade</button
+        >{t('wheel.replay')}</button
       >
       <p class="hint">
-        The song select's exit: the eyecatch at its own size from the top left - a 1024x512 picture
-        shows its top-left 640x480 - under the stage mask and plate, faded in from black.
-        {#if !eyecatch}<b>This song has no eyecatch</b>: the screen stays black under the plate.{/if}
+        {t('wheel.exit')}
+        {#if !eyecatch}{#each noEyecatch as p, i (i)}{#if 'slot' in p}<b>{t('wheel.noEyecatch')}</b
+              >{:else}{p.text}{/if}{/each}{/if}
       </p>
     {/if}
 
     <p class="hint">
-      Click the screen, then <kbd>↑</kbd><kbd>↓</kbd> to turn the wheel, <kbd>1</kbd>–<kbd>4</kbd>
-      for the tier, <kbd>E</kbd> for the eyecatch. The preview starts after the wheel stands still for
-      half a second, as the game waits.
+      {#each keysHint as p, i (i)}{#if 'text' in p}{p.text}{:else if p.slot === 'turn'}<kbd>↑</kbd
+          ><kbd>↓</kbd>{:else if p.slot === 'tiers'}<kbd>1</kbd>–<kbd>4</kbd>{:else}<kbd>E</kbd
+          >{/if}{/each}
     </p>
     <p class="hint" data-testid="wheel-art">
       {#if !root}
-        Neon stand-ins: set your game folder (the Port drawer) to see your song select's own masks.
+        {t('wheel.neon')}
       {:else if artLoading}
-        Reading your game's song select art…
+        {t('wheel.reading')}
       {:else if artKind === 'game'}
-        Drawn with your game's song select masks.
+        {t('wheel.gameArt')}
       {:else}
-        Your game folder has no <code>{missing.join(', ')}</code>: neon stand-ins take their place.
+        {#each tParts('wheel.partial', {}, ['files']) as p, i (i)}{#if 'slot' in p}<code
+              >{missing.join(', ')}</code
+            >{:else}{p.text}{/if}{/each}
       {/if}
-      The animated backdrop and frame are not drawn yet.
+      {t('wheel.notDrawn')}
     </p>
     {#if !disc}
-      <p class="warn" data-testid="wheel-no-disc">
-        No disc: EZ2PORT shows the masks alone at the focus.
-      </p>
+      <p class="warn" data-testid="wheel-no-disc">{t('wheel.noDisc')}</p>
     {/if}
-    {#if plateError}<p class="warn">The title plate: {plateError}</p>{/if}
+    {#if plateError}<p class="warn">{t('plate.failed', { error: plateError })}</p>{/if}
     <p class="hint">
-      While it flies along the arc a package's disc shows no picture: EZ2PORT looks for that
-      thumbnail in the game's <code>system\discsmall</code>, never in the package.
+      {#each tParts('wheel.thumb', {}, ['folder']) as p, i (i)}{#if 'slot' in p}<code
+            >system\discsmall</code
+          >{:else}{p.text}{/if}{/each}
     </p>
   </div>
 </section>

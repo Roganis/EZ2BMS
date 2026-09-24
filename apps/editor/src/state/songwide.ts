@@ -3,6 +3,7 @@
 // change is one step in each chart it touched; the toast offers to undo it
 // in all of them - in each chart where it is still the last step.
 
+import { t } from '../i18n/i18n.svelte';
 import type { ChartSlot } from './project.svelte';
 import { toast, toasts } from './toasts.svelte';
 
@@ -25,17 +26,13 @@ export function undoAll(done: readonly SongwideStep[], what: string): void {
     if (d.slot.doc.historyMark() === d.mark) d.slot.doc.undo();
     else skipped++;
   }
-  if (skipped)
-    toast(
-      `${what} undone, except in ${plural(skipped, 'chart')} edited since (undo there with Ctrl+Z)`,
-      'warn',
-    );
+  if (skipped) toast(t('song.undoneExcept', { what, n: skipped }), 'warn');
 }
 
 /** A toast for a song-wide change, with "Undo in all charts". */
 export function songwideToast(text: string, done: readonly SongwideStep[], what: string): void {
   toasts.push(text, 'ok', 15000, {
-    label: 'Undo in all charts',
+    label: t('song.undoAll'),
     run: () => undoAll(done, what),
   });
 }

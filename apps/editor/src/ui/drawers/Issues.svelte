@@ -4,6 +4,7 @@
   // quick fix has a button for it (one undo step in its chart), and a rule
   // found in several places can be fixed everywhere at once.
   import type { Finding, Severity } from '@ez2bms/chart-core';
+  import { t, tCore, tSaid } from '../../i18n/i18n.svelte';
   import { applyFix, fixAll } from '../../port/fixes';
   import { songFindings } from '../../port/lint';
   import { app } from '../../state/app.svelte';
@@ -58,9 +59,9 @@
   async function fix(f: Finding) {
     try {
       if ((await applyFix(app, f)) && f.chart)
-        toast(`${f.fix!.label}: done (Ctrl+Z undoes it)`, 'ok');
+        toast(t('issues.fixed', { fix: tSaid(f.fix!.said) }), 'ok');
     } catch (e) {
-      toast(`The fix failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
+      toast(t('issues.fixFailed', { error: e instanceof Error ? e.message : String(e) }), 'error');
     }
   }
   const name = (rule: string) => rule.replace(/-/g, ' ');
@@ -68,26 +69,27 @@
 
 <div class="ez-form" data-testid="issues">
   {#if findings.length}
-    <div class="ez-seg filter" role="group" aria-label="Show">
-      <button class:on={show === 'all'} onclick={() => (show = 'all')}>All {findings.length}</button
+    <div class="ez-seg filter" role="group" aria-label={t('issues.show')}>
+      <button class:on={show === 'all'} onclick={() => (show = 'all')}
+        >{t('issues.all', { n: findings.length })}</button
       >
       <button
         class:on={show === 'error'}
         data-testid="issues-errors"
         disabled={!count('error')}
-        onclick={() => (show = 'error')}>Errors {count('error')}</button
+        onclick={() => (show = 'error')}>{t('issues.errors', { n: count('error') })}</button
       >
       <button
         class:on={show === 'warning'}
         disabled={!count('warning')}
-        onclick={() => (show = 'warning')}>Warnings {count('warning')}</button
+        onclick={() => (show = 'warning')}>{t('issues.warnings', { n: count('warning') })}</button
       >
       <button class:on={show === 'info'} disabled={!count('info')} onclick={() => (show = 'info')}
-        >Notes {count('info')}</button
+        >{t('issues.notes', { n: count('info') })}</button
       >
     </div>
   {:else}
-    <p class="hint ok">Nothing to fix: this song is ready for EZ2PORT.</p>
+    <p class="hint ok">{t('issues.none')}</p>
   {/if}
   {#each groups as g (g.rule)}
     <section class="group {g.severity}" data-rule={g.rule}>
@@ -99,8 +101,8 @@
             <button
               class="ez-btn fix"
               data-testid="fix-all-{g.rule}"
-              title="One undo step in each chart"
-              onclick={() => void fixAll(app, g.rule)}>Fix all</button
+              title={t('issues.fixAllTitle')}
+              onclick={() => void fixAll(app, g.rule)}>{t('issues.fixAll')}</button
             >
           {/if}
         </header>
@@ -111,7 +113,7 @@
             <button class="msg" onclick={() => go(f)}>
               <span class="dot"></span>
               <span>
-                {f.message}
+                {tCore(f)}
                 {#if f.chart && (app.project?.charts.length ?? 0) > 1}<small>{f.chart}</small>{/if}
               </span>
             </button>
@@ -119,8 +121,8 @@
               <button
                 class="ez-btn fix"
                 data-testid="fix-{f.rule}"
-                title={f.fix.label}
-                onclick={() => void fix(f)}>{f.fix.label}</button
+                title={tSaid(f.fix.said)}
+                onclick={() => void fix(f)}>{tSaid(f.fix.said)}</button
               >
             {/if}
           </li>
