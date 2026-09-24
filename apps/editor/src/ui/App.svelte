@@ -8,6 +8,7 @@
   import { registerSliceCommands } from '../commands/slice';
   import { app } from '../state/app.svelte';
   import CommandPalette from './CommandPalette.svelte';
+  import ControlsDialog from './ControlsDialog.svelte';
   import Editor from './Editor.svelte';
   import ExportDialog from './export/ExportDialog.svelte';
   import ImportWizard from './import/ImportWizard.svelte';
@@ -27,8 +28,8 @@
     void app.init();
     const onKey = (e: KeyboardEvent) => {
       if (app.view.paletteOpen && e.key !== 'Escape') return;
-      // The Publish, Import and Export dialogs take their own keys.
-      if (app.publish.open || app.importer.open || app.exporter.open) return;
+      // The Publish, Import, Export and Controls dialogs take their own keys.
+      if (app.publish.open || app.importer.open || app.exporter.open || app.controls.open) return;
       app.commands.handleKey(e, app.view.covered);
     };
     const onUnload = (e: BeforeUnloadEvent) => {
@@ -59,6 +60,9 @@
 {/if}
 {#if app.project && app.exporter.open}
   <ExportDialog />
+{/if}
+{#if app.controls.open}
+  <ControlsDialog />
 {/if}
 <CommandPalette />
 <Toasts />

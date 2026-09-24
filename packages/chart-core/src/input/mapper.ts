@@ -184,6 +184,13 @@ export class InputMapper {
     this.captureAxes = wantAxes;
   }
 
+  /** Stop listening for a binding (the page closed, or Esc). */
+  disarmCapture(): void {
+    this.captureArmed = false;
+    this.capturePad = null;
+    this.captureKey = 0;
+  }
+
   /** The control pressed since arming, as a binding token - a pad's before a key's. */
   captured(): string | null {
     if (!this.captureArmed) return null;

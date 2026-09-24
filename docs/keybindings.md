@@ -108,6 +108,7 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 
 | Command                                                    | Keys           | Palette |
 | ---------------------------------------------------------- | -------------- | ------- |
+| Controls and timing… (keys, controllers, offsets)          |                |         |
 | Mute / unmute background sounds                            | `Ctrl+Shift+M` |         |
 | Play / stop from the cursor                                | `Space`        |         |
 | Play again from where playback last started                | `Shift+Space`  |         |

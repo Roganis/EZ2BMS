@@ -36,6 +36,13 @@ export function registerPlayCommands(app: App): void {
       },
     },
     {
+      id: 'input.controls',
+      title: 'Controls and timing… (keys, controllers, offsets)',
+      group: 'Play',
+      global: true,
+      run: () => app.controls.show(),
+    },
+    {
       id: 'play.again',
       title: 'Play again from where playback last started',
       group: 'Play',

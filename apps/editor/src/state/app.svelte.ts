@@ -13,6 +13,7 @@ import { Project, type ChartSlot } from './project.svelte';
 import { Settings } from './settings.svelte';
 import { SkinState } from './skin.svelte';
 import { ClassicState } from './classic.svelte';
+import { ControlsState } from './controls.svelte';
 import { SoundsState } from './sounds.svelte';
 import { SongState } from './song.svelte';
 import { ArtState } from './art.svelte';
@@ -45,6 +46,7 @@ export class App {
   readonly strips: StripsState;
   readonly importer: Importer;
   readonly exporter: Exporter;
+  readonly controls: ControlsState;
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
@@ -69,6 +71,7 @@ export class App {
     this.strips = new StripsState(this);
     this.importer = new Importer(this);
     this.exporter = new Exporter(this);
+    this.controls = new ControlsState(this);
     this.commands.onError = (e, c) =>
       toast(`${c.title}: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }

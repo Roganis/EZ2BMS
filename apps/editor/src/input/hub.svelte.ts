@@ -44,9 +44,11 @@ export const MAX_AGE_MS = 200;
 export interface HubUser {
   /**
    * 'all': every bound key is the game's (test play, recording). 'plain':
-   * only presses without Ctrl, Alt or Meta, so shortcuts still work (step input).
+   * only presses without Ctrl, Alt or Meta, so shortcuts still work (step
+   * input). 'none': the keys stay the editor's (the Controls dialog, which
+   * only watches).
    */
-  keys: 'all' | 'plain';
+  keys: 'all' | 'plain' | 'none';
   /** Open the controllers while attached. */
   pads: boolean;
   /** Channel edges in time order; `ms` is host time (see songMs). */
@@ -89,6 +91,7 @@ export class InputHub {
   private known: string[] = [];
   private held = false;
   private raf = 0;
+  private capturing: ((token: string | null) => void) | null = null;
 
   constructor(private readonly app: App) {}
 
@@ -188,6 +191,40 @@ export class InputHub {
     };
   }
 
+  /**
+   * The next control pressed, as a binding token (chart-core's capture: a
+   * pad's before a key's, `Left Ctrl` or `0810:e501/b3`); axes too with
+   * `wantAxes`. Every key is taken while it waits - bound or not - and Esc
+   * gives null. Something must be attached (the pads must be open).
+   */
+  capture(wantAxes: boolean): Promise<string | null> {
+    this.cancelCapture();
+    this.mapper.armCapture(wantAxes);
+    return new Promise((resolve) => (this.capturing = resolve));
+  }
+
+  get isCapturing(): boolean {
+    return this.capturing !== null;
+  }
+
+  cancelCapture(): void {
+    this.finishCapture(null);
+  }
+
+  private finishCapture(token: string | null): void {
+    const done = this.capturing;
+    if (!done) return;
+    this.capturing = null;
+    this.mapper.disarmCapture();
+    done(token);
+  }
+
+  private pollCapture(): void {
+    if (!this.capturing) return;
+    const t = this.mapper.captured();
+    if (t) this.finishCapture(t);
+  }
+
   /** Song ms for a host time, with the player's input offset; undefined when the song isn't playing. */
   songMs(hostMs: number): number | undefined {
     const ms = this.app.audio.songMsAtHost(hostMs);
@@ -213,7 +250,8 @@ export class InputHub {
     }
     cancelAnimationFrame(this.raf);
     if (!this.users.size) {
-      // Nothing listens: whatever is held is let go.
+      // Nothing listens: whatever is held is let go, and nothing is being bound.
+      this.cancelCapture();
       this.taken.clear();
       this.deliver(this.mapper.releaseKeys(this.app.audio.hostNowMs()));
       return;
@@ -228,6 +266,7 @@ export class InputHub {
 
   private feed(ev: RawInput): void {
     this.deliver(this.mapper.input(ev));
+    this.pollCapture();
   }
 
   private deliver(edges: readonly ChannelEdge[]): void {
@@ -238,6 +277,16 @@ export class InputHub {
   private readonly onKeyDown = (e: KeyboardEvent): void => {
     if (!this.users.size || typing(e)) return;
     const sc = scancodeForCode(e.code);
+    if (this.capturing) {
+      // Binding by pressing: any key is the answer, Esc is no answer.
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.key === 'Escape') return this.cancelCapture();
+      if (!sc || e.repeat) return;
+      this.taken.add(sc);
+      const ms = this.aged(this.app.audio.hostMsAtPerf(e.timeStamp));
+      return this.feed({ kind: 'key', scancode: sc, down: true, ms });
+    }
     if (!sc || !this.mapper.keyBound(sc)) return;
     const plain = !(e.ctrlKey || e.altKey || e.metaKey);
     const users = [...this.users];
