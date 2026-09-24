@@ -10,6 +10,7 @@ import type {
   AudioEvent,
   AudioInfo,
   Backend,
+  Clicks,
   ClockSnapshot,
   ConfigFile,
   Entry,
@@ -159,6 +160,7 @@ export function tauriBackend(): Backend {
         return new Int16Array(b.buffer, b.byteOffset, b.byteLength >> 1);
       },
       preview: (job) => invoke<Audition>('audio_preview', { job }),
+      clicks: () => invoke<Clicks>('audio_clicks'),
       streamClock: (on) => {
         let live = true;
         const ch = new Channel<ClockSnapshot>();

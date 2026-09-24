@@ -15,7 +15,7 @@ import {
   type SampleLookup,
 } from '@ez2bms/chart-core';
 import { SvelteMap } from 'svelte/reactivity';
-import type { AudioEvent, Backend, ClockSnapshot, Loaded } from '../bridge';
+import type { AudioEvent, Backend, Clicks, ClockSnapshot, Loaded } from '../bridge';
 import type { ChartSlot, Project } from '../state/project.svelte';
 import type { Settings } from '../state/settings.svelte';
 import { toast } from '../state/toasts.svelte';
@@ -45,6 +45,13 @@ export class AudioClient {
   solo = $state<number | null>(null);
   /** Test play: the engine plays the backing only; lane sounds come from presses. */
   lanesMuted = false;
+  /** Played with the chart (Record mode's count-in and metronome clicks). */
+  private extra: AudioEvent[] = [];
+  private extraRev = 0;
+  private sentExtra = -1;
+  /** The compiled chart's events, as last sent. */
+  private chartEvents: AudioEvent[] = [];
+  private clickSounds: Clicks | undefined;
   private reg: KeysoundRegistry | undefined;
   private planKey = '';
   /** Bumped whenever the set of loaded sounds changes. */
@@ -162,31 +169,85 @@ export class AudioClient {
   async sync(slot: ChartSlot): Promise<void> {
     clearTimeout(this.syncTimer);
     const key = `${this.muteBgm}|${this.solo}|${this.lanesMuted}`;
-    if (this.planSlot === slot && this.planRev === slot.rev && this.planKey === key) return;
-    this.planKey = key;
-    const d = slot.doc.data;
-    const reg = new KeysoundRegistry();
-    const plan = compileChart(d, {
-      columns: modeDef(slot.mode).columns,
-      name: 'preview',
-      keysounds: reg,
-      samples: this.lengths(),
-    });
-    this.plan = plan;
-    this.reg = reg;
-    this.timeline = new PlanTimeline(plan.tempo, slot.doc.resolution, d.stopEvents);
-    this.planRev = slot.rev;
-    this.planSlot = slot;
-    const events: AudioEvent[] = engineEvents(
-      plan,
-      reg,
-      (src) => this.loaded.get(src)?.id,
-      (e) =>
-        !(this.muteBgm && !e.lane) &&
-        !(this.lanesMuted && e.lane) &&
-        !(this.solo !== null && e.lane && e.x !== this.solo),
+    const compiled = this.planSlot === slot && this.planRev === slot.rev && this.planKey === key;
+    if (compiled && this.sentExtra === this.extraRev) return;
+    if (!compiled) {
+      this.planKey = key;
+      const d = slot.doc.data;
+      const reg = new KeysoundRegistry();
+      const plan = compileChart(d, {
+        columns: modeDef(slot.mode).columns,
+        name: 'preview',
+        keysounds: reg,
+        samples: this.lengths(),
+      });
+      this.plan = plan;
+      this.reg = reg;
+      this.timeline = new PlanTimeline(plan.tempo, slot.doc.resolution, d.stopEvents);
+      this.planRev = slot.rev;
+      this.planSlot = slot;
+      this.chartEvents = engineEvents(
+        plan,
+        reg,
+        (src) => this.loaded.get(src)?.id,
+        (e) =>
+          !(this.muteBgm && !e.lane) &&
+          !(this.lanesMuted && e.lane) &&
+          !(this.solo !== null && e.lane && e.x !== this.solo),
+      );
+    }
+    // Clicks come and go without compiling the chart again.
+    this.sentExtra = this.extraRev;
+    await this.backend.audio.setEvents(
+      this.extra.length ? [...this.chartEvents, ...this.extra] : this.chartEvents,
     );
+  }
+
+  /** The metronome's two clicks (made by the host once). */
+  async clicks(): Promise<Clicks> {
+    this.clickSounds ??= await this.backend.audio.clicks();
+    return this.clickSounds;
+  }
+
+  /** Clicks at song times, as events (`accent`: the first beat of a bar). */
+  async clickEvents(beats: readonly { ms: number; accent: boolean }[]): Promise<AudioEvent[]> {
+    const c = await this.clicks();
+    return beats.map((b) => ({
+      ms: b.ms,
+      origin_ms: b.ms,
+      until_ms: null,
+      sample: b.accent ? c.accent : c.plain,
+      voice: c.voice,
+      level: 0,
+      pan: 0,
+    }));
+  }
+
+  /** Events to play along with the chart from the next sync on ([] for none). */
+  setExtra(events: AudioEvent[]): void {
+    if (!events.length && !this.extra.length) return;
+    this.extra = events;
+    this.extraRev++;
+  }
+
+  /**
+   * Play events that are not the chart from song time 0 (the latency tests'
+   * clicks), without moving the cursor. The chart is sent again at the next
+   * sync. songMsAtHost follows it as it follows the chart.
+   */
+  async playTrack(events: AudioEvent[]): Promise<void> {
+    if (this.view.playing) await this.stop();
+    if (!this.clock) await this.calibrate();
+    // The chart goes back to the engine at the next sync.
+    this.sentExtra = -1;
     await this.backend.audio.setEvents(events);
+    this.startGen = this.clock?.generation ?? -1;
+    this.lastMs = 0;
+    await this.backend.audio.play(this.settings.data.audioOffsetMs);
+  }
+
+  async stopTrack(): Promise<void> {
+    await this.backend.audio.stop();
   }
 
   /** The chart's clock (f32 tempo, STOPs as gaps) once `slot` is synced: what a take snaps by. */
@@ -224,7 +285,12 @@ export class AudioClient {
       if (!this.view.playing) return;
       const heard = this.heardMs();
       if (heard !== undefined) {
-        this.view.cursor = Math.max(0, this.timeline!.pulseAt(heard));
+        // What is shown leads what is heard by the picture's own lateness:
+        // a screen that shows a frame V ms late is drawn V ms ahead.
+        this.view.cursor = Math.max(
+          0,
+          this.timeline!.pulseAt(heard + this.settings.data.visualOffsetMs),
+        );
         if (this.plan && heard > this.plan.endMs + 1500) {
           void this.stop();
           return;

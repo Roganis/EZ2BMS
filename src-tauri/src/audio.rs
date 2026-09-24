@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use ez2bms_audio::analysis::{analyse, Analysis};
 use ez2bms_audio::cache::SampleCache;
+use ez2bms_audio::click::click;
 use ez2bms_audio::disk::{CacheInfo, DiskCache};
 use ez2bms_audio::level::ds_gains;
 use ez2bms_audio::peaks::Peaks;
@@ -163,6 +164,20 @@ pub struct Audition {
 
 /// The bank's key for the auditioned preview (not a file).
 const PREVIEW_KEY: &str = "\0ez2bms-preview";
+const CLICK_ACCENT_KEY: &str = "\0ez2bms-click-accent";
+const CLICK_KEY: &str = "\0ez2bms-click";
+
+/// The clicks' voice: their own, beside the preview's, so a click never cuts
+/// a lane (and a click cuts the one before, which has long died away).
+pub const CLICK_VOICE: VoiceKey = LANE_VOICE_BASE + 254;
+
+/// The metronome's two clicks' sample ids, and the voice to play them on.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct Clicks {
+    pub accent: u32,
+    pub plain: u32,
+    pub voice: VoiceKey,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TriggerDto {
@@ -453,21 +468,38 @@ impl Audio {
             None => preview::render(Arc::new(self.schedule_of(&job.events)?), from, frames, fade)?,
         };
         let s = Arc::new(Sample::from_pcm16(rate, 2, &pcm));
-        let key = PathBuf::from(PREVIEW_KEY);
+        let id = self.put_generated(PREVIEW_KEY, s.clone());
+        Ok(Audition { sample: id, seconds: s.seconds(), voice: PREVIEW_VOICE })
+    }
+
+    /// A sound made here (not a file) into the bank under `key`, replacing
+    /// what was there; its id.
+    fn put_generated(&self, key: &str, s: Arc<Sample>) -> u32 {
+        let key = PathBuf::from(key);
         let mut bank = self.bank.lock().unwrap();
-        let id = match bank.ids.get(&key) {
+        match bank.ids.get(&key) {
             Some(&id) => {
-                bank.samples[id as usize] = s.clone();
+                bank.samples[id as usize] = s;
                 id
             }
             None => {
                 let id = bank.samples.len() as u32;
-                bank.samples.push(s.clone());
+                bank.samples.push(s);
                 bank.ids.insert(key, id);
                 id
             }
-        };
-        Ok(Audition { sample: id, seconds: s.seconds(), voice: PREVIEW_VOICE })
+        }
+    }
+
+    /// The metronome's clicks at the engine's rate (ez2bms-audio click.rs),
+    /// in the bank for the editor to schedule as events.
+    pub fn clicks(&self) -> Clicks {
+        let rate = self.engine.rate();
+        Clicks {
+            accent: self.put_generated(CLICK_ACCENT_KEY, Arc::new(click(rate, true))),
+            plain: self.put_generated(CLICK_KEY, Arc::new(click(rate, false))),
+            voice: CLICK_VOICE,
+        }
     }
 
     pub fn trigger(&self, t: &TriggerDto) -> CmdResult<bool> {
@@ -616,6 +648,21 @@ mod tests {
         for k in ["frame", "host_ns", "latency_frames", "rate", "playing", "generation", "now_ns"] {
             assert!(c.get(k).is_some(), "{k}");
         }
+    }
+
+    #[test]
+    fn clicks_go_in_the_bank_once_at_the_engine_rate() {
+        let audio = Audio::from_engine(Engine::start_null(48_000), "null", None);
+        let a = audio.clicks();
+        assert_ne!(a.accent, a.plain);
+        assert_eq!(a.voice, CLICK_VOICE);
+        // Asked again: the same ids, not new samples.
+        let b = audio.clicks();
+        assert_eq!((a.accent, a.plain), (b.accent, b.plain));
+        let s = audio.sample(a.accent).unwrap();
+        assert_eq!((s.rate, s.channels), (48_000, 1));
+        let v = serde_json::to_value(a).unwrap();
+        assert_eq!(v["voice"], CLICK_VOICE);
     }
 
     #[test]

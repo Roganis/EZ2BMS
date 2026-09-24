@@ -603,6 +603,7 @@ export function webBackend(
         seconds: job.length_ms / 1000,
         voice: (1 << 16) + 255,
       }),
+      clicks: async () => ({ accent: (1 << 20) + 1, plain: (1 << 20) + 2, voice: (1 << 16) + 254 }),
       // Mipmap buckets as ez2bms-audio lays them out (64 frames at level 0,
       // doubling): the demo stem's pattern, a test's WAV from its samples,
       // anything else a made-up decay.

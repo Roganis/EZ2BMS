@@ -132,6 +132,19 @@ export class Recorder {
     await app.audio.sync(slot);
     const res = slot.doc.resolution;
     const start = Math.max(0, from - o.countIn * res);
+    // The count-in clicks every beat before the cursor; the metronome, if
+    // asked for, every beat after it to the chart's end. Accented on a bar.
+    const tl = app.audio.timelineFor(slot)!;
+    const beats: { ms: number; accent: boolean }[] = [];
+    for (let p = start; p < from; p += res)
+      beats.push({ ms: tl.msAt(p), accent: p % (4 * res) === 0 });
+    if (o.metronome) {
+      const end = app.audio.currentPlan?.endMs ?? 0;
+      for (let p = Math.ceil(from / res) * res; tl.msAt(p) <= end; p += res)
+        beats.push({ ms: tl.msAt(p), accent: p % (4 * res) === 0 });
+    }
+    app.audio.setExtra(await app.audio.clickEvents(beats));
+    await app.audio.sync(slot);
     this.fromMs = app.audio.msAt(slot, from);
     const beatMs = Math.max(1, this.fromMs - app.audio.msAt(slot, Math.max(0, from - res)));
     this.state = start < from ? 'countin' : 'recording';
@@ -243,6 +256,7 @@ export class Recorder {
     const app = this.app;
     if (app.view.playing) await app.audio.stop();
     app.audio.lanesMuted = false;
+    app.audio.setExtra([]);
     const slot = this.slot!;
     const notes = this.snapped();
     app.view.cursor = this.from;
@@ -310,6 +324,7 @@ export class Recorder {
     this.detach?.();
     this.detach = undefined;
     this.app.audio.lanesMuted = false;
+    this.app.audio.setExtra([]);
     this.state = 'idle';
     this.review = null;
     this.ghosts = [];

@@ -21,7 +21,7 @@ use tauri::ipc::{Channel, Response};
 use tauri::{AppHandle, Manager, State};
 
 use crate::audio::{
-    Audio, AudioInfo, Audition, ClockDto, EventDto, Loaded, PreviewJob, TriggerDto,
+    Audio, AudioInfo, Audition, Clicks, ClockDto, EventDto, Loaded, PreviewJob, TriggerDto,
 };
 use crate::error::{CmdError, CmdResult};
 use crate::files::{Entry, ImportKind, Imported, ProjectScan};
@@ -362,6 +362,12 @@ async fn audio_preview(audio: State<'_, Arc<Audio>>, job: PreviewJob) -> CmdResu
         .map_err(|e| CmdError::Io(e.to_string()))?
 }
 
+/// The metronome's clicks, put in the bank (Record mode, the latency test).
+#[tauri::command]
+fn audio_clicks(audio: State<'_, Arc<Audio>>) -> Clicks {
+    audio.clicks()
+}
+
 #[tauri::command]
 fn audio_play(audio: State<'_, Arc<Audio>>, from_ms: f64) {
     audio.engine.play_from(audio.frame_at_ms(from_ms));
@@ -575,6 +581,7 @@ pub fn run() {
             audio_set_events,
             audio_preview_overview,
             audio_preview,
+            audio_clicks,
             audio_play,
             audio_seek,
             audio_stop,

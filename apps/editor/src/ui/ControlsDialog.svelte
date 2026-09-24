@@ -13,6 +13,7 @@
   } from '@ez2bms/chart-core';
   import { onMount } from 'svelte';
   import { app } from '../state/app.svelte';
+  import { CAL_BEATS, CAL_WARMUP } from '../state/calibrator.svelte';
   import type { ControlsRow } from '../state/controls.svelte';
 
   const c = app.controls;
@@ -210,10 +211,73 @@
       </div>
     {/each}
   {:else}
+    {@const cal = app.calibrator}
     <p class="hint">
       How late EZ2BMS hears, shows and takes presses on this machine. EZ2PORT has no offsets: these
       are for playing and recording in the editor only.
     </p>
+    <div class="tests">
+      <div class="test">
+        <b>Sound test</b>
+        <span class="dim"
+          >Tap any of your keys or buttons on each click (20, the first 4 to find the beat). Sets
+          the input offset.</span
+        >
+        <button
+          class="ez-btn"
+          disabled={cal.running}
+          onclick={() => void cal.start('sound')}
+          data-testid="calibrate-sound">Start</button
+        >
+      </div>
+      <div class="test">
+        <b>Picture test</b>
+        <span class="dim"
+          >Tap on each flash (silent). Sets the picture offset; run the sound test first.</span
+        >
+        <button
+          class="ez-btn"
+          disabled={cal.running}
+          onclick={() => void cal.start('picture')}
+          data-testid="calibrate-picture">Start</button
+        >
+      </div>
+    </div>
+    {#if cal.running}
+      <div class="running" data-testid="calibrate-running">
+        {#if cal.kind === 'picture'}
+          <div class="flash" class:on={cal.flash} data-testid="calibrate-flash"></div>
+        {/if}
+        <div class="dots">
+          {#each Array.from({ length: CAL_BEATS }, (_, k) => k) as k (k)}
+            <i class:done={k <= cal.beat} class:warm={k < CAL_WARMUP}></i>
+          {/each}
+        </div>
+        <span>{cal.taps} taps</span>
+        <button class="ez-btn" onclick={() => cal.stop()}>Stop</button>
+      </div>
+    {:else if cal.result}
+      <div class="result" data-testid="calibrate-result">
+        Taps land <b
+          >{Math.abs(Math.round(cal.result.offsetMs))} ms
+          {cal.result.offsetMs >= 0 ? 'late' : 'early'}</b
+        >
+        <span class="dim"
+          >({cal.result.used} taps, spread {cal.result.spreadMs.toFixed(1)} ms{cal.result.dropped
+            ? `, ${cal.result.dropped} left out`
+            : ''})</span
+        >
+        <button class="ez-btn go" onclick={() => cal.apply()} data-testid="calibrate-apply"
+          >Use as the {cal.kind === 'sound' ? 'input' : 'picture'} offset</button
+        >
+      </div>
+    {:else if cal.failed}
+      <p class="warn" data-testid="calibrate-failed">
+        Too few taps on the beat to tell. Try again, tapping on every {cal.kind === 'sound'
+          ? 'click'
+          : 'flash'}.
+      </p>
+    {/if}
     <div class="timing">
       <label
         >Audio offset (ms)<input
@@ -437,6 +501,56 @@
     display: block;
     height: 4px;
     border-radius: 2px;
+    background: var(--neon);
+  }
+  .tests {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .test {
+    display: grid;
+    gap: 6px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(88, 225, 255, 0.18);
+    font-size: 12px;
+  }
+  .test .ez-btn {
+    justify-self: start;
+  }
+  .running,
+  .result {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+  }
+  .flash {
+    width: 64px;
+    height: 64px;
+    border-radius: 10px;
+    background: #111831;
+    border: 1px solid rgba(88, 225, 255, 0.3);
+  }
+  .flash.on {
+    background: #fff;
+    box-shadow: 0 0 30px #fff;
+  }
+  .dots {
+    display: flex;
+    gap: 4px;
+  }
+  .dots i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(88, 225, 255, 0.15);
+  }
+  .dots i.warm {
+    background: rgba(138, 143, 168, 0.25);
+  }
+  .dots i.done {
     background: var(--neon);
   }
   .timing {

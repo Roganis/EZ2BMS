@@ -50,6 +50,7 @@ export class ControlsState {
   }
 
   close(): void {
+    this.app.calibrator.stop();
     this.app.input.cancelCapture();
     this.binding = null;
     this.detach?.();

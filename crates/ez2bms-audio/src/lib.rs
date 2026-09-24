@@ -23,6 +23,7 @@
 pub mod analysis;
 pub mod backend;
 pub mod cache;
+pub mod click;
 pub mod clock;
 pub mod cut;
 pub mod decode;

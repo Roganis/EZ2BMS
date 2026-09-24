@@ -104,6 +104,13 @@
             onchange={(e) => set('countIn', Number(e.currentTarget.value))}
           /> beats</label
         >
+        <label class="check"
+          ><input
+            type="checkbox"
+            checked={o.metronome}
+            onchange={(e) => set('metronome', e.currentTarget.checked)}
+          /> metronome</label
+        >
         {#if !r.review.classic}
           <label class="check"
             ><input
