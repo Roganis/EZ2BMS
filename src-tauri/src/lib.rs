@@ -7,6 +7,7 @@ mod audio;
 mod error;
 mod export;
 mod files;
+mod input;
 mod media;
 mod port;
 
@@ -24,11 +25,14 @@ use crate::audio::{
 };
 use crate::error::{CmdError, CmdResult};
 use crate::files::{Entry, ImportKind, Imported, ProjectScan};
+use crate::input::{Input, InputInfo, Paused};
 use crate::media::Media;
 use crate::port::{
     InspectionDto, Located, PackageDto, ProbeDto, PublishOptions, Published, RunEvent, Runs,
     TestDto,
 };
+use ez2bms_input::PadEvent;
+use ez2bms_launch::ConfigFile;
 use ez2bms_media::text::PlateSpec;
 
 /// Which clock stream is current; older ones stop (a reloaded page opens a new one).
@@ -453,13 +457,21 @@ fn port_retire(songs_root: PathBuf, key: String, song_ini: String) -> CmdResult<
 async fn port_test(
     app: AppHandle,
     runs: State<'_, Arc<Runs>>,
+    input: State<'_, Arc<Input>>,
     test: TestDto,
     on_event: Channel<RunEvent>,
 ) -> CmdResult<u32> {
     let cache = app.path().app_cache_dir().map_err(|e| CmdError::Io(e.to_string()))?;
     let runs = runs.inner().clone();
+    let input = input.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        runs.start(&cache, &test, move |ev| on_event.send(ev).is_ok())
+        // The pads close before the game starts and reopen when the run's
+        // watcher lets go of this (it exits, or never started).
+        let paused = Paused::new(input);
+        runs.start(&cache, &test, move |ev| {
+            let _held = &paused;
+            on_event.send(ev).is_ok()
+        })
     })
     .await
     .map_err(|e| CmdError::Io(e.to_string()))?
@@ -468,6 +480,36 @@ async fn port_test(
 #[tauri::command]
 fn port_stop(runs: State<'_, Arc<Runs>>, id: u32) -> CmdResult<()> {
     runs.stop(id)
+}
+
+/// Where EZ2PORT keeps keys.ini and settings.ini, in its order (read, never written).
+#[tauri::command]
+fn port_config_files(ez2play: Option<PathBuf>, game_root: Option<PathBuf>) -> Vec<ConfigFile> {
+    ez2bms_launch::config_files(ez2play.as_deref(), game_root.as_deref(), &|k| std::env::var_os(k))
+}
+
+// ---- controllers
+
+#[tauri::command]
+fn input_devices(input: State<'_, Arc<Input>>) -> InputInfo {
+    input.info()
+}
+
+/// Pad events in batches, to the newest page that asked.
+#[tauri::command]
+fn input_stream(input: State<'_, Arc<Input>>, on_event: Channel<Vec<PadEvent>>) {
+    input.stream(Arc::new(move |events| {
+        let _ = on_event.send(events);
+    }));
+}
+
+/// Open (a rescan) or close the pads; returns once done.
+#[tauri::command]
+async fn input_hold(input: State<'_, Arc<Input>>, active: bool) -> CmdResult<()> {
+    let input = input.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || input.want(active))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))
 }
 
 /// The plate fonts (fonts/README.md): `EZ2BMS_FONTS`, else the bundle's
@@ -489,7 +531,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            app.manage(Arc::new(Audio::open(app.path().app_cache_dir().ok())));
+            let audio = Arc::new(Audio::open(app.path().app_cache_dir().ok()));
+            // Pad events are timed on the audio engine's host clock, the one
+            // the editor turns into song time.
+            let clock = audio.clone();
+            app.manage(Arc::new(Input::start(Arc::new(move || clock.engine.now_ns()))));
+            app.manage(audio);
             app.manage(Arc::new(Runs::default()));
             app.manage(Arc::new(Media::new(fonts_dir(app.handle()))));
             Ok(())
@@ -543,6 +590,10 @@ pub fn run() {
             port_retire,
             port_test,
             port_stop,
+            port_config_files,
+            input_devices,
+            input_stream,
+            input_hold,
         ])
         .run(tauri::generate_context!())
         .expect("EZ2BMS failed to start");

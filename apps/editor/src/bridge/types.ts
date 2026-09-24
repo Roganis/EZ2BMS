@@ -362,6 +362,80 @@ export interface ExportBackend {
   restore(root: string, stamp: string, force?: boolean): Promise<RestoreReport>;
 }
 
+/** An open game controller, named as EZ2PORT names it (crates/ez2bms-input device.rs). */
+export interface PadInfo {
+  /** The device part of a binding: `0810:e501`, or `0810:e501#1` for a second board of that make. */
+  key: string;
+  name: string;
+  vid: number;
+  pid: number;
+  buttons: number;
+  axes: number;
+  hats: number;
+}
+
+/**
+ * What the controller thread sends (ez2bms-input event.rs), timed on the audio
+ * engine's host clock (`hostNs`, the scale of ClockSnapshot.host_ns). A
+ * `devices` event is a rescan: every held control of every pad is released.
+ */
+export type PadEvent =
+  | { kind: 'devices'; devices: PadInfo[] }
+  | { kind: 'button'; device: string; index: number; down: boolean; hostNs: number }
+  /** An SDL_HAT_* mask. */
+  | { kind: 'hat'; device: string; index: number; value: number; hostNs: number }
+  /** -32768..32767. */
+  | { kind: 'axis'; device: string; index: number; value: number; hostNs: number };
+
+export interface InputInfo {
+  devices: PadInfo[];
+  /** Pads are open (the editor holds them, and no EZ2PORT test run is live). */
+  active: boolean;
+  /** Controllers are unavailable, and why: keyboard only. */
+  error: string | null;
+}
+
+/** A place EZ2PORT reads its settings from (ez2bms-launch config.rs), in its order. */
+export interface ConfigFile {
+  kind: 'keys' | 'settings';
+  path: string;
+  exists: boolean;
+  /** EZ2_KEYS, a data folder's `ez2port`, or the per-user folder. */
+  source: 'env' | 'data' | 'user';
+}
+
+export interface InputBackend {
+  info(): Promise<InputInfo>;
+  /** Pad events in batches, until the returned function is called; a new stream replaces the last. */
+  stream(on: (events: PadEvent[]) => void): () => void;
+  /**
+   * Whether the editor wants pads open; resolves once they are. One flag for
+   * the whole page (the input hub counts its own users).
+   */
+  hold(active: boolean): Promise<void>;
+  /** keys.ini and settings.ini candidates, in EZ2PORT's order. */
+  configFiles(ez2play: string | null, gameRoot: string | null): Promise<ConfigFile[]>;
+}
+
+/**
+ * The browser build's stand-in for SDL (`window.__ez2bmsPad`): boards to plug
+ * in and press at exact host times, for tests and for trying the editor
+ * without a controller. Events flow only while the editor holds the pads.
+ */
+export interface DevPad {
+  /** Plug a board in; returns its key as the port would number it now. */
+  plug(info?: Partial<Omit<PadInfo, 'key'>>): string;
+  unplug(key: string): void;
+  button(key: string, index: number, down: boolean, hostNs?: number): void;
+  hat(key: string, index: number, value: number, hostNs?: number): void;
+  axis(key: string, index: number, value: number, hostNs?: number): void;
+  /** The host clock now (ns). */
+  hostNow(): number;
+  /** The host time (ns) at which the song, playing, reaches `ms`. */
+  hostAtSong(ms: number): number;
+  readonly active: boolean;
+}
+
 /** What an import takes; other files offered with it are refused (src-tauri files::ImportKind). */
 export type ImportKind = 'audio' | 'image' | 'movie';
 
@@ -434,6 +508,9 @@ export interface Backend {
   readonly port: PortBackend;
   readonly media: MediaBackend;
   readonly export: ExportBackend;
+  readonly input: InputBackend;
+  /** The browser build's pretend controllers; never set in the desktop app. */
+  readonly devPad?: DevPad;
   /**
    * Chart tables for the browser build's made-up game (its made-up executable
    * cannot carry real ones); never set in the desktop app.

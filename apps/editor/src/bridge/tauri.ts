@@ -11,6 +11,7 @@ import type {
   AudioInfo,
   Backend,
   ClockSnapshot,
+  ConfigFile,
   Entry,
   ExportBackup,
   ExportJob,
@@ -18,10 +19,12 @@ import type {
   ExportReport,
   Imported,
   ImportReport,
+  InputInfo,
   Inspection,
   Loaded,
   Located,
   PackageSpec,
+  PadEvent,
   Probe,
   ProjectScan,
   Published,
@@ -209,6 +212,23 @@ export function tauriBackend(): Backend {
         });
       },
       stop: (id) => invoke('port_stop', { id }),
+    },
+    input: {
+      info: () => invoke<InputInfo>('input_devices'),
+      stream: (on) => {
+        let live = true;
+        const ch = new Channel<PadEvent[]>();
+        ch.onmessage = (evs) => {
+          if (live) on(evs);
+        };
+        void invoke('input_stream', { onEvent: ch });
+        return () => {
+          live = false;
+        };
+      },
+      hold: (active) => invoke('input_hold', { active }),
+      configFiles: (ez2play, gameRoot) =>
+        invoke<ConfigFile[]>('port_config_files', { ez2play, gameRoot }),
     },
     export: {
       probe: (sounds) => invoke<ExportProbeResult[]>('export_probe', { sounds }),

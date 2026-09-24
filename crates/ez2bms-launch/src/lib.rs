@@ -9,6 +9,7 @@
 //! playback) and keysounds from ez2bms-audio; this crate only puts files in
 //! place and starts the process.
 
+pub mod config;
 pub mod error;
 pub mod gamepatch;
 pub mod locate;
@@ -16,6 +17,7 @@ pub mod package;
 pub mod probe;
 pub mod spawn;
 
+pub use config::{config_files, ConfigFile};
 pub use error::{LaunchError, Result};
 pub use package::{
     inspect, is_valid_song_key, retire_package, write_package, write_package_with, Inspection,

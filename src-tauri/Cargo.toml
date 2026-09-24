@@ -16,6 +16,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 ez2bms-audio = { path = "../crates/ez2bms-audio", features = ["cpal"] }
+ez2bms-input = { path = "../crates/ez2bms-input", features = ["sdl"] }
 ez2bms-launch = { path = "../crates/ez2bms-launch" }
 ez2bms-media = { path = "../crates/ez2bms-media" }
 serde = { workspace = true }

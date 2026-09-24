@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { PadEvent } from './types';
 import { wavSeconds, webBackend } from './web';
+import { padKeys } from './web-pad';
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
@@ -283,5 +285,83 @@ describe("the browser backend's exports (the host's rules, in memory)", () => {
     expect(r).toEqual({ dir: '/out', files: 1 });
     expect(new TextDecoder().decode(await b.readFile('/out/sound/alpha/a.ez'))).toBe('a');
     await expect(b.export.toFolder('/out', { files: [] })).rejects.toThrow(/not empty/);
+  });
+});
+
+describe('the browser build pads', () => {
+  const flush = () => new Promise<void>((r) => setTimeout(r, 0));
+
+  it('number boards by make as EZ2PORT does', () => {
+    expect(
+      padKeys([
+        { vid: 0x0810, pid: 0xe501 },
+        { vid: 0x045e, pid: 0x028e },
+        { vid: 0x0810, pid: 0xe501 },
+      ]),
+    ).toEqual(['0810:e501', '045e:028e', '0810:e501#1']);
+  });
+
+  it('send events only while held, with the times given', async () => {
+    const b = webBackend(new Map());
+    const pad = b.devPad!;
+    const got: PadEvent[] = [];
+    b.input.stream((evs) => got.push(...evs));
+    const a = pad.plug();
+    const a2 = pad.plug({ name: 'Second' });
+    expect([a, a2]).toEqual(['0810:e501', '0810:e501#1']);
+    pad.button(a, 0, true, 1000);
+    await flush();
+    // Closed: nothing flows, nothing is listed.
+    expect(got).toEqual([]);
+    expect((await b.input.info()).devices).toEqual([]);
+
+    await b.input.hold(true);
+    pad.button(a2, 3, true, 5_000_000);
+    pad.axis(a, 1, -20000, 6_000_000);
+    await flush();
+    expect(got).toEqual([
+      {
+        kind: 'devices',
+        devices: [
+          expect.objectContaining({ key: a }),
+          expect.objectContaining({ key: a2, name: 'Second' }),
+        ],
+      },
+      { kind: 'button', device: a2, index: 3, down: true, hostNs: 5_000_000 },
+      { kind: 'axis', device: a, index: 1, value: -20000, hostNs: 6_000_000 },
+    ]);
+    expect(() => pad.button('dead:beef', 0, true)).toThrow('no pad');
+
+    // Unplugging renumbers; releasing the pads says so.
+    got.length = 0;
+    pad.unplug(a);
+    await b.input.hold(false);
+    await flush();
+    expect(got).toEqual([
+      { kind: 'devices', devices: [expect.objectContaining({ key: '0810:e501', name: 'Second' })] },
+      { kind: 'devices', devices: [] },
+    ]);
+    expect(pad.active).toBe(false);
+  });
+
+  it('list keys.ini where EZ2PORT would look, the data folder first', async () => {
+    const b = webBackend(
+      new Map([
+        ['/game/sound/a/x.ssf', enc('x')],
+        ['/game/system/x.gds', enc('x')],
+        ['/game/ez2port/keys.ini', enc('[Keys]\n')],
+      ]),
+    );
+    const files = await b.input.configFiles('/game/ez2play.exe', '/game');
+    expect(files).toEqual([
+      { kind: 'keys', path: '/game/ez2port/keys.ini', exists: true, source: 'data' },
+      { kind: 'settings', path: '/game/ez2port/settings.ini', exists: false, source: 'data' },
+      { kind: 'keys', path: '/config/ez2port/keys.ini', exists: false, source: 'user' },
+      { kind: 'settings', path: '/config/ez2port/settings.ini', exists: false, source: 'user' },
+    ]);
+    expect((await b.input.configFiles('/tools/ez2play', null)).map((c) => c.source)).toEqual([
+      'user',
+      'user',
+    ]);
   });
 });

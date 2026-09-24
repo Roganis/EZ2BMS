@@ -17,6 +17,7 @@ import {
   type PlateSpec,
 } from '@ez2bms/chart-core';
 import { memoryExport } from './web-export';
+import { webPads } from './web-pad';
 import { demoFiles, demoSeconds, demoStem, demoStemLevel, DEMO_DIR } from './demo';
 
 /** An .ssf/.ezw as a WAV, its PCM untouched (the host's ez2bms-audio import.rs / wav::wrap_pcm). */
@@ -287,6 +288,15 @@ export function webBackend(
       files.delete(k);
     }
   };
+
+  // The silent clock's song time is the frame count at RATE from the last
+  // play; stopped, as if played from where it stands now.
+  const pads = webPads({
+    hostAtSong: (ms) =>
+      ((playing ? startPerf : performance.now()) + ms - (startFrame * 1000) / RATE) * 1e6,
+    isFile: (p) => files.has(norm(p)),
+    isGameRoot: (d) => !!childCi(norm(d), 'sound') && !!childCi(norm(d), 'system'),
+  });
 
   const backend: Backend = {
     kind: 'web',
@@ -732,6 +742,8 @@ export function webBackend(
       stop: async () => {},
     },
     export: memoryExport({ files, mtimes, norm }),
+    input: pads.input,
+    devPad: pads.devPad,
     ...(opts.gameTables ? { devGameTables: opts.gameTables } : {}),
   };
   return backend;

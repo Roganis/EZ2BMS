@@ -885,6 +885,7 @@ name = "ez2bms"
 version = "0.1.0"
 dependencies = [
  "ez2bms-audio",
+ "ez2bms-input",
  "ez2bms-launch",
  "ez2bms-media",
  "serde",
