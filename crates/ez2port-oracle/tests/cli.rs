@@ -52,3 +52,35 @@ fn cipher_round_trips_with_a_synthetic_table() {
     assert_eq!(std::fs::read(dir.join("r.bin")).unwrap(), plain);
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn keyconf_reads_alternates_quotes_and_turntables_over_the_defaults() {
+    let v = run_with_stdin(
+        &["keyconf"],
+        "[Keys]\nKey1 = Z, 0810:e501/b3 ; the panel too\nScratch1 = \";\"\n[Analog]\nP1 Turntable = 0810:e501/a0:rev\n",
+    );
+    // Two channels and a turntable set.
+    assert_eq!(v["rc"], 3);
+    assert_eq!(v["bad_line"], 0);
+    assert_eq!(v["channels"][0]["name"], "Key1");
+    assert_eq!(v["channels"][0]["names"], serde_json::json!(["Z", "0810:e501/b3"]));
+    assert_eq!(v["channels"][7]["names"], serde_json::json!([";"]));
+    // A channel the file does not name keeps its default.
+    assert_eq!(v["channels"][1]["names"], serde_json::json!(["S"]));
+    assert_eq!(v["analog"], serde_json::json!(["0810:e501/a0:rev", ""]));
+    // The formatted text reads back to the same thing.
+    let again = run_with_stdin(&["keyconf", "bare"], v["formatted"].as_str().unwrap());
+    assert_eq!(again["channels"], v["channels"]);
+    assert_eq!(again["analog"], v["analog"]);
+}
+
+#[test]
+fn bindspec_parses_every_kind_and_refuses_a_broken_device_token() {
+    let v = run_with_stdin(&["bindspec"], "Left Ctrl\n0810:e501#2/h0.downright\n0810:e501/b\n");
+    assert_eq!(v[0]["kind"], 1);
+    assert_eq!(v[0]["key"], "Left Ctrl");
+    assert_eq!(v[1]["kind"], 3);
+    assert_eq!(v[1]["device"], "0810:e501#2");
+    assert_eq!(v[1]["formatted"], "0810:e501#2/h0.downright");
+    assert_eq!(v[2]["ok"], 0);
+}

@@ -35,12 +35,20 @@
  *   bmson-import FOLDER GAME_ROOT OUT_ROOT [KEY]
  *                             run the port's own bmson importer (WAV-only:
  *                             no ffmpeg decoders), print its log lines
+ *   keyconf [bare]            stdin: a keys.ini. Parsed over the defaults (as
+ *                             ez2play and ez2input load it) or, with `bare`,
+ *                             over nothing; every channel's alternates, the
+ *                             turntables, and ez2_keyconf_format's text
+ *   bindspec                  stdin: one binding token per line; each parsed
+ *                             and formatted back
  */
 #include "ez2/abm.h"
 #include "ez2/bmson.h"
 #include "ez2/chart.h"
 #include "ez2/crypt.h"
 #include "ez2/ezi.h"
+#include "ez2/bindspec.h"
+#include "ez2/keyconf.h"
 #include "ez2/file.h"
 #include "ez2/gds.h"
 #include "ez2/mixparam.h"
@@ -1222,6 +1230,99 @@ static int cmd_songdb_charts(const char *path, const char *root, const char *mod
 
 /* ---- main ---------------------------------------------------------------- */
 
+/* ---- keys.ini and binding tokens ------------------------------------------ */
+
+/* All of stdin, NUL-terminated (the length is returned separately). */
+static char *slurp_stdin(size_t *n)
+{
+    size_t cap = 4096, used = 0;
+    char *buf = (char *)malloc(cap);
+    size_t got;
+    while (buf && (got = fread(buf + used, 1, cap - used - 1, stdin)) > 0) {
+        used += got;
+        if (cap - used < 2) {
+            char *grown = (char *)realloc(buf, cap * 2);
+            if (!grown) { free(buf); return 0; }
+            buf = grown;
+            cap *= 2;
+        }
+    }
+    if (buf) buf[used] = 0;
+    *n = used;
+    return buf;
+}
+
+static int cmd_keyconf(int bare)
+{
+    size_t n = 0, i;
+    char *text = slurp_stdin(&n), *out;
+    ez2_keyconf kc;
+    int bad = 0, rc, need, c, a;
+
+    if (!text) return fail("keyconf", "out of memory");
+    if (bare) memset(&kc, 0, sizeof kc);
+    else ez2_keyconf_defaults(&kc);
+    rc = ez2_keyconf_parse(text, n, &kc, &bad);
+    free(text);
+    printf("{\"rc\":%d,\"bad_line\":%d,\"channels\":[", rc, bad);
+    for (c = 0; c < EZ2_KEY_CHANNELS; c++) {
+        printf("%s{\"name\":", c ? "," : "");
+        jstr(ez2_keyconf_channel_name(c));
+        printf(",\"names\":[");
+        for (i = 0; i < (size_t)kc.count[c] && i < EZ2_KEY_ALTS; i++) {
+            if (i) putchar(',');
+            jstr(kc.names[c][i]);
+        }
+        printf("]}");
+    }
+    printf("],\"analog\":[");
+    for (a = 0; a < EZ2_KEY_ANALOGS; a++) {
+        if (a) putchar(',');
+        jstr(kc.analog[a]);
+    }
+    need = ez2_keyconf_format(&kc, 0, 0);
+    out = need > 0 ? (char *)malloc((size_t)need) : 0;
+    if (out) ez2_keyconf_format(&kc, out, (size_t)need);
+    printf("],\"formatted\":");
+    jstr(out ? out : "");
+    free(out);
+    printf("}\n");
+    return 0;
+}
+
+static int cmd_bindspec(void)
+{
+    char line[1024], out[256];
+    int first = 1;
+
+    printf("[");
+    while (fgets(line, sizeof line, stdin)) {
+        size_t len = strlen(line);
+        ez2_bindspec b;
+        int ok;
+        while (len && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+            line[--len] = 0;
+        memset(&b, 0, sizeof b);
+        ok = ez2_bindspec_parse(line, &b);
+        out[0] = 0;
+        if (ok) ez2_bindspec_format(&b, out, sizeof out);
+        printf("%s{\"text\":", first ? "" : ",");
+        jstr(line);
+        printf(",\"ok\":%d,\"kind\":%d,\"device\":", ok, b.kind);
+        jstr(b.device);
+        printf(",\"key\":");
+        jstr(b.key);
+        printf(",\"index\":%d,\"dir\":%d,\"reverse\":%d,\"velocity\":%d,\"amount\":%d,"
+               "\"analog\":%d,\"formatted\":",
+               b.index, b.dir, b.reverse, b.velocity, b.amount, ez2_bindspec_is_analog(&b));
+        jstr(out);
+        printf("}");
+        first = 0;
+    }
+    printf("]\n");
+    return 0;
+}
+
 int ez2bms_oracle_main(int argc, char **argv)
 {
     const char *c = argc > 1 ? argv[1] : "";
@@ -1262,6 +1363,9 @@ int ez2bms_oracle_main(int argc, char **argv)
         return cmd_songdb_charts(argv[2], argv[3], argv[4]);
     if (!strcmp(c, "usersongs") && (argc == 4 || argc == 5))
         return cmd_usersongs(argv[2], argv[3], argc == 5 ? argv[4] : 0);
+    if (!strcmp(c, "keyconf") && (argc == 2 || (argc == 3 && !strcmp(argv[2], "bare"))))
+        return cmd_keyconf(argc == 3);
+    if (!strcmp(c, "bindspec") && argc == 2) return cmd_bindspec();
     if (!strcmp(c, "bmson-import") && argc >= 5 && argc <= 7) {
         /* [KEY] [--rgba]: --rgba reads the art from test RGBA files */
         int images = !strcmp(argv[argc - 1], "--rgba");
@@ -1285,6 +1389,7 @@ int ez2bms_oracle_main(int argc, char **argv)
             "       ez2port-oracle textspec DIR REL SCALE OUT\n"
             "       ez2port-oracle select-wheel COUNT SCROLL\n"
             "       ez2port-oracle select-chase COUNT FROM TO TICKS\n"
-            "       ez2port-oracle select-swing DIFFS\n");
+            "       ez2port-oracle select-swing DIFFS\n"
+            "       ez2port-oracle keyconf [bare] | bindspec   (text on stdin)\n");
     return 2;
 }

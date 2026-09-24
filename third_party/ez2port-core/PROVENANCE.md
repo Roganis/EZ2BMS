@@ -17,6 +17,8 @@ compatible.
 | `tools/ez2judge.c` | `source/port/tools/` | reference for the oracle's synthetic-player loop |
 | `reference/play.c`, `reference/ez2play.h` | `source/port/tools/ez2play/` | NOT built. The play loop (press matching, strays, expiry, keysound picking, voices) that `packages/chart-core/src/engine` ports |
 | `reference/bmson2ez.py`, `reference/keys.example.ini` | `source/port/tools/`, `source/port/` | NOT built. Reference for package writing and default bindings |
+| `reference/ezinput.c`, `reference/ezinput.h`, `reference/ezpad.c` | `source/port/platform/common/` | NOT built (they need SDL). The input layer - a channel as the OR of its bindings, debounce, pad device keys, hats and the analog turntable - that `packages/chart-core/src/input` ports |
+| `reference/test_inputchannel.c`, `reference/test_keyconf.c`, `reference/test_bindspec.c` | `source/port/tests/` | NOT built. The port's own cases for those rules, transcribed into EZ2BMS's tests |
 | `docs/*.md` | `source/port/*.md`, `source/docs/*.md` | the port's own design notes this project cites |
 
 `SHA256SUMS` lists the checksum of every copied file as it was in the bundle.
