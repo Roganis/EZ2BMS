@@ -266,3 +266,30 @@ Reading:
 - The Edit figure is well above M1.18's 1.4 ms: the extras drawn since (the
   grouped rack, strips' columns, markers) and a busier synthetic chart, not
   M8, as the "without" column shows. It stays inside a 60 Hz frame.
+
+## M9 - messages in three languages
+
+chart-core `test/bench.test.ts` ("says every message …"). This container
+(Node 22, one core); three runs each.
+
+| Date       | What                                                                               | Time               |
+| ---------- | ---------------------------------------------------------------------------------- | ------------------ |
+| 2026-09-24 | Every chart-core message (367) formatted in English, first time (each parsed once) | 21-32 ms           |
+| 2026-09-24 | … again (parsed messages kept)                                                     | 14-28 ms           |
+| 2026-09-24 | Lint of the 50k-note chart: the code before M9.6 / with message keys, same chart   | 90-149 / 68-113 ms |
+| 2026-09-24 | Its findings said again in another language (a switch)                             | 0.4-0.6 ms         |
+
+Reading:
+
+- A message is parsed once per language and kept; after that, saying one
+  costs tens of microseconds. The editor says a few hundred at most on a
+  screen, so a language switch re-renders in well under a frame's work of
+  formatting; the rest is Svelte redrawing what changed.
+- Findings keep their key and values, so a switch re-says them without
+  linting again.
+- Keeping a key beside each finding costs lint nothing measurable (the
+  runs overlap). Lint is slower than M1's 31 ms because of the rules added
+  since (holds covering notes, lane duplicates, scroll changes …), not M9.
+- The log (M9.1) writes a few lines a session: the start, the update check,
+  and errors. Its cost is a file append on the host, off the editor's
+  frame.

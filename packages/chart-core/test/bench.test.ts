@@ -40,6 +40,10 @@ import { holdPreview } from '../src/engine/holdpreview';
 import { EZ_SCROLL_MAX, multiplierAt, scrollPoints } from '../src/timing/scroll';
 import { TickConverter } from '../src/timing/ticks';
 import type { ChartData } from '../src/model/types';
+import { coreCatalogs, setCoreLocale } from '../src/i18n/core';
+import { coreEn } from '../src/i18n/en';
+import { messageArgs } from '../src/i18n/translate';
+import { textOf } from '../src/i18n/say';
 
 function time<T>(f: () => T): [T, number] {
   const t0 = performance.now();
@@ -491,5 +495,48 @@ describe('hold previews and scroll changes at full size', () => {
     expect(report.previewAll).toBeLessThan(2000);
     expect(report.scrollPoints4096).toBeLessThan(200);
     expect(report.walkNsPerFrame).toBeLessThan(5000);
+  });
+
+  it("says every message, and a big chart's findings again in another language, within budget", () => {
+    // A value for every parameter: a number where a plural or number wants one.
+    const keys = coreCatalogs.keys();
+    const params = (k: (typeof keys)[number]) =>
+      Object.fromEntries(messageArgs(coreEn[k]).map((a) => [a, 2]));
+    const [, coldMs] = time(() => keys.map((k) => coreCatalogs.format(k, params(k), 'en')));
+    const [, warmMs] = time(() => keys.map((k) => coreCatalogs.format(k, params(k), 'en')));
+
+    // The 50k-note chart with problems enough to find.
+    const data = synthChart({ mode: '14k', notes: 50_000, channels: 1500 });
+    data.info.level = 25;
+    for (let i = 0; i < 2000; i++) data.notes[i]!.y += 1;
+    const song = {
+      key: 'bench',
+      charts: [{ file: 'x.bmson', data, mode: '14k' as const, tier: 'NM' as const }],
+    };
+    const [findings, lintMs] = time(() => lintSong(song));
+    setCoreLocale('ko', true);
+    const [, againMs] = (() => {
+      try {
+        return time(() => findings.map(textOf));
+      } finally {
+        setCoreLocale('en');
+      }
+    })();
+    const report = {
+      messages: keys.length,
+      coldMs,
+      warmMs,
+      findings: findings.length,
+      lintMs,
+      againMs,
+    };
+    console.log(
+      'bench M9 (ms):',
+      Object.fromEntries(Object.entries(report).map(([k, v]) => [k, Math.round(v * 100) / 100])),
+    );
+    expect(findings.length).toBeGreaterThan(0);
+    expect(report.coldMs).toBeLessThan(2000);
+    expect(report.warmMs).toBeLessThan(200);
+    expect(report.againMs).toBeLessThan(50);
   });
 });
