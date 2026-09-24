@@ -187,5 +187,7 @@ deferred.
 ## Licence
 
 GPL-3.0. The vendored EZ2PORT core under `third_party/ez2port-core` is
-GPL-3.0-or-later and is used by tests only. See [`AI-DISCLOSURE.md`](AI-DISCLOSURE.md)
+GPL-3.0-or-later and is used by tests only. The desktop app links
+[SDL 3](https://libsdl.org) (zlib licence, Copyright (C) 1997-2026 Sam Lantinga)
+to read game controllers, as EZ2PORT does. See [`AI-DISCLOSURE.md`](AI-DISCLOSURE.md)
 for how this project was written.

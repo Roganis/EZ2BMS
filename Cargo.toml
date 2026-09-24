@@ -4,6 +4,7 @@ members = [
   "crates/ez2bms-audio",
   "crates/ez2bms-launch",
   "crates/ez2bms-media",
+  "crates/ez2bms-input",
   "crates/ez2port-oracle",
   "src-tauri",
 ]
@@ -13,6 +14,7 @@ default-members = [
   "crates/ez2bms-audio",
   "crates/ez2bms-launch",
   "crates/ez2bms-media",
+  "crates/ez2bms-input",
   "crates/ez2port-oracle",
 ]
 
@@ -21,7 +23,7 @@ version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-only"
 repository = "https://github.com/Roganis/EZ2BMS"
-rust-version = "1.80"
+rust-version = "1.85"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

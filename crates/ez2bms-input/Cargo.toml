@@ -1,0 +1,38 @@
+[package]
+name = "ez2bms-input"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "EZ2BMS: game controllers read the way EZ2PORT reads them (SDL3 joysticks), with times on the audio clock"
+
+[features]
+# SDL3, built from source and linked in (sdl3-sys `build-from-source-static`:
+# cmake and a C compiler). Off by default, so the portable half builds and
+# tests anywhere; the desktop app turns it on.
+sdl = ["dep:sdl3-sys"]
+
+[dependencies]
+serde.workspace = true
+# Only SDL's joystick layer (and HIDAPI, which it drives devices through as
+# EZ2PORT's own SDL does) - the rest is off: this build has nothing to show or
+# play, and each subsystem left on is a system library a machine must have.
+sdl3-sys = { version = "0.7.1", optional = true, default-features = false, features = [
+  "build-from-source-static",
+  "sdl-joystick",
+  "sdl-hidapi",
+  "no-sdl-audio",
+  "no-sdl-video",
+  "no-sdl-gpu",
+  "no-sdl-render",
+  "no-sdl-camera",
+  "no-sdl-dialog",
+  "no-sdl-tray",
+  "no-sdl-haptic",
+  "no-sdl-power",
+  "no-sdl-sensor",
+  "sdl-unix-console-build",
+] }
+
+[dev-dependencies]
+serde_json.workspace = true

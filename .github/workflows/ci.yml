@@ -54,8 +54,10 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      # ALSA headers, for the audio crate's real-device backend (cpal).
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev
+      # ALSA headers, for the audio crate's real-device backend (cpal); udev
+      # headers, so the SDL the input crate builds finds pads through udev as
+      # EZ2PORT's does (without them it falls back to watching /dev/input).
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev
       - run: cargo fmt --all -- --check
       - uses: actions/cache@v4
         with:
@@ -65,6 +67,8 @@ jobs:
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test
       - run: cargo build -p ez2bms-audio --features cpal
+      # SDL built from source (cmake) and driven with virtual joysticks.
+      - run: cargo test -p ez2bms-input --features sdl
 
   # The desktop host needs webkit2gtk on Linux, so it has a job of its own.
   tauri:
@@ -78,12 +82,13 @@ jobs:
       - run: >-
           sudo apt-get update && sudo apt-get install -y --no-install-recommends
           libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libgtk-3-dev
-          librsvg2-dev libayatana-appindicator3-dev libasound2-dev
+          librsvg2-dev libayatana-appindicator3-dev libasound2-dev libudev-dev
       - run: cargo clippy -p ez2bms --all-targets -- -D warnings
       - run: cargo test -p ez2bms
 
   # What runs on the owner's Windows machines: audio (WASAPI through cpal),
-  # the ez2play launcher (CREATE_NO_WINDOW) and the host (WebView2).
+  # the ez2play launcher (CREATE_NO_WINDOW), controllers (SDL built with MSVC)
+  # and the host (WebView2).
   windows:
     runs-on: windows-latest
     steps:
@@ -92,3 +97,4 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p ez2bms-audio -p ez2bms-launch -p ez2bms-media -p ez2bms
       - run: cargo build -p ez2bms-audio --features cpal
+      - run: cargo test -p ez2bms-input --features sdl
