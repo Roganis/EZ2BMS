@@ -10,7 +10,7 @@ export const lint = {
   'lint.bpm-same-tick': 'Two BPM changes ({a}, {b}) land on the same EZ2 tick',
   'lint.stops':
     '{n, plural, one {{n} STOP} other {{n} STOPs}}: EZ2 has none, so EZ2PORT gets a gap in time and the scroll does not freeze',
-  // ×{rate}: a scroll speed multiplier, e.g. ×1.5
+  // {rate}: the change's multiplier as written, e.g. 0 or -1
   'lint.scroll-rate':
     'A scroll change of {rate}: the field would stand still or run backwards (it must be above 0)',
   'lint.scroll-same-tick':

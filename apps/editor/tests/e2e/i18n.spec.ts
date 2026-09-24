@@ -1,8 +1,7 @@
 // The UI's language: it follows the system's, Preferences switch it live
 // (and it stays switched), the palette finds a command by its English title
 // in any language, and the pseudo-language shows what is left untranslated.
-// Only a few messages are translated until M9.7/M9.8; the rest stand in
-// in English.
+// (i18n-sweep.spec.ts walks every screen in each language.)
 
 import { expect, test } from '@playwright/test';
 

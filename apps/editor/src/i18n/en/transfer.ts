@@ -14,7 +14,8 @@ export const transfer = {
   'import.readAgain': 'Read again',
   'import.game.bpm': '{bpm} BPM',
   // {key} is the song's key (its folder name), drawn in bold.
-  'import.game.summary': 'Song key {key} · category {category} · {n} keysounds',
+  'import.game.summary':
+    'Song key {key} · category {category} · {n, plural, one {{n} keysound} other {{n} keysounds}}',
   'import.game.chart': 'level {level} · {notes} notes',
   'import.game.hint':
     "Pick a song. Its charts become bmson files in a new song folder, its keysounds WAVs (the same samples), under a new key - publishing under the game's own would replace that song on the wheel.",

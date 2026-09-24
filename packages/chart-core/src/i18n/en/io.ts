@@ -106,10 +106,11 @@ export const io = {
   'ez.kept.mark':
     '{n, plural, one {{n} mark record} other {{n} mark records}}: kept in the chart, not published',
   'ez.kept.stop':
-    '{n, plural, one {{n} stop (the engine ignores them) record} other {{n} stop (the engine ignores them) records}}: kept in the chart, not published',
+    '{n, plural, one {{n} stop record} other {{n} stop records}} (the engine ignores them): kept in the chart, not published',
   'ez.kept.tempo':
-    '{n, plural, one {{n} tempo outside 0-1000 BPM (the engine ignores them) record} other {{n} tempo outside 0-1000 BPM (the engine ignores them) records}}: kept in the chart, not published',
-  'ez.kept.unknown': '{n} records of kinds EZ2BMS does not know: kept, not published',
+    '{n, plural, one {{n} tempo record} other {{n} tempo records}} outside 0-1000 BPM (the engine ignores them): kept in the chart, not published',
+  'ez.kept.unknown':
+    '{n, plural, one {{n} record of a kind} other {{n} records of kinds}} EZ2BMS does not know: kept, not published',
   'ez.kept.length':
     '{n, plural, one {{n} background note has} other {{n} background notes have}} a length: kept as x_len; publishing writes them as taps, as the game plays them',
   // {names}: up to six file names, e.g. "kick.wav, snare.wav..."
@@ -189,7 +190,7 @@ export const io = {
   'bms.level.none': "#PLAYLEVEL (none) is not 1-20, which EZ2PORT's song list needs: set to {set}",
   'bms.no-bpm': 'No usable #BPM: the start tempo is taken as {bpm}',
   'bms.bad-refs':
-    '{n} tempo or stop changes name a #BPMxx/#STOPxx the file does not define: left out',
+    '{n, plural, one {{n} tempo or stop change names} other {{n} tempo or stop changes name}} a #BPMxx/#STOPxx the file does not define: left out',
   'bms.stops':
     '{n, plural, one {{n} STOP} other {{n} STOPs}}: EZ2 has none - publishing turns each into a gap, so the scroll does not freeze',
   // {channel}: a BMS channel, e.g. 51
@@ -210,13 +211,15 @@ export const io = {
   // e.g. EZ2 BME or bms.map.keys
   'bms.unmapped':
     '{n, plural, one {Channel {channels} has} other {Channels {channels} have}} no lane in the {map} map: those notes are background sounds',
-  'bms.off-mode': '{n} notes are on lanes this mode does not have: background sounds',
+  'bms.off-mode':
+    '{n, plural, one {{n} note is} other {{n} notes are}} on lanes this mode does not have: background sounds',
   'bms.other-channels':
     '{n, plural, one {Channel {channels}: not read (EZ2 has no use for it)} other {Channels {channels}: not read (EZ2 has no use for them)}}',
   // {header}: #SCROLL or #SPEED
   'bms.scroll': '{header} changes: EZ2 has none; left out',
   // {ids}: up to eight #WAV ids, e.g. "0Z, 1A"
-  'bms.undefined-wav': 'Notes use {n} #WAV ids the file does not define: {ids}',
+  // {n}: how many ids; {ids}: the ids themselves.
+  'bms.undefined-wav': 'Notes use #WAV ids the file does not define ({n}): {ids}',
   // {names}: up to six file names, e.g. "kick.wav, snare.wav..."
   'bms.missing-sound':
     '{n, plural, one {{n} sound file is} other {{n} sound files are}} not in the folder: {names}',
@@ -249,14 +252,16 @@ export const io = {
   // {chars}: the characters, separated by spaces; {encoding}: Shift-JIS or EUC-KR (CP949)
   'bmsw.unmappable': '{chars} cannot be written in {encoding}: written as ?',
   'bmsw.velpan':
-    '{n} notes have a velocity or pan: BMS has neither, so they play at full volume, centred',
+    '{n, plural, one {{n} note has} other {{n} notes have}} a velocity or pan: BMS has neither, so they play at full volume, centred',
   // {map}: a channel map's name, e.g. EZ2 BME or bms.map.keys
-  'bmsw.unmapped': '{n} notes are on lanes the {map} map has no channel for: written as background',
-  'bmsw.dupes': '{n} notes share a lane and a spot with another: written as background',
+  'bmsw.unmapped':
+    '{n, plural, one {{n} note is} other {{n} notes are}} on lanes the {map} map has no channel for: written as background',
+  'bmsw.dupes':
+    '{n, plural, one {{n} note shares} other {{n} notes share}} a lane and a spot with another: written as background',
   'bmsw.holds':
-    '{n} long notes end where the next on their lane starts: written a pulse shorter, as BMS cannot put both there',
+    '{n, plural, one {{n} long note ends} other {{n} long notes end}} where the next on their lane starts: written a pulse shorter, as BMS cannot put both there',
   'bmsw.stops':
-    '{n} STOPs are not a whole number of 1/192 measures: written as decimals (beatoraja reads them; LR2 rounds them down)',
+    '{n, plural, one {{n} STOP is} other {{n} STOPs are}} not a whole number of 1/192 measures: written as decimals (beatoraja reads them; LR2 rounds them down)',
   // EZ2PORT eases to a new scroll speed; beatoraja's #SCROLL jumps to it.
   'bmsw.scroll':
     "{n, plural, one {{n} scroll change is} other {{n} scroll changes are}} not written: LR2 has none, and beatoraja's #SCROLL is not what EZ2PORT does (it eases to the new speed)",

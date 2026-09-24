@@ -12,7 +12,7 @@ export const publish = {
     '{file} is {bytes} bytes: the original game reads a file into {max} and cannot load it ({kb} KB of 128 KB)',
   // A slice: the part of a sound a note plays.
   'cabinet.slots': '{n} keysounds (slices each count): the original game loads at most {max}',
-  'cabinet.level': "level {level}: the game's table takes 1-20",
+  'cabinet.level': "Level {level}: the game's table takes 1-20",
   // "Background" sounds play by themselves, on no lane. The cabinet plays one
   // sound at a time on each of a chart's tracks; EZ2PORT plays them all.
   'cabinet.voice-cut':

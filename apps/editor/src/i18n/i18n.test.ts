@@ -40,11 +40,12 @@ describe('the catalogs', () => {
     expect(catalogProblems(en, { ko, ja })).toEqual([]);
   });
 
-  it('switch language live, English standing in for what is not translated yet', () => {
+  // English standing in for a message not translated is chart-core's
+  // Catalogs, tested there (test/i18n.test.ts).
+  it('switch language live, English still at hand', () => {
     try {
       i18n.apply('ja');
       expect(t('prefs.language')).toBe('言語');
-      expect(t('top.charts')).toBe('Charts');
       expect(tEn('prefs.language')).toBe('Language');
       i18n.apply('en', true);
       expect(t('prefs.language')).toBe('⟦Långüågé⟧');

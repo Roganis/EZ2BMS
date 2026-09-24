@@ -166,7 +166,7 @@ export const song = {
   'art.imported': 'Imported {n, plural, one {{n} image} other {{n} images}}',
   'art.already': 'Already in the folder',
   // {files}: the files not imported; {error}: why the first was not.
-  'art.skipped': 'skipped {files} ({error})',
+  'art.skipped': 'Skipped {files} ({error})',
   'art.importedSkipped':
     'Imported {n, plural, one {{n} image} other {{n} images}}; skipped {files} ({error})',
   'art.alreadySkipped': 'Already in the folder; skipped {files} ({error})',
@@ -267,7 +267,7 @@ export const song = {
   'wheel.keys':
     'Click the screen, then {turn} to turn the wheel, {tiers} for the tier, {eyecatch} for the eyecatch. The preview starts after the wheel stands still for half a second, as the game waits.',
   'wheel.neon':
-    "Neon stand-ins: set your game folder (the Port drawer) to see your song select's own masks.",
+    "Neon stand-ins: set your game folder (the EZ2PORT tab) to see your song select's own masks.",
   'wheel.reading': "Reading your game's song select art…",
   'wheel.gameArt': "Drawn with your game's song select masks.",
   'wheel.partial': 'Your game folder has no {files}: neon stand-ins take their place.',

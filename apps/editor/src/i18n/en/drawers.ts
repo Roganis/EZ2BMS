@@ -153,7 +153,7 @@ export const drawers = {
   'sounds.cantRename': "Can't rename {file}: {reason}",
   'sounds.renamed':
     'Renamed {from} to {to}{charts, plural, =0 {} one { in {charts} chart} other { in {charts} charts}}{unsaved, plural, =0 {} other { ({unsaved} unsaved)}}',
-  // After the rename's report, joined by " - ": charts that named the new file, which now plays for them.
+  // After the rename's report, joined by " - ": {names} are sounds that had no file and now find the renamed one.
   'sounds.adopted':
     '{names} {n, plural, one {was missing and now plays it} other {were missing and now play it}}',
   'sounds.undo': 'Undo',
