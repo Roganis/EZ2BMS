@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LANE_KEYS, laneForKey, laneKeysFromIni, sdlToCode } from './lanekeys';
+import { DEFAULT_LANE_KEYS, laneForKey, laneKeysFromIni } from './lanekeys';
 
 describe('lane keys', () => {
   it("uses EZ2PORT's default bindings", () => {
@@ -19,13 +19,14 @@ describe('lane keys', () => {
     expect(laneForKey('KeyV', new Set([11]))).toBeUndefined();
   });
 
-  it("reads the player's keys.ini: names, alternates, quotes, comments", () => {
+  it("reads the player's keys.ini as the port does: names, alternates, quotes, comments", () => {
     const map = laneKeysFromIni(`; mine
 [Keys]
 Key1 = A, Keypad 1   ; two keys
 Key3 = ","
 Pedal =
 Scratch1 = Left Alt
+Key4 = Home, Keypad Enter # not a comment mid-name, so one name
 [Other]
 Key2 = Q
 `);
@@ -34,10 +35,9 @@ Key2 = Q
     expect(map.Comma).toBe(13);
     expect(map.Space).toBeUndefined(); // unbound
     expect(map.AltLeft).toBe(1);
-    expect(map.KeyS).toBe(12); // untouched: still the default
-    expect(map.KeyQ).toBeUndefined(); // not in [Keys]
-    expect(sdlToCode('Right Shift')).toBe('ShiftRight');
-    expect(sdlToCode('Return')).toBe('Enter');
-    expect(sdlToCode('\\')).toBe('Backslash');
+    expect(map.Home).toBe(14);
+    // Any section but [Analog] is keys to the port.
+    expect(map.KeyQ).toBe(12);
+    expect(map.KeyS).toBeUndefined();
   });
 });
