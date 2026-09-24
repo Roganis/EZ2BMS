@@ -8,6 +8,7 @@ export type CommandGroup =
 
 export interface Command {
   id: string;
+  /** In English: docs/keybindings.md and the palette's second language. */
   title: string;
   group: CommandGroup;
   /** Default keys, e.g. 'Mod+Z', 'Shift+Tab', 'Space', 'Alt+ArrowLeft'. */
@@ -93,6 +94,18 @@ export class Commands {
   private keyIndex = new Map<string, string>();
   private overrides: Record<string, string[]> = {};
   onError: (e: unknown, cmd: Command) => void = (e) => console.error(e);
+  /**
+   * A command's title and group in the language chosen (set by the app from
+   * its catalogs, i18n/; the registry itself knows no languages). Unset or
+   * undefined: the English.
+   */
+  localize: (c: Command) => string | undefined = () => undefined;
+  groupLabel: (g: CommandGroup) => string = (g) => g;
+
+  /** What the palette shows for `c`. */
+  titleOf(c: Command): string {
+    return this.localize(c) ?? c.title;
+  }
 
   register(...cmds: Command[]): void {
     for (const c of cmds) this.map.set(c.id, c);
@@ -170,15 +183,20 @@ export class Commands {
         out.push({ cmd: c, ...(rest ? { arg: rest } : {}), score: 1000 });
         continue;
       }
+      // Both the title shown and the English one find it: help pages,
+      // videos and habits name commands in English.
+      const title = this.titleOf(c);
       const s = Math.max(
-        fuzzy(q, c.title) * 2,
+        fuzzy(q, title) * 2,
+        fuzzy(q, `${this.groupLabel(c.group)} ${title}`),
+        title !== c.title ? fuzzy(q, c.title) * 2 : 0,
         fuzzy(q, `${c.group} ${c.title}`),
         c.verb ? fuzzy(q, c.verb) : 0,
       );
       if (s > 0) out.push({ cmd: c, score: s });
     }
     return out
-      .sort((a, b) => b.score - a.score || a.cmd.title.localeCompare(b.cmd.title))
+      .sort((a, b) => b.score - a.score || this.titleOf(a.cmd).localeCompare(this.titleOf(b.cmd)))
       .slice(0, limit);
   }
 }

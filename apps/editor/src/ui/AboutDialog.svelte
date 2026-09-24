@@ -1,6 +1,7 @@
 <script lang="ts">
   // Which EZ2BMS this is, where it keeps things, and what to send when
   // something went wrong: the log stays on this machine until you copy it.
+  import { t } from '../i18n/i18n.svelte';
   import { app } from '../state/app.svelte';
   import { formatWhen } from '../state/autosave';
   import { toast } from '../state/toasts.svelte';
@@ -18,80 +19,76 @@
   const reveal = () =>
     app.backend.diag
       .revealLogs()
-      .catch((e) => toast(`Could not open the log folder: ${e}`, 'error'));
+      .catch((e) => toast(t('about.logsFailed', { error: String(e) }), 'error'));
 </script>
 
 <svelte:window onkeydown={onKey} />
 <div class="scrim" role="presentation" onpointerdown={close}></div>
-<div class="dialog" role="dialog" aria-modal="true" aria-label="About EZ2BMS" data-testid="about">
+<div
+  class="dialog"
+  role="dialog"
+  aria-modal="true"
+  aria-label={t('about.label')}
+  data-testid="about"
+>
   <h2>EZ2BMS</h2>
-  <p class="lead">An arcade-native chart editor for EZ2PORT and EZ2AC cabinets.</p>
+  <p class="lead">{t('about.lead')}</p>
   <dl>
-    <dt>Version</dt>
+    <dt>{t('about.version')}</dt>
     <dd data-testid="about-version">
       {i?.version ?? '…'} <span class="dim">({i?.commit ?? '…'})</span>
     </dd>
-    <dt>System</dt>
+    <dt>{t('about.system')}</dt>
     <dd>{i ? `${i.os} ${i.arch}` : '…'}</dd>
-    {#if i?.config_dir}<dt>Settings</dt>
+    {#if i?.config_dir}<dt>{t('about.settings')}</dt>
       <dd class="path">{i.config_dir}</dd>{/if}
-    {#if i?.cache_dir}<dt>Cache</dt>
+    {#if i?.cache_dir}<dt>{t('about.cache')}</dt>
       <dd class="path">{i.cache_dir}</dd>{/if}
-    {#if i?.log_dir}<dt>Log</dt>
+    {#if i?.log_dir}<dt>{t('about.log')}</dt>
       <dd class="path">{i.log_dir}</dd>{/if}
   </dl>
 
   {#if prev}
     <p class="warn" data-testid="about-crashed">
-      The last run ({prev.version}, started {formatWhen(prev.started_ms)}) closed without shutting
-      down. Its last lines are in the log; the autosave kept unsaved charts.
+      {t('about.crashed', { version: prev.version, when: formatWhen(prev.started_ms) })}
     </p>
   {/if}
   {#if d.errors.length}
     <p class="warn" data-testid="about-errors">
-      {d.errors.length} error{d.errors.length === 1 ? '' : 's'} this run, the last: {d.errors.at(
-        -1,
-      )}
+      {t('about.errors', { n: d.errors.length, last: d.errors.at(-1) ?? '' })}
     </p>
   {/if}
 
   <div class="updates" data-testid="about-updates">
     {#if app.updates.unsupported === 'no-key'}
-      <p class="hint">This build cannot update itself (it was built without the update key).</p>
+      <p class="hint">{t('about.noKey')}</p>
     {:else}
-      <label class="check">
-        <input
-          type="checkbox"
-          checked={app.settings.data.updates.check}
-          onchange={(e) => app.updates.setAutoCheck(e.currentTarget.checked)}
-        />
-        Look for a new version at start (once a day)
-      </label>
+      <button
+        class="ez-btn"
+        onclick={() => {
+          close();
+          app.prefsOpen = true;
+        }}>{t('prefs.label')}…</button
+      >
       <button
         class="ez-btn"
         disabled={app.updates.stage === 'checking'}
         onclick={() => void app.updates.check(true)}
-        data-testid="about-check">Check now</button
+        data-testid="about-check">{t('about.checkNow')}</button
       >
     {/if}
   </div>
 
-  <p class="hint">
-    The log stays on this computer. To report a problem, copy a report (the version, this run's
-    errors and the end of the log) and paste it into your message.
-  </p>
+  <p class="hint">{t('about.logHint')}</p>
   <div class="actions">
-    <button class="ez-btn" onclick={reveal} data-testid="about-logs">Open the log folder</button>
+    <button class="ez-btn" onclick={reveal} data-testid="about-logs">{t('about.openLogs')}</button>
     <button class="ez-btn" onclick={() => void d.copyReport()} data-testid="about-report"
-      >Copy a report</button
+      >{t('about.copyReport')}</button
     >
     <span class="grow"></span>
-    <button class="ez-btn" onclick={close}>Close</button>
+    <button class="ez-btn" onclick={close}>{t('about.close')}</button>
   </div>
-  <p class="legal">
-    GPL-3.0. Uses SDL 3 (zlib licence) to read game controllers, as EZ2PORT does. Nothing of the
-    game ships with EZ2BMS: it reads your own files.
-  </p>
+  <p class="legal">{t('about.legal')}</p>
 </div>
 
 <style>
@@ -169,10 +166,5 @@
     gap: 10px;
     justify-content: space-between;
     font-size: 13px;
-  }
-  .check {
-    display: flex;
-    gap: 6px;
-    align-items: center;
   }
 </style>

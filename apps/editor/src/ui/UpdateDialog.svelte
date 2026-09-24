@@ -1,6 +1,7 @@
 <script lang="ts">
   // A newer EZ2BMS: what changed, and install (the app starts again on it),
   // skip this version, or later.
+  import { i18n, t } from '../i18n/i18n.svelte';
   import { app } from '../state/app.svelte';
 
   const u = app.updates;
@@ -20,50 +21,55 @@
 
 <svelte:window onkeydown={onKey} />
 <div class="scrim" role="presentation"></div>
-<div class="dialog" role="dialog" aria-modal="true" aria-label="Update" data-testid="update">
+<div
+  class="dialog"
+  role="dialog"
+  aria-modal="true"
+  aria-label={t('update.label')}
+  data-testid="update"
+>
   {#if i}
-    <h2>EZ2BMS {i.version}</h2>
+    <h2>{t('update.title', { version: i.version })}</h2>
     <p class="lead">
-      You have {i.current}.{#if i.date}
-        Published {new Date(i.date).toLocaleDateString()}.{/if}
+      {t('update.youHave', { current: i.current })}{#if i.date}
+        {t('update.published', {
+          date: new Date(i.date).toLocaleDateString(i18n.locale),
+        })}{/if}
     </p>
     {#if i.notes}<pre class="notes" data-testid="update-notes">{i.notes}</pre>{/if}
   {/if}
 
   {#if u.unsupported === 'package'}
-    <p class="hint">
-      This EZ2BMS came as a Linux package, which your package manager updates: download the new
-      version from its release page.
-    </p>
+    <p class="hint">{t('update.package')}</p>
     <div class="actions">
       <button class="ez-btn" onclick={() => void app.backend.updates.openReleases()}
-        >Open the release page</button
+        >{t('update.openReleases')}</button
       >
       <span class="grow"></span>
-      <button class="ez-btn" onclick={close}>Close</button>
+      <button class="ez-btn" onclick={close}>{t('about.close')}</button>
     </div>
   {:else if u.stage === 'installing' || u.stage === 'installed'}
     <div class="bar" data-testid="update-progress">
       <i style:width="{pct ?? 5}%"></i>
     </div>
     <p class="hint">
-      {#if u.stage === 'installed'}Installed: starting again…{:else if u.progress?.total}Downloading
-        {mb(u.progress.done)} of {mb(u.progress.total)} MB…{:else}Downloading…{/if}
+      {#if u.stage === 'installed'}{t('update.installed')}{:else if u.progress?.total}{t(
+          'update.downloadingOf',
+          { done: mb(u.progress.done), total: mb(u.progress.total) },
+        )}{:else}{t('update.downloading')}{/if}
     </p>
   {:else}
     {#if u.stage === 'failed'}<p class="warn" data-testid="update-error">{u.error}</p>{/if}
-    {#if app.project?.dirty}<p class="warn">
-        Save your charts first: installing restarts EZ2BMS.
-      </p>{/if}
+    {#if app.project?.dirty}<p class="warn">{t('update.saveFirst')}</p>{/if}
     <div class="actions">
       <button class="ez-btn go" onclick={() => void u.install()} data-testid="update-install"
-        >Install and restart</button
+        >{t('update.install')}</button
       >
       <button class="ez-btn" onclick={() => u.skip()} data-testid="update-skip"
-        >Skip this version</button
+        >{t('update.skip')}</button
       >
       <span class="grow"></span>
-      <button class="ez-btn" onclick={close}>Later</button>
+      <button class="ez-btn" onclick={close}>{t('update.later')}</button>
     </div>
   {/if}
 </div>

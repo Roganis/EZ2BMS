@@ -491,6 +491,41 @@ owner's machines:
 - the hold ticks against what EZ2PORT pays while a hold is held (the
   session they are checked against is itself oracle-checked).
 
+### Milestone 9: polish and distribution (M9.1-M9.4 so far), 2026-09-24
+
+The assistant is writing Milestone 9 after the owner chose it. The owner
+decided:
+
+- installers unsigned for now; updates signed with Tauri's own key, and a
+  Windows certificate used by the release workflow once one is added;
+- the repository made public by the owner, so the app can update from its
+  releases;
+- `.bmson` and BMS files opening in EZ2BMS;
+- Korean and Japanese for the whole app, following the system's language
+  with a switch; the docs stay English.
+
+New areas of work (details and checks are completed at M9.9):
+
+- **a local log and crash report** (M9.1): a rotating log file, a panic
+  hook, the next start's offer, the About box;
+- **opening files from the system** (M9.2): launch arguments, one running
+  window, file associations and the Linux MIME types;
+- **updates and releases** (M9.3): the updater's settings added by the
+  release workflow only when the owner's key exists, the daily check, and a
+  scan of the history for anything that must not be published;
+- **translations** (M9.4 on): the message catalogs (ICU MessageFormat), the
+  language setting, and every screen reading its words from them. **The
+  Korean and Japanese are drafted by the assistant**, marked as drafts in
+  the app, and need reading by a native speaker before they are relied on.
+  So far only the Preferences dialog and two command titles are translated;
+  the rest follows in M9.7 (Korean) and M9.8 (Japanese).
+
+What is checked so far for translations: every message parses; a
+translation takes the same parameters as the English; a converted screen
+has no English written into its markup (a scan of the Svelte source);
+switching language live, following a Korean system, and the pseudo-language
+end to end.
+
 ---
 
 ## Verification status

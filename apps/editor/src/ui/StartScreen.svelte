@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n/i18n.svelte';
   // The song-select screen: recent songs as spinning discs, and the way in.
   import { baseName } from '../bridge';
   import { app } from '../state/app.svelte';
@@ -28,10 +29,10 @@
 
   <header>
     <h1><span class="ez">EZ2</span>BMS</h1>
-    <p class="tag">chart suite for EZ2PORT</p>
+    <p class="tag">{t('start.tag')}</p>
   </header>
 
-  <section class="wheel" aria-label="Songs">
+  <section class="wheel" aria-label={t('start.songs')}>
     {#each recent as dir (dir)}
       <button
         class="disc"
@@ -46,7 +47,7 @@
     {/each}
     <button class="disc new" onclick={() => open()} disabled={busy} data-testid="open-folder">
       <span class="vinyl"><span class="plus">↗</span></span>
-      <span class="name">Open song folder</span>
+      <span class="name">{t('start.open')}</span>
     </button>
     <button
       class="disc new"
@@ -55,20 +56,22 @@
       data-testid="import"
     >
       <span class="vinyl"><span class="plus">⇣</span></span>
-      <span class="name">Import…</span>
+      <span class="name">{t('start.import')}</span>
     </button>
     {#if app.backend.kind !== 'web'}
       <button class="disc new" onclick={() => app.newSong()} disabled={busy} data-testid="new-song">
         <span class="vinyl"><span class="plus">+</span></span>
-        <span class="name">New song</span>
+        <span class="name">{t('start.new')}</span>
       </button>
     {/if}
   </section>
 
   <footer>
-    <kbd>Ctrl K</kbd> commands · <kbd>Ctrl O</kbd> open
+    <kbd>Ctrl K</kbd>
+    {t('start.keys')} · <kbd>Ctrl O</kbd>
+    {t('start.keysOpen')}
     {#if app.backend.kind === 'web'}
-      · <span class="web">browser preview: files live in memory</span>
+      · <span class="web">{t('start.web')}</span>
     {/if}
   </footer>
 </main>

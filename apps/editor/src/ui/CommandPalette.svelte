@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n/i18n.svelte';
   import { formatKey, type Match } from '../commands/registry';
   import { app } from '../state/app.svelte';
 
@@ -54,12 +55,12 @@
 
 {#if app.view.paletteOpen}
   <div class="scrim" onpointerdown={close} role="presentation"></div>
-  <div class="palette" role="dialog" aria-label="Command palette" data-testid="palette">
+  <div class="palette" role="dialog" aria-label={t('palette.label')} data-testid="palette">
     <input
       bind:this={input}
       bind:value={query}
       onkeydown={onKey}
-      placeholder="Type a command - or goto 32, bpm 174, snap 1/12, speed 300"
+      placeholder={t('palette.placeholder')}
       spellcheck="false"
       autocomplete="off"
     />
@@ -67,9 +68,9 @@
       {#each matches as m, i (m.cmd.id)}
         <li>
           <button class:on={i === index} onpointerenter={() => (index = i)} onclick={() => run(m)}>
-            <span class="group">{m.cmd.group}</span>
+            <span class="group">{app.commands.groupLabel(m.cmd.group)}</span>
             <span class="title">
-              {m.cmd.title}
+              {app.commands.titleOf(m.cmd)}
               {#if m.arg !== undefined}<b>{m.arg}</b>{:else if m.cmd.verb}<i
                   >{m.cmd.verb} {m.cmd.argHint}</i
                 >{/if}
@@ -81,7 +82,7 @@
           </button>
         </li>
       {:else}
-        <li class="none">No command matches “{query}”</li>
+        <li class="none">{t('palette.none', { query })}</li>
       {/each}
     </ul>
   </div>

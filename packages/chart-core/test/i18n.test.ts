@@ -3,7 +3,11 @@
 // pseudo-language, and the system's language picked up.
 
 import { describe, expect, it } from 'vitest';
-import { Catalogs, localeOf, pseudo } from '../src/i18n/translate';
+import { coreCatalogs } from '../src/i18n/core';
+import { coreEn } from '../src/i18n/en';
+import { coreJa } from '../src/i18n/ja';
+import { coreKo } from '../src/i18n/ko';
+import { Catalogs, catalogProblems, localeOf, messageArgs, pseudo } from '../src/i18n/translate';
 
 const en = {
   notes: '{n, plural, one {# note} other {# notes}} on {lane}',
@@ -34,6 +38,10 @@ describe('messages', () => {
     const c = catalogs();
     c.setLocale('ko');
     expect(c.t('only')).toBe('Only in English');
+    // ...counting in English (Korean has one form: it would say "1 notes").
+    const k = new Catalogs({ n: '{n, plural, one {# note} other {# notes}}' }, { ko: {} });
+    k.setLocale('ko');
+    expect(k.t('n', { n: 1 })).toBe('1 note');
     // English is always there to search by.
     expect(c.format('saved', undefined, 'en')).toBe('Saved');
   });
@@ -54,5 +62,38 @@ describe('messages', () => {
     expect(localeOf('en-US')).toBe('en');
     expect(localeOf('de-DE')).toBe('en');
     expect(localeOf(undefined)).toBe('en');
+  });
+});
+
+describe('catalogs', () => {
+  it('name the parameters a message takes, however it uses them', () => {
+    expect(messageArgs('{n, plural, one {# note} other {# notes}} on {lane}')).toEqual([
+      'lane',
+      'n',
+    ]);
+    expect(messageArgs('{lane}에 노트 {n}개', 'ko')).toEqual(['lane', 'n']);
+    expect(messageArgs('{kind, select, a {A {x}} other {B}}')).toEqual(['kind', 'x']);
+    expect(messageArgs('No command matches “{query}” <b>')).toEqual(['query']);
+  });
+
+  it('find a translation that drops, renames or adds a parameter, or does not parse', () => {
+    const en = { a: '{n} notes', b: 'Saved', c: 'Hi {name}' };
+    expect(catalogProblems(en, { ko: { a: '노트 {n}개', b: '저장' } })).toEqual([]);
+    expect(
+      catalogProblems(en, {
+        ko: { a: '노트 {count}개', c: '안녕' },
+        ja: { b: '{oops', d: 'x' } as Record<string, string>,
+      }),
+    ).toEqual([
+      'ko a: takes {count}, English {n}',
+      'ko c: takes none, English {name}',
+      expect.stringMatching(/^ja b: does not parse/),
+      'ja d: not in the English catalog',
+    ]);
+  });
+
+  it("chart-core's own are sound", () => {
+    expect(catalogProblems(coreEn, { ko: coreKo, ja: coreJa })).toEqual([]);
+    expect(coreCatalogs.keys().length).toBe(Object.keys(coreEn).length);
   });
 });

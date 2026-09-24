@@ -7,6 +7,7 @@
 import type { UpdateInfo } from '../bridge';
 import type { App } from './app.svelte';
 import { checkDue, offer } from './updatecheck';
+import { t } from '../i18n/i18n.svelte';
 import { ask, toast } from './toasts.svelte';
 
 /** How long after start the daily look waits (the song and audio come first). */
@@ -54,16 +55,16 @@ export class Updates {
       this.info = info;
       this.stage = info ? 'available' : 'none';
       if (!info) {
-        if (manual) toast(`EZ2BMS is up to date`, 'ok');
+        if (manual) toast(t('update.upToDate'), 'ok');
         return;
       }
       this.app.backend.diag.log('info', `update available: ${info.current} -> ${info.version}`);
       if (manual) this.dialogOpen = true;
       else if (offer(s.data.updates, info.version, false))
         ask(
-          `EZ2BMS ${info.version} is out (you have ${info.current}).`,
+          t('update.out', { version: info.version, current: info.current }),
           {
-            label: "What's new",
+            label: t('update.whatsNew'),
             run: () => (this.dialogOpen = true),
           },
           'info',
@@ -72,7 +73,7 @@ export class Updates {
       this.stage = 'failed';
       this.error = e instanceof Error ? e.message : String(e);
       this.app.backend.diag.log('warn', `update check failed: ${this.error}`);
-      if (manual) toast(`Could not look for updates: ${this.error}`, 'error');
+      if (manual) toast(t('update.checkFailed', { error: this.error }), 'error');
     }
   }
 
@@ -81,7 +82,7 @@ export class Updates {
     if (!this.info || this.stage === 'installing') return;
     const p = this.app.project;
     if (p?.dirty) {
-      toast('Save your charts first: installing restarts EZ2BMS', 'warn');
+      toast(t('update.saveFirstToast'), 'warn');
       return;
     }
     this.stage = 'installing';

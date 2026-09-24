@@ -1,5 +1,6 @@
 // The editor's commands. Anything a key, a button or the palette does is here.
 
+import { tEn } from '../i18n/i18n.svelte';
 import { SNAP_GRIDS, eraseNotes, measureStart } from '@ez2bms/chart-core';
 import type { App } from '../state/app.svelte';
 import { toast } from '../state/toasts.svelte';
@@ -317,15 +318,23 @@ export function registerBuiltins(app: App): void {
       run: () => app.sounds.removeUnused(),
     },
     {
+      id: 'app.preferences',
+      title: tEn('cmd.app.preferences'),
+      group: 'File',
+      keys: ['Mod+,'],
+      global: true,
+      run: () => (app.prefsOpen = true),
+    },
+    {
       id: 'help.about',
-      title: 'About EZ2BMS',
+      title: tEn('cmd.help.about'),
       group: 'Help',
       global: true,
       run: () => (app.diag.aboutOpen = true),
     },
     {
       id: 'help.updates',
-      title: 'Check for updates',
+      title: tEn('cmd.help.updates'),
       group: 'Help',
       global: true,
       enabled: () => app.updates.unsupported !== 'no-key',
@@ -333,14 +342,14 @@ export function registerBuiltins(app: App): void {
     },
     {
       id: 'help.report',
-      title: 'Copy a problem report (version, errors, the end of the log)',
+      title: tEn('cmd.help.report'),
       group: 'Help',
       global: true,
       run: () => app.diag.copyReport(),
     },
     {
       id: 'help.logs',
-      title: 'Open the log folder',
+      title: tEn('cmd.help.logs'),
       group: 'Help',
       global: true,
       run: () => app.backend.diag.revealLogs(),

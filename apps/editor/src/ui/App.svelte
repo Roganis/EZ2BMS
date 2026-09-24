@@ -14,6 +14,7 @@
   import ExportDialog from './export/ExportDialog.svelte';
   import ImportWizard from './import/ImportWizard.svelte';
   import NewChartDialog from './NewChartDialog.svelte';
+  import PrefsDialog from './PrefsDialog.svelte';
   import PublishDialog from './PublishDialog.svelte';
   import StartScreen from './StartScreen.svelte';
   import Toasts from './Toasts.svelte';
@@ -37,6 +38,7 @@
         app.exporter.open ||
         app.controls.open ||
         app.diag.aboutOpen ||
+        app.prefsOpen ||
         app.updates.dialogOpen
       )
         return;
@@ -76,6 +78,9 @@
 {/if}
 {#if app.diag.aboutOpen}
   <AboutDialog />
+{/if}
+{#if app.prefsOpen}
+  <PrefsDialog />
 {/if}
 {#if app.updates.dialogOpen}
   <UpdateDialog />

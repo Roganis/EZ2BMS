@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import type { ChartSlot } from '../../state/project.svelte';
   import type { RightDrawer } from '../../state/view.svelte';
@@ -10,21 +11,15 @@
   import TimingPanel from './TimingPanel.svelte';
 
   let { slot }: { slot: ChartSlot } = $props();
-  const TABS: { id: RightDrawer; label: string }[] = [
-    { id: 'inspector', label: 'Notes' },
-    { id: 'chart', label: 'Chart' },
-    { id: 'timing', label: 'Timing' },
-    { id: 'issues', label: 'Issues' },
-    { id: 'port', label: 'EZ2PORT' },
-  ];
+  const TABS: RightDrawer[] = ['inspector', 'chart', 'timing', 'issues', 'port'];
 </script>
 
 <Drawer side="right" width={320} onclose={() => (app.view.right = null)}>
   {#snippet tabs()}
     <nav class="tabs">
-      {#each TABS as t (t.id)}
-        <button class:on={app.view.right === t.id} onclick={() => (app.view.right = t.id)}
-          >{t.label}</button
+      {#each TABS as id (id)}
+        <button class:on={app.view.right === id} onclick={() => (app.view.right = id)}
+          >{t(`drawer.tab.${id}`)}</button
         >
       {/each}
     </nav>

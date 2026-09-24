@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n/i18n.svelte';
   // The neon strip: which chart, where the cursor is (BPM, position, time),
   // snap and speed, and the Edit/Play switch.
   import { formatPosition, formatSeconds, positionOf } from '@ez2bms/chart-core';
@@ -31,12 +32,12 @@
   <button
     class="song"
     class:on={app.view.songManager}
-    title="Song manager: info, category and every chart (Ctrl+Shift+L)"
+    title={t('top.songTitle')}
     data-testid="open-song"
     onclick={() => app.commands.run('view.songManager')}
-    >SONG <span>{project.sidecar.key || project.name}</span></button
+    >{t('top.song')} <span>{project.sidecar.key || project.name}</span></button
   >
-  <nav class="charts" aria-label="Charts">
+  <nav class="charts" aria-label={t('top.charts')}>
     {#each project.charts as c, i (c.file)}
       <button
         class="chart tier-{c.tier}"
@@ -48,21 +49,25 @@
         <span class="lv">{c.level}</span>
         {#if project.unsaved(c)}<span
             class="dot"
-            title={c.dirty ? 'unsaved' : `will be saved as ${project.targetFile(c)}`}
+            title={c.dirty
+              ? t('top.unsaved')
+              : t('top.willSaveAs', { file: project.targetFile(c) })}
           ></span>{/if}
       </button>
     {/each}
   </nav>
 
   <div class="readouts">
-    <div class="ro"><span>BPM</span><b data-testid="ro-bpm">{bpm.toFixed(bpm % 1 ? 2 : 0)}</b></div>
-    <div class="ro wide"><span>POS</span><b data-testid="ro-pos">{pos}</b></div>
-    <div class="ro wide"><span>TIME</span><b>{time}</b></div>
-    <div class="ro"><span>SNAP</span><b data-testid="ro-snap">1/{v.snap}</b></div>
     <div class="ro">
-      {#if v.mode === 'play'}<span>SPEED</span><b>{v.speed}%</b>{:else}<span>ZOOM</span><b
-          >{Math.round((v.zoom / 76.8) * 100)}%</b
-        >{/if}
+      <span>{t('top.bpm')}</span><b data-testid="ro-bpm">{bpm.toFixed(bpm % 1 ? 2 : 0)}</b>
+    </div>
+    <div class="ro wide"><span>{t('top.pos')}</span><b data-testid="ro-pos">{pos}</b></div>
+    <div class="ro wide"><span>{t('top.time')}</span><b>{time}</b></div>
+    <div class="ro"><span>{t('top.snap')}</span><b data-testid="ro-snap">1/{v.snap}</b></div>
+    <div class="ro">
+      {#if v.mode === 'play'}<span>{t('top.speed')}</span><b>{v.speed}%</b>{:else}<span
+          >{t('top.zoom')}</span
+        ><b>{Math.round((v.zoom / 76.8) * 100)}%</b>{/if}
     </div>
   </div>
 
@@ -71,37 +76,37 @@
       class="classic"
       class:on={app.classic.on}
       onclick={() => app.commands.run('view.classic')}
-      title="Classic mode: placing a note keys the sound playing there (Ctrl+Shift+K)"
-      data-testid="classic-toggle">CLASSIC</button
+      title={t('top.classicTitle')}
+      data-testid="classic-toggle">{t('top.classic')}</button
     >
     <button
       class="icon"
       disabled={!canUndo}
       onclick={() => app.commands.run('edit.undo')}
-      title="Undo (Ctrl+Z)">↶</button
+      title={t('top.undo')}>↶</button
     >
     <button
       class="icon"
       disabled={!canRedo}
       onclick={() => app.commands.run('edit.redo')}
-      title="Redo (Ctrl+Shift+Z)">↷</button
+      title={t('top.redo')}>↷</button
     >
-    <div class="seg" role="radiogroup" aria-label="View">
+    <div class="seg" role="radiogroup" aria-label={t('top.view')}>
       <button
         role="radio"
         aria-checked={v.mode === 'edit'}
         class:on={v.mode === 'edit'}
-        onclick={() => (v.mode = 'edit')}>EDIT</button
+        onclick={() => (v.mode = 'edit')}>{t('top.edit')}</button
       >
       <button
         role="radio"
         aria-checked={v.mode === 'play'}
         class:on={v.mode === 'play'}
         onclick={() => (v.mode = 'play')}
-        data-testid="mode-play">PLAY</button
+        data-testid="mode-play">{t('top.play')}</button
       >
     </div>
-    <button class="icon" onclick={() => app.commands.run('view.palette')} title="Commands (Ctrl+K)"
+    <button class="icon" onclick={() => app.commands.run('view.palette')} title={t('top.commands')}
       >⌘</button
     >
   </div>

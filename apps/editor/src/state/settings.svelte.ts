@@ -2,6 +2,7 @@
 // app, localStorage in a browser). Saved a moment after each change.
 
 import type { Backend } from '../bridge';
+import type { LanguageChoice } from '../i18n/i18n.svelte';
 
 export interface SettingsData {
   /** EZ2AC data folder (the one with `sound` and `system`). */
@@ -33,6 +34,8 @@ export interface SettingsData {
   record: RecordOptions;
   /** Updates (state/updates.svelte.ts). */
   updates: UpdateOptions;
+  /** The UI's language; `auto` follows the system's (i18n/). */
+  language: LanguageChoice;
 }
 
 export interface UpdateOptions {
@@ -96,6 +99,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   controls: { ini: null, debounceMs: null },
   record: DEFAULT_RECORD,
   updates: DEFAULT_UPDATES,
+  language: 'auto',
 };
 
 export class Settings {

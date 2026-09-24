@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../i18n/i18n.svelte';
   import type { Snippet } from 'svelte';
   import { fly } from 'svelte/transition';
 
@@ -26,7 +27,7 @@
 >
   <header>
     {#if tabs}{@render tabs()}{:else}<h2>{title}</h2>{/if}
-    {#if onclose}<button class="x" onclick={onclose} aria-label="Close">×</button>{/if}
+    {#if onclose}<button class="x" onclick={onclose} aria-label={t('drawer.close')}>×</button>{/if}
   </header>
   <div class="content">
     {@render children()}

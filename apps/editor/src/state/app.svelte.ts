@@ -1,6 +1,7 @@
 // The editor's one root object: the backend, settings, the open project, how
 // it is viewed, and every command. Components import `app` and read from it.
 
+import { hasMessage, i18n, t, type LanguageChoice } from '../i18n/i18n.svelte';
 import { BMS_FILE, setBpmAt, type ChartDoc, type Clip } from '@ez2bms/chart-core';
 import { AudioClient } from '../audio/client.svelte';
 import {
@@ -65,6 +66,7 @@ export class App {
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
+  prefsOpen = $state(false);
   /** Copied notes (in the app, not the system clipboard). */
   clip: Clip | undefined;
 
@@ -94,13 +96,21 @@ export class App {
     this.commands.onError = (e, c) => {
       const message = e instanceof Error ? e.message : String(e);
       this.backend.diag.log('warn', `${c.id}: ${describeError(e).detail}`);
-      toast(`${c.title}: ${message}`, 'error');
+      toast(`${this.commands.titleOf(c)}: ${message}`, 'error');
     };
+    this.commands.localize = (c) => {
+      const key = `cmd.${c.id}`;
+      return hasMessage(key) ? t(key) : undefined;
+    };
+    this.commands.groupLabel = (g) => t(`group.${g}`);
   }
 
   async init(): Promise<void> {
-    void this.diag.start();
+    // The language first, so what the start says (a crash offer) is in it.
+    this.applyLanguage();
     await this.settings.load();
+    this.applyLanguage();
+    void this.diag.start();
     this.view.side = this.settings.data.side;
     this.view.speed = this.settings.data.speed;
     this.commands.setOverrides(this.settings.data.keys);
@@ -115,6 +125,17 @@ export class App {
     // Files the system handed over: at launch, and from later launches.
     this.backend.opened.onOpen(() => void this.takeOpened());
     await this.takeOpened();
+  }
+
+  /** Preferences' language (or `?pseudo`, the pseudo-language that shows untranslated text). */
+  applyLanguage(): void {
+    const pseudo = typeof location !== 'undefined' && /[?&]pseudo(?:[=&]|$)/.test(location.search);
+    i18n.apply(this.settings.data.language, pseudo);
+  }
+
+  setLanguage(choice: LanguageChoice): void {
+    this.settings.set('language', choice);
+    this.applyLanguage();
   }
 
   private async takeOpened(): Promise<void> {

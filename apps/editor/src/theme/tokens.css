@@ -32,6 +32,22 @@
   color-scheme: dark;
 }
 
+/* Korean and Japanese UI: the system's own fonts, as no UI font is bundled
+ * (Linux needs its CJK fonts installed; docs say so). Han characters are
+ * shared between the two languages but drawn differently in each, and a
+ * browser falling back on its own may take the other language's font, so
+ * each language names its fonts first: Windows, macOS, then Noto. */
+:root:lang(ko) {
+  --font-ui:
+    'Inter', 'Segoe UI', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans CJK KR', 'Noto Sans KR',
+    system-ui, sans-serif;
+}
+:root:lang(ja) {
+  --font-ui:
+    'Inter', 'Segoe UI', 'Yu Gothic UI', 'Meiryo', 'Hiragino Sans', 'Noto Sans CJK JP',
+    'Noto Sans JP', system-ui, sans-serif;
+}
+
 html,
 body {
   margin: 0;

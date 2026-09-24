@@ -22,6 +22,7 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 | Import a song… (EZ2AC, BMS, bmson)                 |          |         |
 | New song…                                          |          |         |
 | Open song folder…                                  | `Ctrl+O` |         |
+| Preferences (language, updates)                    | `Ctrl+,` |         |
 | Save                                               | `Ctrl+S` |         |
 | Undo a cabinet export…                             |          |         |
 

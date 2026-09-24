@@ -6,6 +6,7 @@
 import type { AppInfo } from '../bridge';
 import type { App } from './app.svelte';
 import { isoTime } from './autosave';
+import { t } from '../i18n/i18n.svelte';
 import { ask, toast } from './toasts.svelte';
 
 /** How much of the log a report carries. */
@@ -47,8 +48,8 @@ export class Diagnostics {
     this.info = await this.app.backend.appInfo().catch(() => null);
     this.app.backend.diag.log('info', `editor started (${navigator.userAgent})`);
     if (this.info?.previous_session)
-      ask('EZ2BMS closed unexpectedly last time. The log may say why.', {
-        label: 'Details',
+      ask(t('diag.crashed'), {
+        label: t('diag.details'),
         run: () => (this.aboutOpen = true),
       });
   }
@@ -67,10 +68,11 @@ export class Diagnostics {
     const now = performance.now();
     if (now - this.toastAt < TOAST_EVERY_MS) return;
     this.toastAt = now;
-    toast(`Something went wrong: ${message}. The log has the details (About EZ2BMS).`, 'error');
+    toast(t('diag.failed', { message }), 'error');
   }
 
-  /** What to paste into a bug report: the build, the machine, this run's errors, the log's end. */
+  /** What to paste into a bug report: the build, the machine, this run's errors, the log's end.
+   *  Always in English, whatever the UI language: whoever reads it fixes the code. */
   async report(): Promise<string> {
     const i = this.info ?? (await this.app.backend.appInfo().catch(() => null));
     const log = await this.app.backend.diag.tail(REPORT_LOG_BYTES).catch((e) => `(no log: ${e})`);
@@ -93,6 +95,6 @@ export class Diagnostics {
   async copyReport(): Promise<void> {
     const text = await this.report();
     await navigator.clipboard.writeText(text);
-    toast('Copied a report: paste it into a bug report or a message', 'ok');
+    toast(t('diag.copied'), 'ok');
   }
 }

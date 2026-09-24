@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n/i18n.svelte';
   import { songFindings } from '../port/lint';
   import { app } from '../state/app.svelte';
   import type { Project } from '../state/project.svelte';
@@ -30,14 +31,14 @@
 <footer class="status">
   <span class="song">{project.name}</span>
   {#if stats}
-    <span>{stats.notes} notes</span>
-    <span>{stats.bgm} background</span>
-    <span>{stats.sounds} sounds</span>
-    {#if stats.selected}<span class="sel">{stats.selected} selected</span>{/if}
-    {#if stats.undo}<span class="dim">last: {stats.undo}</span>{/if}
+    <span>{t('status.notes', { n: stats.notes })}</span>
+    <span>{t('status.background', { n: stats.bgm })}</span>
+    <span>{t('status.sounds', { n: stats.sounds })}</span>
+    {#if stats.selected}<span class="sel">{t('status.selected', { n: stats.selected })}</span>{/if}
+    {#if stats.undo}<span class="dim">{t('status.last', { what: stats.undo })}</span>{/if}
     {#if app.classic.on && slot}
       <span class="classic" data-testid="classic-status"
-        >CLASSIC{#if app.classic.cands.length}
+        >{t('status.classic')}{#if app.classic.cands.length}
           · {app.classic.label(slot.doc)}{/if}</span
       >
     {/if}
@@ -50,20 +51,20 @@
       data-testid="lint"
     >
       {#if lint.errors || lint.warnings}
-        {#if lint.errors}<b>{lint.errors} error{lint.errors === 1 ? '' : 's'}</b>{/if}
-        {#if lint.warnings}<i>{lint.warnings} warning{lint.warnings === 1 ? '' : 's'}</i>{/if}
-      {:else}ready for EZ2PORT{/if}
+        {#if lint.errors}<b>{t('status.errors', { n: lint.errors })}</b>{/if}
+        {#if lint.warnings}<i>{t('status.warnings', { n: lint.warnings })}</i>{/if}
+      {:else}{t('status.ready')}{/if}
     </button>
     {#if app.port.runId !== null}<button class="lint" onclick={() => (app.port.logOpen = true)}
-        >EZ2PORT running</button
+        >{t('status.running')}</button
       >{/if}
     {#if audio}
       <span class="audio {audio.backend}"
         >{audio.backend === 'cpal'
-          ? `${audio.rate / 1000} kHz`
+          ? t('status.khz', { khz: audio.rate / 1000 })
           : audio.backend === 'null'
-            ? 'no audio device'
-            : 'browser preview'}</span
+            ? t('status.noAudio')
+            : t('status.browser')}</span
       >
     {/if}
     <span class="side">{app.view.side}</span>

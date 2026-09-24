@@ -82,14 +82,79 @@ export class Catalogs<K extends string> {
 
   /** `key` in a given language (the palette also searches the English titles). */
   format(key: K, params: Params | undefined, locale: Locale): string {
-    const msg = this.source(key, locale);
-    const id = `${locale}\u0000${key}`;
+    // English standing in for a missing translation counts in English
+    // ("1 note", not Korean's single form "1 notes").
+    const own = locale !== 'en' && this.others[locale]?.[key] !== undefined;
+    const lang: Locale = own ? locale : 'en';
+    const id = `${lang}\u0000${key}`;
     let f = this.cache.get(id);
     if (!f) {
-      f = new IntlMessageFormat(msg, locale, undefined, { ignoreTag: true });
+      f = new IntlMessageFormat(this.source(key, lang), lang, undefined, { ignoreTag: true });
       this.cache.set(id, f);
     }
     const out = String(f.format(params as Record<string, never>));
     return this.pseudoOn && locale === this.locale ? pseudo(out) : out;
   }
+}
+
+/** A message's parts as intl-messageformat parses them (the fields read here). */
+interface Part {
+  type: number;
+  value?: unknown;
+  options?: Record<string, { value: Part[] }>;
+  children?: Part[];
+}
+// intl-messageformat's element types: 0 text, 7 `#` (the plural's number).
+const LITERAL = 0;
+const POUND = 7;
+
+/** The parameters a message takes (`{n}`, `{n, plural, ...}`), sorted. Throws when it does not parse. */
+export function messageArgs(message: string, locale: Locale = 'en'): string[] {
+  const out = new Set<string>();
+  const walk = (parts: Part[]): void => {
+    for (const p of parts) {
+      if (p.type !== LITERAL && p.type !== POUND && typeof p.value === 'string') out.add(p.value);
+      for (const o of Object.values(p.options ?? {})) walk(o.value);
+      if (p.children) walk(p.children);
+    }
+  };
+  walk(new IntlMessageFormat(message, locale, undefined, { ignoreTag: true }).getAst() as Part[]);
+  return [...out].sort();
+}
+
+/**
+ * What is wrong with a set of catalogs: a message that does not parse, a
+ * translated key English does not have, or a translation taking other
+ * parameters than the English (it would print `{n}`, or drop a number).
+ * Tests run it on every catalog; an empty list is a pass.
+ */
+export function catalogProblems(
+  en: Record<string, string>,
+  others: Partial<Record<Locale, Partial<Record<string, string>>>>,
+): string[] {
+  const problems: string[] = [];
+  const argsOf = (key: string, m: string, l: Locale): string[] | null => {
+    try {
+      return messageArgs(m, l);
+    } catch (e) {
+      problems.push(`${l} ${key}: does not parse (${(e as Error).message})`);
+      return null;
+    }
+  };
+  const want = new Map<string, string[] | null>();
+  for (const [k, m] of Object.entries(en)) want.set(k, argsOf(k, m, 'en'));
+  for (const [l, cat] of Object.entries(others) as [Locale, Record<string, string>][]) {
+    for (const [k, m] of Object.entries(cat ?? {})) {
+      if (!want.has(k)) {
+        problems.push(`${l} ${k}: not in the English catalog`);
+        continue;
+      }
+      const got = argsOf(k, m, l);
+      const w = want.get(k);
+      const say = (a: string[]) => (a.length ? a.map((x) => `{${x}}`).join(', ') : 'none');
+      if (got && w && got.join(',') !== w.join(','))
+        problems.push(`${l} ${k}: takes ${say(got)}, English ${say(w)}`);
+    }
+  }
+  return problems;
 }
