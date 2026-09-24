@@ -202,3 +202,37 @@ times what the cabinet can load. An export's time is the host's: making
 the keysounds, where only a new or changed one is written. The dialog
 works the export out again on each choice, which these figures leave room
 for.
+
+## M7.13 - controllers and recording
+
+The TypeScript figures are chart-core `test/bench.test.ts` ("takes at full
+size", "input at full rate"); the controller figure is `crates/ez2bms-input`
+`tests/sdl.rs` `pad_event_delay` (ignored by default:
+`cargo test -p ez2bms-input --features sdl -- --ignored --nocapture`). This
+container (Node 22, one core; Linux, no udev); three runs each.
+
+| Date       | What                                                                                                   | Time                |
+| ---------- | ------------------------------------------------------------------------------------------------------ | ------------------- |
+| 2026-09-24 | A press on an SDL virtual board to the editor's stream: SDL, the controller thread, the batch (median) | 0.033-0.035 ms      |
+| 2026-09-24 | ...its 95th percentile / worst of 200                                                                  | 0.05 / 0.08-0.25 ms |
+| 2026-09-24 | ...the time it carries, from when the board changed (median)                                           | 0.027-0.029 ms      |
+| 2026-09-24 | The input mapper, per turntable axis event (100 000: steps, holds, wrap)                               | 0.20-0.23 µs        |
+| 2026-09-24 | The input mapper, per button event (100 000 presses and releases through the resolver)                 | 0.82-0.99 µs        |
+| 2026-09-24 | Snapping a 5 000-press take to the grid                                                                | 5.5-8.0 ms          |
+| 2026-09-24 | Applying a 1 000-press brush take to the 50k-note chart (one undo step)                                | 5.8-12.1 ms         |
+| 2026-09-24 | Applying a 300-press Classic take to a sliced 5-minute stem (each keying checked for the sound)        | 300-340 ms          |
+
+Reading:
+
+- A virtual board changes inside the controller thread's own loop, so the
+  first figures are EZ2BMS's share only. A real board adds its USB report
+  interval (the cabinet bridge reports on change, or every 10 ms at the
+  latest) and SDL's pump, which runs every millisecond while a board is
+  open. Either way the press carries SDL's stamp, not its arrival, so what
+  is judged and recorded is when it happened; the delay only decides how
+  soon the field shows it.
+- The bridge's turntables report at most every 10 ms or so each; at a
+  fifth of a microsecond an event, the mapper is nowhere near the budget.
+- Keeping a take is instant for the brush. A Classic take pays for the
+  sound check each keying makes, about 1 ms a press on a dense stem, once,
+  when Keep is pressed.

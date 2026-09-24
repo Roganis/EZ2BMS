@@ -171,9 +171,24 @@ pnpm tauri dev          # the desktop app
 The cabinet export writes v8 (encrypted) charts; the older plaintext v6 is
 deferred.
 
+### M7 - Record mode + cabinet controller
+
+- [x] M7.1 EZ2PORT's input rules vendored, and `keys.ini` and binding tokens in the oracle
+- [x] M7.2 `keys.ini` read and written as the port does (oracle, random files and tokens)
+- [x] M7.3 Key names as SDL spells them, and each channel routed to the lane EZ2PORT sends it to
+- [x] M7.4 The port's input layer: alternates, debounce, hats, the analog turntable
+- [x] M7.5 ScratchMix as fret-and-strum in test play
+- [x] M7.6 A recorded take snapped, reviewed and applied as one undo step (Classic: keying what plays)
+- [x] M7.7 Controllers through SDL3, named and timed as EZ2PORT's (`crates/ez2bms-input`)
+- [x] M7.8 The host's controller commands, closed for every EZ2PORT test run; the browser build's pretend pads
+- [x] M7.9 One input path for keyboard and controllers into test play and step input; bindings from EZ2PORT's `keys.ini`
+- [x] M7.10 Controls and timing: bind by pressing, controllers live, import and "Copy as keys.ini"
+- [x] M7.11 Record mode (R): count-in, the take on the field, Keep / Retake / Discard
+- [x] M7.12 Clicks, the sound and picture latency tests, the picture offset on the cursor
+- [x] M7.13 [Recording, controllers and calibration](docs/recording.md), timings in the [perf log](docs/perf-log.md), end-to-end specs
+
 ### Later
 
-- M7 Record mode + cabinet controller
 - M8 EZ2-native extras
 - M9 Polish and distribution
 

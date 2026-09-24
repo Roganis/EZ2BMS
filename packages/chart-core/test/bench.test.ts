@@ -31,7 +31,11 @@ import { memoryGameFs, openGame } from '../src/io/ez/game';
 import { synthGame, SYNTH_EZ_TABLES } from '../src/dev/synthgame';
 import { cabinetTargets, finishCabinet, nameSounds, planCabinet } from '../src/publish/cabinet';
 import { lintCabinet } from '../src/lint/cabinet';
-import { applyTake } from '../src/edit/record';
+import { applyTake, snapTake } from '../src/edit/record';
+import { InputMapper } from '../src/input/mapper';
+import { keyconfDefaults, KEY_CHANNELS } from '../src/input/keyconf';
+import { EngineTempo } from '../src/timing/engine-tempo';
+import { PlanTimeline } from '../src/timing/plan-timeline';
 
 function time<T>(f: () => T): [T, number] {
   const t0 = performance.now();
@@ -356,5 +360,65 @@ describe('takes at full size', () => {
     );
     expect(report.brush1000).toBeLessThan(2000);
     expect(report.classic300).toBeLessThan(10000);
+  });
+});
+
+// M7: input at full rate - what the input hub asks of the mapper for every
+// event: a turntable axis streaming (the cabinet bridge reports its encoders
+// every 10 ms or on change), buttons pressed and released, and a take of
+// 5000 presses snapped to the grid.
+describe('input at full rate', () => {
+  it('maps a turntable and buttons, and snaps a long take, within budget', () => {
+    const conf = keyconfDefaults();
+    conf.names[KEY_CHANNELS.indexOf('Key1')] = ['Z', '0810:e501/b0'];
+    conf.analog = ['0810:e501/a0', ''];
+    const m = new InputMapper(conf);
+    const N = 100_000;
+    const [axisEdges, axisMs] = time(() => {
+      let n = 0;
+      for (let i = 0; i < N; i++) {
+        // Turning steadily: 3 units of 256 each report, wrapping.
+        const v = ((((i * 3) % 256) - 128) * 256) | 0;
+        n += m.input({ kind: 'axis', device: '0810:e501', index: 0, value: v, ms: i * 10 }).length;
+      }
+      return n;
+    });
+    const [btnEdges, btnMs] = time(() => {
+      let n = 0;
+      for (let i = 0; i < N; i++)
+        n += m.input({
+          kind: 'button',
+          device: '0810:e501',
+          index: 0,
+          down: i % 2 === 0,
+          ms: N * 10 + i * 20,
+        }).length;
+      return n;
+    });
+    expect(axisEdges).toBeGreaterThan(0);
+    // Every press and release, and the turntable's last hold running out.
+    expect(btnEdges).toBe(N + 1);
+    const tl = new PlanTimeline(new EngineTempo(150, []), 240, []);
+    const presses = Array.from({ length: 5000 }, (_, i) => ({
+      x: 11 + (i % 5),
+      downMs: i * 100 + (i % 7) - 3,
+      upMs: i * 100 + 40,
+    }));
+    const [notes, snapMs] = time(() =>
+      snapTake(presses, tl, { step: 60, holds: true, holdMinMs: 200 }),
+    );
+    expect(notes).toHaveLength(5000);
+    const report = {
+      axisUsPerEvent: (axisMs * 1000) / N,
+      buttonUsPerEvent: (btnMs * 1000) / N,
+      snap5000: snapMs,
+    };
+    console.log(
+      'bench M7 input:',
+      Object.fromEntries(Object.entries(report).map(([k, v]) => [k, Math.round(v * 100) / 100])),
+    );
+    expect(report.axisUsPerEvent).toBeLessThan(50);
+    expect(report.buttonUsPerEvent).toBeLessThan(50);
+    expect(report.snap5000).toBeLessThan(500);
   });
 });

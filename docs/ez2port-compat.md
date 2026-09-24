@@ -40,6 +40,7 @@ row is proven by a test against the vendored engine core
 | A cabinet export's files: `.ez`/`.ezi`/`.ini` encrypted with the executable's tables, and `song.bin` patched in place                                                                                                | `publish/cabinet.ts`, `ez2data/songdb.ts`     | `cabinet-plan.test.ts` - `ez2_decrypt` then the chart, `.ezi` and `.ini` readers give our plaintext; the patched table decrypts and parses with the new levels, and `ez2_songdb_charts` finds an added tier                                                                                                                                             |
 | Cabinet keysounds: 16-bit PCM rewrapped untouched, anything else cut as a publish cuts it                                                                                                                            | `ez2bms-audio` `export.rs`                    | `ez2port-oracle` `tests/audio.rs` - read by `ez2_ssf_parse` with the same samples                                                                                                                                                                                                                                                                       |
 | `keys.ini` and one binding token (a key, a pad button, a hat direction, an axis, the mouse, `vtt`): channels, alternates, quoting, comments, sections, the turntables, the first bad line, and the text written back | `input/{keyconf,bindspec}.ts`                 | `input.oracle.test.ts` - fixed and random files and tokens through `ez2_keyconf_parse`/`format` and `ez2_bindspec_parse`/`format`                                                                                                                                                                                                                       |
+| `settings.ini`'s `Debounce` (the only value EZ2BMS takes from it): read in 255-byte pieces as `fgets` reads it, `;` comments, `[`/`#` lines, the key in any case, `atoi`, 0-100 only, the last one winning           | `input/portcfg.ts`                            | `input.oracle.test.ts` - fixed and random files through `ez2_portcfg_load` (oracle `portcfg`)                                                                                                                                                                                                                                                           |
 
 ## Deliberate differences
 
@@ -403,6 +404,14 @@ Where EZ2BMS departs, deliberately:
   subtraction takes it as such);
 - the seat (2P playing on 1P's side) and the mouse and virtual turntables'
   positions are left out: nothing in the editor reads them.
+- the bindings are EZ2BMS's own: the port's `keys.ini` is read (the first
+  time, and by Import) and never written;
+- the audio, picture and input offsets, and the latency tests that set
+  them, are EZ2BMS's only: EZ2PORT has no offsets, so a chart plays in the
+  port exactly as it did;
+- a debounced edge with nothing after it waits for the next event, as in
+  the port (a request in `ez2port-requests.md` §11), where re-reading once
+  the window ends would free it.
 
 ## Port behaviour worth knowing
 

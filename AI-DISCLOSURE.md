@@ -342,77 +342,170 @@ On the cabinet, to confirm:
 Also not yet seen: the BMS output in LR2 (Shift-JIS, CP949) and beatoraja
 (UTF-8, fractional stops, long notes).
 
+### Milestone 7: record mode and the cabinet controller (M7.1-M7.13), 2026-09-24
+
+The assistant wrote Milestone 7 after the owner said to go ahead with it.
+The owner chose:
+
+- controllers read with SDL3, as EZ2PORT reads them;
+- bindings kept in EZ2BMS's own settings, EZ2PORT's `keys.ini` only read;
+- a recorded press keying the background sound in a Classic song, and
+  otherwise a note with the brush sound;
+- a take reviewed first, then kept as one undo step.
+
+The assistant took the rest and stated it in the plan:
+
+- recording from the cursor after a count-in;
+- the grid a take snaps to, and the hold threshold;
+- a take never overwriting a note;
+- pads open only while something needs them;
+- the sound and picture tests;
+- the metronome off by default.
+
+New areas of work:
+
+- **reading game controllers:** SDL3 built from source and linked into the
+  host, on a thread of its own; boards named and events timed as EZ2PORT's
+  (`crates/ez2bms-input`); pads closed for every EZ2PORT test run;
+- **EZ2PORT's input layer in TypeScript:** `keys.ini`, binding tokens and
+  `settings.ini`'s Debounce, all checked against the port's own code, plus
+  the parts that are platform code and cannot be run by the oracle
+  (alternates, debounce, hats, the analog turntable), transcribed with the
+  port's own test cases;
+- **one input path** for keyboard and controllers, with EZ2PORT's age rule,
+  into test play (ScratchMix as fret-and-strum), step input and recording;
+- **recording:** takes snapped to the grid, reviewed, and applied as one
+  undo step, keying what plays in a Classic song;
+- **latency calibration:** generated clicks, the sound and picture tests,
+  and their statistics; the picture offset applied to the cursor;
+- the Controls dialog.
+
+What is checked:
+
+- **Against EZ2PORT's own code, through the oracle, on made-up data:**
+  `keys.ini` files and binding tokens (fixed and random) read and written
+  back; `settings.ini`'s Debounce (fixed and random files).
+- **Unit tests:**
+  - the mapper against the port's own input tests, and the turntable's
+    rules;
+  - ScratchMix's strum rule by rule;
+  - takes: snapping, clashes, holds, one undo, a Classic take with the
+    sound unchanged;
+  - the input hub (times, the age rule, keys kept from shortcuts only while
+    something listens, a rescan releasing held buttons, seeding from the
+    port's files);
+  - the calibration's arithmetic.
+- **Rust tests (Linux and Windows CI):**
+  - with SDL's virtual joysticks: two boards of one make named `vid:pid`
+    and `vid:pid#1`; button, hat and axis events in order on the host
+    clock; unplugging renumbering; closing closing;
+  - chart-core's scancode names against SDL's own;
+  - where the port keeps its settings;
+  - the pads closing for a test run;
+  - the click sound.
+- **End to end, with a pretend controller pressed at exact times:**
+  - a pad press judged at its time, and ScratchMix strumming;
+  - binding by pressing; import, copy and reset;
+  - a brush take landing on its pulses and undone in one step; a Classic
+    take keeping the sound; Discard; a ScratchMix take;
+  - the latency tests setting the offsets; the cursor leading by the
+    picture offset.
+
+Nothing has been run with a real controller, the cabinet or a sound
+device. To confirm on the owner's machines:
+
+- the bridge on Windows and Linux: its buttons are `/b0`-`/b24` as
+  EZ2PORT names them, and two boards number `#n` as in the port;
+- the turntable's feel (steps and the 90 ms hold) on the bridge's axes;
+- DirectInput with EZ2PORT running, and the pads released during F5;
+- Linux `/dev/input` permissions;
+- latency: calibrate, then record a take and see it land where it was
+  played;
+- ScratchMix's strum feel;
+- Ctrl and Shift as the turntable not triggering editor shortcuts in
+  WebView2 and WebKitGTK;
+- the clicks' sound and loudness over a mix.
+
 ---
 
 ## Verification status
 
-| Claim                                                                     | Basis                                           | Verified              |
-| ------------------------------------------------------------------------- | ----------------------------------------------- | --------------------- |
-| Renderer JS cost is ~1 ms/frame at ~10k sprites                           | headless Chromium (software GL)                 | Yes, in the container |
-| Renderer frame rate on WebKitGTK / WebView2                               | not yet measured                                | **No** - owner        |
-| Every format EZ2BMS writes reads back in EZ2PORT's core as planned        | oracle (build 1582), synthetic inputs           | Yes, in the container |
-| Play mode judges and scores like EZ2PORT                                  | oracle: random scripts, `ez2judge` player       | Yes, in the container |
-| `.gds`/`.pvi`/`.abm` readers on real game files                           | not run (no game data here)                     | **No** - owner        |
-| A published song shows and plays in EZ2PORT                               | not run                                         | **No** - owner        |
-| Mixer: exact starts, voice cuts, mid-sample resume, gapless slices        | unit tests through the offline renderer         | Yes, in the container |
-| The renderer never allocates                                              | a counting allocator in a test                  | Yes, in the container |
-| Published `.ssf` files load in EZ2PORT's parser                           | oracle                                          | Yes, in the container |
-| Sound on a real device (cpal), latency, no glitches                       | not run (no audio device here)                  | **No** - owner        |
-| The probe reads build 1582's options and commit                           | run on the owner's `ez2play.exe` locally        | Yes, in the container |
-| F5 plays a chart in EZ2PORT (Windows, path with spaces)                   | a fake ez2play on Linux only                    | **No** - owner        |
-| The desktop app starts (Linux)                                            | Xvfb, silent-clock fallback                     | Yes, in the container |
-| The desktop app starts (Windows, WebView2) and plays sound                | CI builds and tests only                        | **No** - owner        |
-| Editing: place, hold, move, resize, erase, undo, save byte-stable         | Playwright on the real playfield                | Yes, in the container |
-| Playback follows the clock; Play mode judges and shows a result           | Playwright, silent clock                        | Yes, in the container |
-| Test play feels right: latency, key response, sound on press              | not run                                         | **No** - owner        |
-| Lint catches what EZ2PORT would hide, reject or mis-play                  | unit tests, rules taken from the port           | Yes, in the container |
-| The release workflow builds the installers                                | not run (needs a tag)                           | **No**                |
-| Game skin: lane boxes, note variants, holds, beams, target bar            | unit + Playwright tests, synthetic panel        | Yes, in the container |
-| The game skin on real panels looks like EZ2PORT's field                   | not run (no game data here)                     | **No** - owner        |
-| Grouping matches BmsTWO's `SampleGrouping`                                | BmsTWO's own test vectors                       | Yes, in the container |
-| Classic-mode edits never change what autoplay plays (editor)              | exact model, property test, real mixer          | Yes, in the container |
-| ...nor what EZ2PORT plays (per-frame timing, one or two players)          | reasoned from the port's code; see compat       | **No** - owner        |
-| Keying in Classic mode sounds right on a real device                      | not run (no audio device here)                  | **No** - owner        |
-| Workbench: waveforms, filters, rename and replace with undo               | Playwright, browser build                       | Yes, in the container |
-| Import never overwrites; renames never replace another file               | Rust tests (Linux and Windows CI), e2e          | Yes, CI               |
-| Import by dropping files from the OS into the desktop app                 | not run (browser build's DOM path only)         | **No** - owner        |
-| Workbench scrolls smoothly on WebKitGTK / WebView2 with 1500 sounds       | headless Chromium only                          | **No** - owner        |
-| `song.ini` is read and listed as EZ2PORT does                             | oracle: `ez2_usersongs_merge`, random           | Yes, in the container |
-| Publishing keeps rankings, refuses shipped keys, backs up                 | Rust temp-folder tests, e2e                     | Yes, CI               |
-| Disc and stretched eyecatch bytes equal the port importer's               | oracle, random images up and down               | Yes, in the container |
-| The disc and eyecatch look right in EZ2PORT (wheel, select exit)          | not run (no game here)                          | **No** - owner        |
-| Publishing while EZ2PORT runs (Windows file locks)                        | not run                                         | **No** - owner        |
-| Title plates equal the port's own renderer's, CJK included                | oracle, random text and plates (Linux)          | Yes, in the container |
-| A plate on the real wheel beside the game's titles (a Korean one)         | not run (no game here)                          | **No** - owner        |
-| The preview's PCM equals the importer's (window, fades, normalising)      | oracle, random songs mixed at unity             | Yes, in the container |
-| The preview loops cleanly on the wheel at a sensible loudness             | not run (no game or sound device here)          | **No** - owner        |
-| The wheel places discs and plates, chases and swings as EZ2PORT does      | oracle, random wheels and tier sequences        | Yes, in the container |
-| The wheel preview looks like the real select screen with its masks        | synthetic masks only (no game here)             | **No** - owner        |
-| `[Bga] StartMs` and the movie picked equal the port importer's            | oracle, random charts (1 ms at f32 edges)       | Yes, in the container |
-| Movie headers read right (codec, size, length)                            | containers built by hand from the specs         | Yes, in the container |
-| A published BGA plays in sync in EZ2PORT (H.264, VP9, WMV; Windows)       | not run (no game here)                          | **No** - owner        |
-| The `<video>` preview on WebView2 and WebKitGTK                           | not run (Chromium, a movie of headers)          | **No** - owner        |
-| The disk cache: a hit is the decode, damage and staleness are misses      | Rust temp-folder tests (Linux, Windows CI)      | Yes, CI               |
-| Onsets and tempo on test signals (hits, ringing notes, click tracks)      | Rust tests on signals made in the tests         | Yes, in the container |
-| Onsets and tempo on real stems (drums, vocals, pads)                      | not run (no real stems here)                    | **No** - owner        |
-| Slicing never changes what autoplay plays                                 | exact model, property test, real mixer          | Yes, in the container |
-| A chopped stem packages to the port importer's own slices                 | oracle, random grids, resolutions, tempi        | Yes, in the container |
-| Strips draw each slice where it plays; gestures cut, move and key         | Playwright, browser build (made-up stem)        | Yes, in the container |
-| Strips stay smooth while playing on WebKitGTK / WebView2                  | headless Chromium only                          | **No** - owner        |
-| Hovering a slice plays it promptly on a real device                       | not run (no audio device here)                  | **No** - owner        |
-| A song with long stems reopens from the disk cache (desktop app)          | Rust tests only                                 | **No** - owner        |
-| The game's `.ezi`/`.ini`/`song.bin` read as EZ2PORT reads them            | oracle, random files and tables                 | Yes, in the container |
-| An imported game chart plays at the engine's clock, republishes same      | oracle, random charts                           | Yes, in the container |
-| Every shipped song imports; tables decrypt; legacy `.ezi` names hold      | tests written for `EZ2_ROOT`/`EZ2_EXE`          | **No** - owner        |
-| BMS timing, control flow and lanes                                        | the BMS memo's arithmetic, random files         | Yes, in the container |
-| Real BMS packs in Shift-JIS and EUC-KR import with the right text         | hand-made bytes only                            | **No** - owner        |
-| bmson 0.21 and both `beat-10k` numberings open as the port reads them     | oracle against the port's importer              | Yes, in the container |
-| An imported song folder is written all or nothing, `.ssf` as the same PCM | Rust temp-folder tests                          | Yes, CI               |
-| A DAW's MIDI of a song cuts its stem where the hits are                   | MIDI files made in the tests                    | **No** - owner        |
-| A game chart compiled for the cabinet reads back as the game had it       | oracle, random game charts                      | Yes, in the container |
-| Cabinet files decrypt and parse; `song.bin` patches read and list a tier  | oracle, made-up game                            | Yes, in the container |
-| A game folder export is all or nothing, and Restore gives it back         | Rust temp-folder tests (Linux, Windows CI), e2e | Yes, CI               |
-| Every shipped chart re-plans; sizes fit; `.ssf` go back unchanged         | tests written for `EZ2_ROOT`/`EZ2_EXE`          | **No** - owner        |
-| Exported songs load and play on the original cabinet                      | not run (no cabinet here)                       | **No** - owner        |
-| BMS export reads back note for note                                       | EZ2BMS's BMS reader, random charts              | Yes, in the container |
-| BMS output in LR2 and beatoraja                                           | not run                                         | **No** - owner        |
+| Claim                                                                               | Basis                                           | Verified              |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------- | --------------------- |
+| Renderer JS cost is ~1 ms/frame at ~10k sprites                                     | headless Chromium (software GL)                 | Yes, in the container |
+| Renderer frame rate on WebKitGTK / WebView2                                         | not yet measured                                | **No** - owner        |
+| Every format EZ2BMS writes reads back in EZ2PORT's core as planned                  | oracle (build 1582), synthetic inputs           | Yes, in the container |
+| Play mode judges and scores like EZ2PORT                                            | oracle: random scripts, `ez2judge` player       | Yes, in the container |
+| `.gds`/`.pvi`/`.abm` readers on real game files                                     | not run (no game data here)                     | **No** - owner        |
+| A published song shows and plays in EZ2PORT                                         | not run                                         | **No** - owner        |
+| Mixer: exact starts, voice cuts, mid-sample resume, gapless slices                  | unit tests through the offline renderer         | Yes, in the container |
+| The renderer never allocates                                                        | a counting allocator in a test                  | Yes, in the container |
+| Published `.ssf` files load in EZ2PORT's parser                                     | oracle                                          | Yes, in the container |
+| Sound on a real device (cpal), latency, no glitches                                 | not run (no audio device here)                  | **No** - owner        |
+| The probe reads build 1582's options and commit                                     | run on the owner's `ez2play.exe` locally        | Yes, in the container |
+| F5 plays a chart in EZ2PORT (Windows, path with spaces)                             | a fake ez2play on Linux only                    | **No** - owner        |
+| The desktop app starts (Linux)                                                      | Xvfb, silent-clock fallback                     | Yes, in the container |
+| The desktop app starts (Windows, WebView2) and plays sound                          | CI builds and tests only                        | **No** - owner        |
+| Editing: place, hold, move, resize, erase, undo, save byte-stable                   | Playwright on the real playfield                | Yes, in the container |
+| Playback follows the clock; Play mode judges and shows a result                     | Playwright, silent clock                        | Yes, in the container |
+| Test play feels right: latency, key response, sound on press                        | not run                                         | **No** - owner        |
+| Lint catches what EZ2PORT would hide, reject or mis-play                            | unit tests, rules taken from the port           | Yes, in the container |
+| The release workflow builds the installers                                          | not run (needs a tag)                           | **No**                |
+| Game skin: lane boxes, note variants, holds, beams, target bar                      | unit + Playwright tests, synthetic panel        | Yes, in the container |
+| The game skin on real panels looks like EZ2PORT's field                             | not run (no game data here)                     | **No** - owner        |
+| Grouping matches BmsTWO's `SampleGrouping`                                          | BmsTWO's own test vectors                       | Yes, in the container |
+| Classic-mode edits never change what autoplay plays (editor)                        | exact model, property test, real mixer          | Yes, in the container |
+| ...nor what EZ2PORT plays (per-frame timing, one or two players)                    | reasoned from the port's code; see compat       | **No** - owner        |
+| Keying in Classic mode sounds right on a real device                                | not run (no audio device here)                  | **No** - owner        |
+| Workbench: waveforms, filters, rename and replace with undo                         | Playwright, browser build                       | Yes, in the container |
+| Import never overwrites; renames never replace another file                         | Rust tests (Linux and Windows CI), e2e          | Yes, CI               |
+| Import by dropping files from the OS into the desktop app                           | not run (browser build's DOM path only)         | **No** - owner        |
+| Workbench scrolls smoothly on WebKitGTK / WebView2 with 1500 sounds                 | headless Chromium only                          | **No** - owner        |
+| `song.ini` is read and listed as EZ2PORT does                                       | oracle: `ez2_usersongs_merge`, random           | Yes, in the container |
+| Publishing keeps rankings, refuses shipped keys, backs up                           | Rust temp-folder tests, e2e                     | Yes, CI               |
+| Disc and stretched eyecatch bytes equal the port importer's                         | oracle, random images up and down               | Yes, in the container |
+| The disc and eyecatch look right in EZ2PORT (wheel, select exit)                    | not run (no game here)                          | **No** - owner        |
+| Publishing while EZ2PORT runs (Windows file locks)                                  | not run                                         | **No** - owner        |
+| Title plates equal the port's own renderer's, CJK included                          | oracle, random text and plates (Linux)          | Yes, in the container |
+| A plate on the real wheel beside the game's titles (a Korean one)                   | not run (no game here)                          | **No** - owner        |
+| The preview's PCM equals the importer's (window, fades, normalising)                | oracle, random songs mixed at unity             | Yes, in the container |
+| The preview loops cleanly on the wheel at a sensible loudness                       | not run (no game or sound device here)          | **No** - owner        |
+| The wheel places discs and plates, chases and swings as EZ2PORT does                | oracle, random wheels and tier sequences        | Yes, in the container |
+| The wheel preview looks like the real select screen with its masks                  | synthetic masks only (no game here)             | **No** - owner        |
+| `[Bga] StartMs` and the movie picked equal the port importer's                      | oracle, random charts (1 ms at f32 edges)       | Yes, in the container |
+| Movie headers read right (codec, size, length)                                      | containers built by hand from the specs         | Yes, in the container |
+| A published BGA plays in sync in EZ2PORT (H.264, VP9, WMV; Windows)                 | not run (no game here)                          | **No** - owner        |
+| The `<video>` preview on WebView2 and WebKitGTK                                     | not run (Chromium, a movie of headers)          | **No** - owner        |
+| The disk cache: a hit is the decode, damage and staleness are misses                | Rust temp-folder tests (Linux, Windows CI)      | Yes, CI               |
+| Onsets and tempo on test signals (hits, ringing notes, click tracks)                | Rust tests on signals made in the tests         | Yes, in the container |
+| Onsets and tempo on real stems (drums, vocals, pads)                                | not run (no real stems here)                    | **No** - owner        |
+| Slicing never changes what autoplay plays                                           | exact model, property test, real mixer          | Yes, in the container |
+| A chopped stem packages to the port importer's own slices                           | oracle, random grids, resolutions, tempi        | Yes, in the container |
+| Strips draw each slice where it plays; gestures cut, move and key                   | Playwright, browser build (made-up stem)        | Yes, in the container |
+| Strips stay smooth while playing on WebKitGTK / WebView2                            | headless Chromium only                          | **No** - owner        |
+| Hovering a slice plays it promptly on a real device                                 | not run (no audio device here)                  | **No** - owner        |
+| A song with long stems reopens from the disk cache (desktop app)                    | Rust tests only                                 | **No** - owner        |
+| The game's `.ezi`/`.ini`/`song.bin` read as EZ2PORT reads them                      | oracle, random files and tables                 | Yes, in the container |
+| An imported game chart plays at the engine's clock, republishes same                | oracle, random charts                           | Yes, in the container |
+| Every shipped song imports; tables decrypt; legacy `.ezi` names hold                | tests written for `EZ2_ROOT`/`EZ2_EXE`          | **No** - owner        |
+| BMS timing, control flow and lanes                                                  | the BMS memo's arithmetic, random files         | Yes, in the container |
+| Real BMS packs in Shift-JIS and EUC-KR import with the right text                   | hand-made bytes only                            | **No** - owner        |
+| bmson 0.21 and both `beat-10k` numberings open as the port reads them               | oracle against the port's importer              | Yes, in the container |
+| An imported song folder is written all or nothing, `.ssf` as the same PCM           | Rust temp-folder tests                          | Yes, CI               |
+| A DAW's MIDI of a song cuts its stem where the hits are                             | MIDI files made in the tests                    | **No** - owner        |
+| A game chart compiled for the cabinet reads back as the game had it                 | oracle, random game charts                      | Yes, in the container |
+| Cabinet files decrypt and parse; `song.bin` patches read and list a tier            | oracle, made-up game                            | Yes, in the container |
+| A game folder export is all or nothing, and Restore gives it back                   | Rust temp-folder tests (Linux, Windows CI), e2e | Yes, CI               |
+| Every shipped chart re-plans; sizes fit; `.ssf` go back unchanged                   | tests written for `EZ2_ROOT`/`EZ2_EXE`          | **No** - owner        |
+| Exported songs load and play on the original cabinet                                | not run (no cabinet here)                       | **No** - owner        |
+| BMS export reads back note for note                                                 | EZ2BMS's BMS reader, random charts              | Yes, in the container |
+| BMS output in LR2 and beatoraja                                                     | not run                                         | **No** - owner        |
+| `keys.ini`, binding tokens and `settings.ini`'s Debounce read as EZ2PORT reads them | oracle, fixed and random files and tokens       | Yes, in the container |
+| The input layer (alternates, debounce, hats, turntable) as the port's               | the port's own input tests, transcribed         | Yes, in the container |
+| Controllers named and timed as EZ2PORT's (SDL virtual joysticks)                    | Rust tests (Linux and Windows CI)               | Yes, CI               |
+| The cabinet bridge's buttons, axes and `#n` numbering match the port's              | not run (no controller here)                    | **No** - owner        |
+| Pads released for F5 runs; DirectInput shared with EZ2PORT                          | Rust test of the pause; not run on Windows      | **No** - owner        |
+| A pad press is judged at its time; ScratchMix strums                                | Playwright, pretend controller                  | Yes, in the container |
+| A take lands on its pulses, is one undo step, keeps a Classic song's sound          | unit tests and Playwright, pretend controller   | Yes, in the container |
+| The latency tests' offsets, and the cursor ahead by the picture offset              | unit tests and Playwright, pretend controller   | Yes, in the container |
+| Recording and calibrating feel right on a real machine and cabinet                  | not run                                         | **No** - owner        |

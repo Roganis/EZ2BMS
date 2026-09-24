@@ -38,12 +38,15 @@ packages/chart-core/src/
               audible.ts: what a chart sounds like, for Classic mode's checks
   sound/      chart names -> folder files, BmsTWO's grouping, song-wide usage, renames
   lint/       rules, grouped by severity
+  input/      keys.ini and binding tokens, scancodes, channel routing, the input mapper,
+              settings.ini's Debounce, latency calibration
 apps/editor/src/
   bridge/ state/ commands/ input/ render/ skin/ audio/ port/ ui/ theme/
 crates/
   ez2bms-audio/    sample cache, peaks, mixer with EZ2 voice rules, offline render, cutting
   ez2bms-launch/   ez2play discovery, capability probe, isolated temp songs root
   ez2bms-media/    song art (disc, eyecatch) and title plates, as the port makes them
+  ez2bms-input/    game controllers through SDL3 (feature `sdl`), named and timed as the port's
   ez2port-oracle/  TEST ONLY: builds third_party/ez2port-core and answers JSON queries
 third_party/ez2port-core/  vendored snapshot of EZ2PORT's ez2core (GPL-3.0-or-later)
 ```
@@ -240,21 +243,57 @@ the host makes the sounds and writes the files, all or nothing.
   `ui/export/ExportDialog.svelte` shows the review. `state/game.ts` is the
   game folder as both the importer and the exporter read it.
 
+## Input and recording (M7)
+
+Every press - keyboard or controller - takes one path, and each step is the
+port's rule where the port has one ([recording](recording.md),
+[compat](ez2port-compat.md#controllers-the-ports-input-layer-not-in-the-oracle)):
+
+1. **Devices.** `crates/ez2bms-input` owns SDL3 on a thread of its own
+   (joystick layer only, built from source and linked in). Boards are named
+   `vid:pid[#n]` as `ezpad.c` names them; each event carries SDL's stamp,
+   moved onto the audio engine's host clock by its age (both clocks read
+   back to back per batch). Pads are open only while the editor holds them,
+   and closed for every EZ2PORT test run (DirectInput is exclusive).
+   `src-tauri` `input.rs` streams batches to the page.
+2. **The hub** (`apps/editor/src/input/hub.svelte.ts`) is the one entry
+   point: keys by `KeyboardEvent.code` → SDL scancode, pads from the stream,
+   both on the host clock, EZ2PORT's 200 ms age rule applied once. Bound
+   keys are kept from the editor's shortcuts while something listens.
+3. **The mapper** (chart-core `input/mapper.ts`, `ezinput.c`/`ezpad.c`
+   transcribed): bindings (`keys.ini` grammar, `input/keyconf.ts` and
+   `bindspec.ts`, oracle-exact) turn raw events into channel edges - the OR
+   of alternates, the debounce, hats, the turntable's steps and holds.
+4. **Routing** (`input/channels.ts`): a channel goes to the lane EZ2PORT
+   sends it to in the chart's mode, or, in ScratchMix, strums.
+5. **Consumers.** Test play (`play/controller.svelte.ts` → the port's
+   judge, `engine/strum.ts` for ScratchMix), step input, Record mode
+   (`play/recorder.svelte.ts` → chart-core `edit/record.ts`: snap, review,
+   apply as one undo step through `ChartDoc.group`), the latency tests
+   (`state/calibrator.svelte.ts` → `input/calibrate.ts`) and the Controls
+   dialog (binding by pressing: the mapper's capture).
+
+Song time for a press is `AudioClient.songMsAtHost(hostMs)` - the same
+clock arithmetic as the cursor - less the input offset. The metronome's
+clicks are made in the host (`ez2bms-audio` `click.rs`) and scheduled as
+engine events beside the chart's.
+
 ## The desktop host (`src-tauri`)
 
 The host does what a browser cannot, and nothing else; chart logic never
 crosses the bridge. Its commands, each mirrored by the web mock in
 `apps/editor/src/bridge/`:
 
-| Group    | Commands                                                                                                                                                                                  |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Files    | `fs_read` (raw bytes), `fs_read_text`, `fs_write_text` / `fs_write_bytes` (atomic, optional `.bak`), `fs_list`, `project_scan`, `fs_copy_into` (import: never overwrites), `fs_rename`    |
-| Settings | `settings_load`, `settings_save` (a JSON object the front end owns, in the app's config folder)                                                                                           |
-| Audio    | `audio_info`, `audio_load`, `audio_peaks`, `audio_thumbs` (a screenful of waveforms in one call), `audio_set_events`, `audio_play` / `seek` / `stop`, `audio_trigger`, `audio_set_master` |
-| Clock    | `audio_clock`, `audio_now` (for offset pings), `audio_clock_stream` (a snapshot every 8 ms over a Tauri channel)                                                                          |
-| EZ2PORT  | `port_locate`, `port_probe`, `port_publish` (cuts keysounds, writes the package whole), `port_test` / `port_stop`                                                                         |
-| Import   | `import_run` (a new song folder, staged and renamed into place)                                                                                                                           |
-| Export   | `export_probe` (which keysounds the game's folder already holds), `export_game` (into a game folder, with a backup), `export_folder`, `export_backups`, `export_restore`                  |
+| Group    | Commands                                                                                                                                                                                           |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Files    | `fs_read` (raw bytes), `fs_read_text`, `fs_write_text` / `fs_write_bytes` (atomic, optional `.bak`), `fs_list`, `project_scan`, `fs_copy_into` (import: never overwrites), `fs_rename`             |
+| Settings | `settings_load`, `settings_save` (a JSON object the front end owns, in the app's config folder)                                                                                                    |
+| Audio    | `audio_info`, `audio_load`, `audio_peaks`, `audio_thumbs` (a screenful of waveforms in one call), `audio_set_events`, `audio_play` / `seek` / `stop`, `audio_trigger`, `audio_set_master`          |
+| Clock    | `audio_clock`, `audio_now` (for offset pings), `audio_clock_stream` (a snapshot every 8 ms over a Tauri channel)                                                                                   |
+| EZ2PORT  | `port_locate`, `port_probe`, `port_publish` (cuts keysounds, writes the package whole), `port_test` / `port_stop` (pads closed for the run), `port_config_files` (where the port keeps `keys.ini`) |
+| Import   | `import_run` (a new song folder, staged and renamed into place)                                                                                                                                    |
+| Export   | `export_probe` (which keysounds the game's folder already holds), `export_game` (into a game folder, with a backup), `export_folder`, `export_backups`, `export_restore`                           |
+| Input    | `input_devices`, `input_stream` (pad events in batches over a Tauri channel), `input_hold` (open or close the pads), `audio_clicks` (the metronome's samples)                                      |
 
 Without an output device the audio engine falls back to a silent real-time
 clock, so Play mode still runs. `port_test` publishes into a private songs

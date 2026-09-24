@@ -213,3 +213,62 @@ fn chart_core_scancode_names_are_sdls() {
         }
     }
 }
+
+/// For the perf log: how long a press takes from the board to the editor's
+/// stream (SDL noticing it, the thread's wait, the batch), and how far the
+/// time it carries is from when it happened. A virtual board's press is made
+/// in the thread's own loop, so this is EZ2BMS's share, not a USB poll's.
+/// `cargo test -p ez2bms-input --features sdl -- --ignored --nocapture`
+/// (alone: SDL is one per process).
+#[test]
+#[ignore]
+fn pad_event_delay() {
+    let epoch = Instant::now();
+    let clock: Clock = Arc::new(move || epoch.elapsed().as_nanos() as u64);
+    let pads = Pads::start(clock.clone()).expect("SDL joystick init");
+    let got: Arc<Mutex<Vec<(u64, PadEvent)>>> = Arc::default();
+    let sink = got.clone();
+    let at = clock.clone();
+    pads.set_sink(Some(Arc::new(move |evs| {
+        let now = at();
+        sink.lock().unwrap().extend(evs.into_iter().map(|e| (now, e)));
+    })));
+    pads.set_active(true);
+    let id = pads.run(|| unsafe { attach(MAKE_A, "Bench") }).unwrap();
+    wait_for("the board", || (!ours(pads.devices()).is_empty()).then_some(()));
+    let (mut arrive, mut stamp) = (Vec::new(), Vec::new());
+    for i in 0..200 {
+        got.lock().unwrap().clear();
+        let down = i % 2 == 0;
+        let c = clock.clone();
+        let t0 = pads
+            .run(move || unsafe {
+                let t = c();
+                SDL_SetJoystickVirtualButton(SDL_GetJoystickFromID(id), 0, down);
+                t
+            })
+            .unwrap();
+        let (seen, ev) = wait_for("the press", || {
+            got.lock().unwrap().iter().find(|(_, e)| matches!(e, PadEvent::Button { .. })).cloned()
+        });
+        let PadEvent::Button { host_ns, .. } = ev else { unreachable!() };
+        arrive.push((seen - t0) as f64 / 1e6);
+        stamp.push((host_ns as f64 - t0 as f64) / 1e6);
+        std::thread::sleep(Duration::from_millis(3));
+    }
+    let q = |v: &mut Vec<f64>, p: f64| {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v[((v.len() - 1) as f64 * p) as usize]
+    };
+    println!(
+        "pad event delay (ms): to the stream median {:.3} p95 {:.3} max {:.3}; stamp - press median {:.3} max {:.3}",
+        q(&mut arrive, 0.5),
+        q(&mut arrive, 0.95),
+        q(&mut arrive, 1.0),
+        q(&mut stamp, 0.5),
+        q(&mut stamp, 1.0),
+    );
+    pads.run(move || unsafe {
+        SDL_DetachVirtualJoystick(id);
+    });
+}
