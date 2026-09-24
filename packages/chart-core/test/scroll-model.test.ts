@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { setScrollAt } from '../src/edit/commands';
 import { ChartDoc } from '../src/edit/doc';
 import { EZ_NOTE } from '../src/io/ez/ezff';
+import { keptRecordsOf } from '../src/io/ez/kept';
 import { parseBmson } from '../src/io/bmson/parse';
 import { serializeBmson } from '../src/io/bmson/serialize';
 import { fixChart } from '../src/lint/fixes';
@@ -246,5 +247,36 @@ describe('the cabinet', () => {
       [`0 96 6  ${wordFromF32(1.5)},0`, `22 192 6  ${wordFromF32(0.1)},${0xdeadbeef}`].sort(),
     );
     expect(f32FromWord(wordFromF32(0.1))).toBe(Math.fround(0.1));
+  });
+});
+
+describe('the game chart’s kept records, described', () => {
+  it('says what each is, per position, leaving playable scroll changes to their own flags', () => {
+    const d = chart();
+    d.extra.x_ez_records = [
+      { track: 3, y: 240, type: 4, value: 3 },
+      { track: 1, y: 0, type: 2, value: 100 },
+      { track: 2, y: 0, type: 5 },
+      { track: 0, y: 480, type: 7, raw: [0, 0] },
+      { track: 0, y: 480, type: 3, bpm: 1500 },
+      { track: 9, y: 720, type: 11, raw: [1, 2] },
+      { track: 0, y: 960, type: 6, raw: [wordFromF32(2), 0] },
+      { track: 0, y: 960, type: 6, raw: [0x7fc00000, 0] },
+      { y: 5, type: 2 }, // no track: not a record
+    ];
+    const k = keptRecordsOf(d);
+    expect(k.map((r) => [r.y, r.track, r.kind, r.short])).toEqual([
+      [0, 1, 'volume', 'vol 100'],
+      [0, 2, 'mark', 'mark'],
+      [240, 3, 'beats', 'beats 3'],
+      [480, 0, 'stop', 'stop'],
+      [480, 0, 'tempo', 'bpm 1500'],
+      [720, 9, 'other', '#11'],
+      [960, 0, 'scroll', '×2'],
+      [960, 0, 'scroll', '× NaN'],
+    ]);
+    expect(k.find((r) => r.kind === 'volume')!.long).toMatch(/cabinet mixes the track/);
+    expect(k.filter((r) => r.scroll !== undefined).map((r) => r.scroll)).toEqual([2]);
+    expect(k.map((r) => r.index)).toEqual([1, 2, 0, 3, 4, 5, 6, 7]);
   });
 });

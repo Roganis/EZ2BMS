@@ -8,6 +8,8 @@ import {
   buildGroups,
   groupKeyOf,
   holdPreview,
+  keptRecordsOf,
+  type KeptRecord,
   multiplierAt,
   scrollEventsOf,
   scrollPoints,
@@ -104,6 +106,8 @@ const TAKE_COLOR = { ok: 0x7dffb2, clash: 0xff5c7a, silent: 0x8a8fa8 } as const;
 const SLICE_TINTS = [0x58e1ff, 0x9d7bff];
 const ONSET = 0xffd166;
 
+/** The game chart's kept records: grey, being read-only. */
+const KEPT_COLOR = 0xa3acc2;
 /** Scroll changes' flags: cyan, apart from BPM's yellow and STOP's pink. */
 const SCROLL_COLOR = 0x5ef2c8;
 /** `×1.5`, `×0.75`, `×1.333`: a multiplier in at most three decimals. */
@@ -831,6 +835,28 @@ export class PlayfieldRenderer {
     for (const e of this.scrollOf(s.doc).events)
       if (e.y >= p0 && e.y <= p1)
         flag(e.y, fmtScroll(e.rate), SCROLL_COLOR, true, e.from.kind === 'event' ? 0.9 : 0.5);
+    // The game chart's own records (volume, marks...: x_ez_records), grey
+    // and read-only, hanging under their line at the gutter's left, one tag
+    // per position. Edit only; hovering one says what each is.
+    this.keptHits = [];
+    if (this.extras > 0.02)
+      for (const k of this.keptOf(s.doc)) {
+        if (k.y < p0 || k.y > p1) continue;
+        const y = vp.yOf(k.y);
+        const t = this.markText.next(k.label);
+        t.scale.set(Math.min(1.2, l.scale * 0.65));
+        const w = t.width + 6;
+        const x = l.gutter.left + 4 * l.scale;
+        const a = 0.75 * this.extras;
+        g.roundRect(x, y + 1, w, t.height + 2, 2).fill({ color: KEPT_COLOR, alpha: 0.35 * a });
+        g.moveTo(x, y + 0.5)
+          .lineTo(l.field.left, y + 0.5)
+          .stroke({ width: 1, color: KEPT_COLOR, alpha: 0.5 * a });
+        t.tint = KEPT_COLOR;
+        t.alpha = a;
+        t.position.set(x + 3, y + 2);
+        this.keptHits.push({ x, y: y + 1, w, h: t.height + 2, recs: k.recs });
+      }
     this.markText.end();
   }
 
@@ -1379,6 +1405,43 @@ export class PlayfieldRenderer {
     return multiplierAt(points, (tc.shift(Math.max(0, s.cursor)) * 48) / s.doc.resolution);
   }
   private lastFrameAt = 0;
+
+  /** Kept records by position, labelled, kept until the chart changes. */
+  private keptOf(doc: ChartDoc): { y: number; label: string; recs: KeptRecord[] }[] {
+    const c = this.keptCache;
+    if (c.doc === doc && c.version === doc.version) return c.groups;
+    const byY = new Map<number, KeptRecord[]>();
+    // Scroll changes that play are drawn with the chart's own flags.
+    for (const k of keptRecordsOf(doc.data)) {
+      if (k.scroll !== undefined) continue;
+      const list = byY.get(k.y) ?? [];
+      list.push(k);
+      byY.set(k.y, list);
+    }
+    c.doc = doc;
+    c.version = doc.version;
+    c.groups = [...byY].map(([y, recs]) => {
+      const shorts = [...new Set(recs.map((r) => r.short))];
+      const label =
+        shorts.length === 1
+          ? shorts[0]! + (recs.length > 1 ? ` ×${recs.length}` : '')
+          : `${shorts[0]} +${recs.length - 1}`;
+      return { y, label, recs };
+    });
+    return c.groups;
+  }
+  private readonly keptCache = {
+    doc: undefined as ChartDoc | undefined,
+    version: -1,
+    groups: [] as { y: number; label: string; recs: KeptRecord[] }[],
+  };
+  private keptHits: { x: number; y: number; w: number; h: number; recs: KeptRecord[] }[] = [];
+
+  /** The kept records whose tag is under a point (CSS pixels), for the tooltip. */
+  keptAt(px: number, py: number): KeptRecord[] | undefined {
+    return this.keptHits.find((k) => px >= k.x && px <= k.x + k.w && py >= k.y && py <= k.y + k.h)
+      ?.recs;
+  }
 
   /** The Play field's scroll rate as drawn: 1 is 76.8 design px a beat (EZ2PORT's 100 %). */
   get liveRate(): number {

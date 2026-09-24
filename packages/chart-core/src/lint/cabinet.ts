@@ -22,6 +22,7 @@ import { OUT_RATE, type KeysoundRegistry } from '../publish/keysounds';
 import { modeNames } from '../modes/ids';
 import type { Finding } from './lint';
 import { positionOf } from '../timing/measures';
+import { TickConverter } from '../timing/ticks';
 
 export const CABINET_FILE_MAX = 131068;
 export const CABINET_SLOTS = 2047;
@@ -219,14 +220,28 @@ export function lintCabinet(plan: CabinetPlan, o: CabinetLintOptions = {}): Find
         chart,
         message: `The chart's header name has characters Korean Windows (CP949) cannot write: ${cab.nameUnmappable.join(' ')} (written as ?)`,
       });
+    // A change of resolution moves the kept records with the notes
+    // (timing/rescale.ts); one set by hand does not, and leaves them between
+    // ticks, where the export can only round them.
     const records = cp.chart.data.extra.x_ez_records;
-    if (Array.isArray(records) && records.length && cp.chart.data.info.resolution !== 240)
-      f({
-        rule: 'cabinet-records-res',
-        severity: 'warning',
-        chart,
-        message: `The resolution was changed since the import (${cp.chart.data.info.resolution}, not 240): the kept records were not moved with the notes and may land elsewhere`,
-      });
+    if (Array.isArray(records) && records.length) {
+      const d = cp.chart.data;
+      const tc = new TickConverter(d.info.resolution ?? 240, d.stopEvents);
+      const off = records.filter(
+        (r) =>
+          !!r &&
+          typeof r === 'object' &&
+          typeof (r as { y?: unknown }).y === 'number' &&
+          tc.tick((r as { y: number }).y).err > 1e-9,
+      ).length;
+      if (off)
+        f({
+          rule: 'cabinet-records-res',
+          severity: 'warning',
+          chart,
+          message: `${off} of the game chart's own records (volume, marks...) fall between EZ2 ticks - was the resolution changed by hand? Each is written at the nearest tick`,
+        });
+    }
 
     // What changes in the game.
     if (cp.before.level === 0)

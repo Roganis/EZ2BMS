@@ -3,6 +3,7 @@
   // position to go there.
   import {
     formatPosition,
+    keptRecordsOf,
     legacyScrollIndices,
     positionOf,
     setBpmAt,
@@ -23,6 +24,7 @@
       stops: [...x.stopEvents].sort((a, b) => a.y - b.y),
       scrolls: x.scrollEvents,
       legacy: legacyScrollIndices(x).length,
+      kept: keptRecordsOf(x).filter((k) => k.scroll === undefined),
     };
   });
   const pos = (y: number) => formatPosition(positionOf(y, d.resolution));
@@ -130,9 +132,46 @@
       the field moves with it. Timing does not change.
     </p>
   {/if}
+  {#if data.kept.length}
+    <details class="kept" data-testid="kept-records">
+      <summary>From the game chart ({data.kept.length})</summary>
+      <p class="hint">
+        Records bmson has no place for, kept for a cabinet export, which writes them back on their
+        tracks. Read-only; they move with a change of resolution. EZ2PORT does not use them.
+      </p>
+      {#each data.kept.slice(0, 200) as k (k.index)}
+        <div class="krow" title={k.long}>
+          <button class="at" onclick={() => (app.view.cursor = k.y)}>{pos(k.y)}</button>
+          <span>{k.short}</span>
+          <span class="trk">track {k.track}</span>
+        </div>
+      {/each}
+      {#if data.kept.length > 200}<p class="hint">and {data.kept.length - 200} more</p>{/if}
+    </details>
+  {/if}
 </div>
 
 <style>
+  .kept summary {
+    cursor: pointer;
+    color: var(--ink-dim);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 10px;
+  }
+  .krow {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 8px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--ink-dim);
+  }
+  .trk {
+    font-family: var(--font-num);
+    color: var(--ink-faint);
+  }
   .ro {
     padding: 6px 0;
     font-family: var(--font-num);

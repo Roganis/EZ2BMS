@@ -109,3 +109,41 @@ test('the Play field scrolls at the speed times the multiplier, eased while play
   expect(await rate(page)).toBeCloseTo(3.75, 1);
   await page.keyboard.press('Space');
 });
+
+test('an imported game song: its scroll change is the chart’s, its other records grey tags', async ({
+  page,
+}) => {
+  await page.goto('/?e2e&game');
+  await page.getByTestId('import').click();
+  const w = page.getByTestId('import-wizard');
+  await w.getByTestId('import-song').filter({ hasText: 'Alpha Song' }).click();
+  await w.getByTestId('import-dest').fill('/songs/Alpha Song');
+  await w.getByTestId('import-go').click();
+  await expect(page.locator('[data-testid=playfield] canvas')).toBeVisible();
+  await page.waitForFunction(() => '__ez2bmsField' in window);
+  // The synthetic StreetMix NM: ×2 at measure 2, a volume record at the start on track 1.
+  expect(await events(page)).toEqual([{ y: 2 * M, rate: 2 }]);
+
+  await page.evaluate(() => ((window as unknown as W).__ez2bms.view.right = 'timing'));
+  await expect(page.getByTestId('scroll-event').locator('input')).toHaveValue('2');
+  const kept = page.getByTestId('kept-records');
+  await kept.locator('summary').click();
+  await expect(kept).toContainText('From the game chart (1)');
+  await expect(kept).toContainText('vol 100');
+  await expect(kept).toContainText('track 1');
+
+  // Its tag hangs under the start's line at the gutter's left; hovering it says what it is.
+  await page.waitForTimeout(300);
+  const box = (await page.getByTestId('playfield').boundingBox())!;
+  const at = await page.evaluate(() => {
+    const f = (window as unknown as W).__ez2bmsField as unknown as {
+      currentLayout: { gutter: { left: number }; scale: number };
+      yOf(p: number): number;
+    };
+    return { x: f.currentLayout.gutter.left + 8 * f.currentLayout.scale, y: f.yOf(0) + 5 };
+  });
+  await page.mouse.move(box.x + at.x, box.y + at.y);
+  await expect(page.getByTestId('kept-tip')).toContainText('Volume 100 on track 1');
+  await page.mouse.move(box.x + at.x + 300, box.y + at.y - 200);
+  await expect(page.getByTestId('kept-tip')).toBeHidden();
+});

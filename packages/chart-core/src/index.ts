@@ -96,3 +96,4 @@ export {
   type SynthGame,
 } from './dev/synthgame';
 export * from './timing/scroll';
+export * from './io/ez/kept';

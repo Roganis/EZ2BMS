@@ -24,6 +24,8 @@
   let hi = $state(0);
   let fieldBox = $state({ left: 0, right: 0, judgeY: 0 });
   let ghost = $state<{ x: number; y: number; l: number } | null>(null);
+  /** The game chart's records under the pointer (a grey tag in the gutter), described. */
+  let keptTip = $state<{ x: number; y: number; lines: string[] } | null>(null);
   const classicOn = $derived(app.classic.on);
   let marquee = $state<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const tool = new PointerTool();
@@ -340,6 +342,8 @@
 
   function onMove(e: PointerEvent) {
     v.hoverLane = renderer?.laneAt(e.offsetX)?.x ?? null;
+    const kept = v.mode === 'edit' ? renderer?.keptAt(e.offsetX, e.offsetY) : undefined;
+    keptTip = kept ? { x: e.offsetX, y: e.offsetY, lines: kept.map((k) => k.long) } : null;
     app.strips.hoverOn(slot.doc, hoverSlice(e));
     const h = host_();
     if (h) tool.move(e, h);
@@ -347,6 +351,7 @@
 
   function onLeave() {
     v.hoverLane = null;
+    keptTip = null;
     app.strips.hoverOn(slot.doc, null);
     if (!tool.busy) app.strips.ghost = null;
     if (!tool.busy) ghost = null;
@@ -375,6 +380,17 @@
     aria-label="Playfield"
   >
     {#if failed}<p class="fail">The playfield needs WebGL: {failed}</p>{/if}
+    {#if keptTip}
+      <div
+        class="tip"
+        data-testid="kept-tip"
+        style:left="{keptTip.x + 14}px"
+        style:top="{keptTip.y + 12}px"
+      >
+        {#each keptTip.lines.slice(0, 8) as line, i (i)}<p>{line}</p>{/each}
+        {#if keptTip.lines.length > 8}<p>and {keptTip.lines.length - 8} more</p>{/if}
+      </div>
+    {/if}
   </div>
   {#if panel}
     <StripPanel {slot} src={panel.src} box={panel.box} />
@@ -418,6 +434,24 @@
   }
   .field :global(canvas) {
     display: block;
+  }
+  .tip {
+    position: absolute;
+    z-index: 5;
+    max-width: 340px;
+    padding: 6px 8px;
+    border: 1px solid var(--panel-edge);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 12px;
+    pointer-events: none;
+  }
+  .tip p {
+    margin: 0;
+  }
+  .tip p + p {
+    margin-top: 4px;
   }
   .fail {
     position: absolute;

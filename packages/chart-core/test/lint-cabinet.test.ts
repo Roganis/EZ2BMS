@@ -152,9 +152,13 @@ describe('cabinet lint', () => {
     );
   });
 
-  it('warns when kept records may have moved, and when a mode has no place for the song', () => {
+  it('warns when kept records fall between ticks, and when a mode has no place for the song', () => {
     const c = chart([{ x: 11 }]);
-    c.data.extra.x_ez_records = [{ track: 5, y: 0, type: 2, value: 1 }];
+    // A resolution set by hand: 3 pulses at 480 is 0.3 of a tick.
+    c.data.extra.x_ez_records = [
+      { track: 5, y: 0, type: 2, value: 1 },
+      { track: 5, y: 3, type: 5 },
+    ];
     c.data.info.resolution = 480;
     const ten = chart([{ x: 11 }], 'NM', '10k');
     const f = lintCabinet(plan([c, ten]));
@@ -166,6 +170,9 @@ describe('cabinet lint', () => {
       ]),
     );
     expect(f.find((x) => x.rule === 'cabinet-table')!.chart).toBe('10k-NM.bmson');
+    // Moved with a rescale, they sit on ticks at any resolution.
+    c.data.extra.x_ez_records = [{ track: 5, y: 10, type: 2, value: 1 }];
+    expect(rules(lintCabinet(plan([c])))).not.toContain('warning cabinet-records-res');
   });
 
   it('says which keysounds have no file, and how many are converted', () => {
