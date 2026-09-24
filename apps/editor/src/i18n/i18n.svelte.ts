@@ -42,6 +42,31 @@ export function t(key: MessageKey, params?: Params): string {
   return catalogs.t(key, params);
 }
 
+/** A piece of a message: its text, or where a slot's markup goes. */
+export type Part = { text: string } | { slot: string };
+
+/**
+ * `key` with some parameters left as slots, for a sentence with markup
+ * around a value (`Saved <b>{file}</b>`): the translation still orders the
+ * sentence, and the component draws each slot itself.
+ *
+ *   {#each tParts('x.saved', { file }, ['file']) as p, i (i)}
+ *     {#if 'slot' in p}<b>{file}</b>{:else}{p.text}{/if}
+ *   {/each}
+ *
+ * A slot must be a plain `{param}`, not a plural's number.
+ */
+export function tParts(key: MessageKey, params: Params, slots: string[]): Part[] {
+  // Marked by NULs and an index: nothing a message says, and nothing the
+  // pseudo-language accents.
+  const marked: Params = { ...params };
+  slots.forEach((s, i) => (marked[s] = `\u0000${i}\u0000`));
+  return t(key, marked)
+    .split(/\u0000(\d+)\u0000/)
+    .map((piece, i): Part => (i % 2 ? { slot: slots[Number(piece)]! } : { text: piece }))
+    .filter((p) => !('text' in p) || p.text !== '');
+}
+
 /** `key` in English (what the palette also searches, and the docs are generated from). */
 export function tEn(key: MessageKey, params?: Params): string {
   return catalogs.format(key, params, 'en');
