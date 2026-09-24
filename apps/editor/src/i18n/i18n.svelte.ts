@@ -57,12 +57,12 @@ export type Part = { text: string } | { slot: string };
  * A slot must be a plain `{param}`, not a plural's number.
  */
 export function tParts(key: MessageKey, params: Params, slots: string[]): Part[] {
-  // Marked by NULs and an index: nothing a message says, and nothing the
-  // pseudo-language accents.
+  // Marked by private-use characters around an index: nothing a message
+  // says, and nothing the pseudo-language accents.
   const marked: Params = { ...params };
-  slots.forEach((s, i) => (marked[s] = `\u0000${i}\u0000`));
+  slots.forEach((s, i) => (marked[s] = `\ue000${i}\ue001`));
   return t(key, marked)
-    .split(/\u0000(\d+)\u0000/)
+    .split(/\ue000(\d+)\ue001/)
     .map((piece, i): Part => (i % 2 ? { slot: slots[Number(piece)]! } : { text: piece }))
     .filter((p) => !('text' in p) || p.text !== '');
 }
