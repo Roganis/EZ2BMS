@@ -18,7 +18,7 @@ import {
   type GameSong,
 } from '@ez2bms/chart-core';
 import { baseName, dirName, joinPath, type ImportJob } from '../bridge';
-import { t } from '../i18n/i18n.svelte';
+import { errorText, t } from '../i18n/i18n.svelte';
 import type { App } from './app.svelte';
 import { loadGame } from './game';
 import { SIDECAR } from './project.svelte';
@@ -95,7 +95,7 @@ export class Importer {
       this.game = game;
       if (!game.songs.length) this.gameError = game.problems[0] ?? t('import.game.noSongs');
     } catch (e) {
-      this.gameError = e instanceof Error ? e.message : String(e);
+      this.gameError = errorText(e);
     } finally {
       this.loadingGame = false;
     }
@@ -121,7 +121,7 @@ export class Importer {
       this.gameImport = importEzSong(await ezSongSource(this.game, song));
       this.dest = joinPath(this.defaultParent(), folderName(song.title?.title ?? song.dir));
     } catch (e) {
-      this.gameError = e instanceof Error ? e.message : String(e);
+      this.gameError = errorText(e);
     }
   }
 
@@ -231,7 +231,7 @@ export class Importer {
       if (await this.app.openProject(dir)) toast(t('import.done', { n: imp.charts.length }), 'ok');
       return true;
     } catch (e) {
-      toast(t('import.failed', { error: e instanceof Error ? e.message : String(e) }), 'error');
+      toast(t('import.failed', { error: errorText(e) }), 'error');
       return false;
     } finally {
       this.busy = false;

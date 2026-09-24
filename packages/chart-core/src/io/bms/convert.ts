@@ -24,6 +24,7 @@
 // docs/ez2port-compat.md, and the tests check the timing against the BMS
 // memo's own arithmetic.
 
+import { said, sayEnglish, saying, type Said } from '../../i18n/say';
 import type { OpenNote, Severity } from '../../lint/lint';
 import { newChart } from '../../model/defaults';
 import type { BgaData, ChartData, NoteRec, SoundChannel, Tier } from '../../model/types';
@@ -38,7 +39,12 @@ export type BmsMapId = 'ez2' | 'keys' | 'custom';
 
 export interface BmsChannelMap {
   id: BmsMapId;
+  /**
+   * Its name, in English; `said` says it in the language chosen, when it is
+   * words rather than a name (Keys in order).
+   */
   label: string;
+  said?: Said;
   /** BMS channel (11-19, 21-29) -> bmson x; missing = background. */
   lanes: Record<string, number>;
 }
@@ -54,6 +60,8 @@ export const EZ2_BME_MAP: BmsChannelMap = {
   label: 'EZ2 BME',
   lanes: Object.fromEntries(LANES.map((l) => [l.bme, l.x])),
 };
+
+const KEYS_IN_ORDER = said('bms.map.keys');
 
 /** The BMS keys of each side, in play order: 1-5, then 6 and 7 (IIDX/beat). */
 const SIDE_KEYS = [
@@ -86,7 +94,7 @@ export function keysInOrderMap(mode: ModeId): BmsChannelMap {
       if (ch) lanes[ch] = c.x;
     }),
   );
-  return { id: 'keys', label: 'Keys in order', lanes };
+  return { id: 'keys', label: sayEnglish(KEYS_IN_ORDER), said: KEYS_IN_ORDER, lanes };
 }
 
 /**
@@ -186,9 +194,10 @@ interface Obj {
 
 export function convertBms(doc: BmsDoc, opts: BmsConvertOptions = {}): ConvertedBms {
   const notes: OpenNote[] = [];
-  const say = (rule: string, severity: Severity, message: string) =>
-    notes.push({ rule, severity, message });
-  for (const w of doc.warnings) say('bms-read', 'warning', `Line ${w.line}: ${w.message}`);
+  const say = (rule: string, severity: Severity, s: Said) =>
+    notes.push({ rule, severity, ...saying(s) });
+  for (const w of doc.warnings)
+    say('bms-read', 'warning', said('bms.line', { line: w.line, problem: w.said ?? w.message }));
 
   // Measure starts, in beats.
   const lastMeasure = Math.max(0, ...doc.lines.map((l) => l.measure), ...doc.measureLength.keys());
@@ -198,11 +207,7 @@ export function convertBms(doc: BmsDoc, opts: BmsConvertOptions = {}): Converted
     const s = doc.measureLength.get(m);
     const v = s === undefined ? 1 : Number.parseFloat(s);
     if (!(v > 0))
-      say(
-        'bms-read',
-        'warning',
-        `Measure ${m}'s length "${s}" is not a positive number: taken as 1`,
-      );
+      say('bms-read', 'warning', said('bms.measure-length', { measure: m, length: String(s) }));
     const r = v > 0 ? measureRational(v) : { n: 1, d: 1 };
     beats.push(Q.of(4 * r.n, r.d));
   }
@@ -271,10 +276,13 @@ export function convertBms(doc: BmsDoc, opts: BmsConvertOptions = {}): Converted
   if (Number.isFinite(lv) && lv >= 1 && lv <= 20) info.level = lv;
   else {
     info.level = Math.min(20, Math.max(1, Number.isFinite(lv) ? lv : 1));
+    const level = h('PLAYLEVEL');
     say(
       'bms-level',
       'warning',
-      `#PLAYLEVEL ${h('PLAYLEVEL') ?? '(none)'} is not 1-20, which EZ2PORT's song list needs: set to ${info.level}`,
+      level === undefined
+        ? said('bms.level.none', { set: info.level })
+        : said('bms.level', { level, set: info.level }),
     );
   }
   for (const k of ['RANK', 'DEFEXRANK', 'TOTAL', 'PLAYER', 'DIFFICULTY', 'LNMODE'])
@@ -283,8 +291,7 @@ export function convertBms(doc: BmsDoc, opts: BmsConvertOptions = {}): Converted
   // Tempo.
   const start = Number.parseFloat(h('BPM') ?? '');
   let initBpm = start > 0 ? start : 130;
-  if (!(start > 0))
-    say('bms-read', 'warning', `No usable #BPM: the start tempo is taken as ${initBpm}`);
+  if (!(start > 0)) say('bms-read', 'warning', said('bms.no-bpm', { bpm: initBpm }));
   const tempo = new Map<number, number>();
   const stops = new Map<number, number>();
   let badRefs = 0;
@@ -312,18 +319,8 @@ export function convertBms(doc: BmsDoc, opts: BmsConvertOptions = {}): Converted
   data.stopEvents = [...stops]
     .sort((a, b) => a[0] - b[0])
     .map(([y, duration]) => ({ y, duration }));
-  if (badRefs)
-    say(
-      'bms-read',
-      'warning',
-      `${badRefs} tempo or stop changes name a #BPMxx/#STOPxx the file does not define: left out`,
-    );
-  if (stops.size)
-    say(
-      'bms-stop',
-      'info',
-      `${stops.size} STOP${stops.size === 1 ? '' : 's'}: EZ2 has none - publishing turns each into a gap, so the scroll does not freeze`,
-    );
+  if (badRefs) say('bms-read', 'warning', said('bms.bad-refs', { n: badRefs }));
+  if (stops.size) say('bms-stop', 'info', said('bms.stops', { n: stops.size }));
 
   // Sounds.
   const channels = new Map<string, SoundChannel>();
@@ -421,12 +418,12 @@ export function convertBms(doc: BmsDoc, opts: BmsConvertOptions = {}): Converted
         const a = objsSorted[i]!;
         const b = objsSorted[i + 1];
         add(a, x, x && b ? yOf(b.q) - yOf(a.q) : 0);
-        if (!b) say('bms-read', 'warning', `A long note on channel ${c} has no end: a tap`);
+        if (!b) say('bms-read', 'warning', said('bms.ln-end', { channel: c }));
       }
     }
   }
   if (doc.lntype !== 1 && doc.lntype !== 2)
-    say('bms-read', 'warning', `#LNTYPE ${doc.lntype} is not one EZ2BMS reads: read as 1`);
+    say('bms-read', 'warning', said('bms.lntype', { lntype: doc.lntype }));
 
   // Channels in the order of their #WAV ids.
   const wavIndex = (name: string) => {
@@ -465,74 +462,69 @@ export function convertBms(doc: BmsDoc, opts: BmsConvertOptions = {}): Converted
     data.bga = bga;
     const used = new Set(bga.bga.map((e) => e.id));
     const movie = bga.header.some((x) => used.has(x.id) && MOVIE.test(x.name));
-    if (!movie)
-      say(
-        'bms-bga',
-        'info',
-        'Its BGA is images, which EZ2PORT does not play (a movie it does): kept in the chart',
-      );
+    if (!movie) say('bms-bga', 'info', said('bms.bga-images'));
   }
 
   // Said once each.
-  if (!exact)
-    say(
-      'bms-rounding',
-      'warning',
-      `Its measure lengths and note spacing need a finer grid than EZ2BMS keeps: placed at 240 pulses a beat, the furthest ${worst.toFixed(2)} pulses from where the file has it`,
-    );
+  if (!exact) say('bms-rounding', 'warning', said('bms.rounding', { worst: worst.toFixed(2) }));
   if (counts.hidden)
     say(
       'bms-hidden',
       'info',
-      `${counts.hidden} hidden note${counts.hidden === 1 ? '' : 's'} (3x/4x, heard only when hit): ${opts.hiddenAsBackground ? 'made background sounds' : 'left out'}`,
+      said(opts.hiddenAsBackground ? 'bms.hidden.background' : 'bms.hidden', { n: counts.hidden }),
     );
-  if (counts.mines)
-    say(
-      'bms-mines',
-      'info',
-      `${counts.mines} mine${counts.mines === 1 ? '' : 's'} (D/E): EZ2 has none; left out`,
-    );
+  if (counts.mines) say('bms-mines', 'info', said('bms.mines', { n: counts.mines }));
   if (counts.unmapped.size)
     say(
       'bms-lanes',
       'warning',
-      `Channel${counts.unmapped.size === 1 ? '' : 's'} ${[...counts.unmapped].sort().join(', ')} ha${counts.unmapped.size === 1 ? 's' : 've'} no lane in the ${map.label} map: those notes are background sounds`,
+      said('bms.unmapped', {
+        n: counts.unmapped.size,
+        channels: [...counts.unmapped].sort().join(', '),
+        map: map.said ?? map.label,
+      }),
     );
-  if (counts.offMode)
-    say(
-      'bms-lanes',
-      'warning',
-      `${counts.offMode} notes are on lanes this mode does not have: background sounds`,
-    );
+  if (counts.offMode) say('bms-lanes', 'warning', said('bms.off-mode', { n: counts.offMode }));
   if (counts.other.size)
     say(
       'bms-read',
       'info',
-      `Channel${counts.other.size === 1 ? '' : 's'} ${[...counts.other].sort().join(', ')}: not read (EZ2 has no use for ${counts.other.size === 1 ? 'it' : 'them'})`,
+      said('bms.other-channels', {
+        n: counts.other.size,
+        channels: [...counts.other].sort().join(', '),
+      }),
     );
   for (const k of ['SCROLL', 'SPEED']) {
     const any = [...doc.headers.keys()].some((x) => x.startsWith(k));
-    if (any) say('bms-read', 'info', `#${k} changes: EZ2 has none; left out`);
+    if (any) say('bms-read', 'info', said('bms.scroll', { header: `#${k}` }));
   }
   if (undefinedWav.size)
     say(
       'bms-sound',
       'warning',
-      `Notes use ${undefinedWav.size} #WAV ids the file does not define: ${[...undefinedWav].slice(0, 8).join(', ')}`,
+      said('bms.undefined-wav', {
+        n: undefinedWav.size,
+        ids: [...undefinedWav].slice(0, 8).join(', '),
+      }),
     );
   if (unfound.size)
     say(
       'bms-sound',
       'warning',
-      `${unfound.size} sound file${unfound.size === 1 ? ' is' : 's are'} not in the folder: ${[...unfound].slice(0, 6).join(', ')}${unfound.size > 6 ? '...' : ''}`,
+      said('bms.missing-sound', {
+        n: unfound.size,
+        names: `${[...unfound].slice(0, 6).join(', ')}${unfound.size > 6 ? '...' : ''}`,
+      }),
     );
   const rnd = doc.randoms.filter((r) => r.value && !r.fixed);
-  if (rnd.length)
-    say(
-      'bms-random',
-      'info',
-      `${rnd.length} random choice${rnd.length === 1 ? '' : 's'} (#RANDOM/#SWITCH): ${rnd.map((r) => `line ${r.line}: ${r.value} of ${r.max}`).join(', ')}`,
-    );
+  if (rnd.length) {
+    // Each choice a message of its own, and the list one too: the
+    // separator is the language's (a Japanese list is joined with 、).
+    const choices = rnd
+      .map((r): Said => said('bms.random.choice', { line: r.line, value: r.value, max: r.max }))
+      .reduce((list, item) => said('bms.random.list', { list, item }));
+    say('bms-random', 'info', said('bms.random', { n: rnd.length, choices }));
+  }
 
   const stage = h('STAGEFILE');
   const preview = h('PREVIEW');

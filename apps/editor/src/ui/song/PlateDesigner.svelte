@@ -18,7 +18,7 @@
     type PlateTint,
   } from '@ez2bms/chart-core';
   import type { PlatePixels } from '../../bridge';
-  import { t, tParts, tSaid, type MessageKey } from '../../i18n/i18n.svelte';
+  import { errorText, t, tParts, tSaid, type MessageKey } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import type { Project } from '../../state/project.svelte';
 
@@ -58,7 +58,7 @@
         .catch((e: unknown) => {
           if (n !== seq) return;
           plate = null;
-          error = e instanceof Error ? e.message : String(e);
+          error = errorText(e);
         });
     }, 60);
     return () => clearTimeout(t);
@@ -119,7 +119,8 @@
       });
   }
   // chart-core names its tints; a custom one is its colours, with no name to say.
-  const tintName = (x: PlateTint) => (x.said ? tSaid(x.said) : x.label);
+  const tintName = (x: PlateTint) =>
+    x.id === 'custom' ? t('plate.tintCustom') : x.said ? tSaid(x.said) : x.label;
   const FORMS: { id: CjkForms; label: MessageKey }[] = [
     { id: 'kr', label: 'plate.cjk.kr' },
     { id: 'jp', label: 'plate.cjk.jp' },

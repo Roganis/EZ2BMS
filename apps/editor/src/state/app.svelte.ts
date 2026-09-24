@@ -1,7 +1,7 @@
 // The editor's one root object: the backend, settings, the open project, how
 // it is viewed, and every command. Components import `app` and read from it.
 
-import { hasMessage, i18n, t, type LanguageChoice } from '../i18n/i18n.svelte';
+import { errorText, hasMessage, i18n, t, type LanguageChoice } from '../i18n/i18n.svelte';
 import { BMS_FILE, setBpmAt, type ChartDoc, type Clip } from '@ez2bms/chart-core';
 import { AudioClient } from '../audio/client.svelte';
 import {
@@ -94,7 +94,7 @@ export class App {
     this.diag = new Diagnostics(this);
     this.updates = new Updates(this);
     this.commands.onError = (e, c) => {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = errorText(e);
       this.backend.diag.log('warn', `${c.id}: ${describeError(e).detail}`);
       toast(t('app.commandFailed', { command: this.commands.titleOf(c), message }), 'error');
     };
@@ -220,10 +220,7 @@ export class App {
       void this.offerRecovery(p);
       return true;
     } catch (e) {
-      toast(
-        t('app.openFailed', { dir, error: e instanceof Error ? e.message : String(e) }),
-        'error',
-      );
+      toast(t('app.openFailed', { dir, error: errorText(e) }), 'error');
       return false;
     }
   }

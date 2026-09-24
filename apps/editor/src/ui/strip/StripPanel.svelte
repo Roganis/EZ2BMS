@@ -14,7 +14,7 @@
     type SnapGrid,
   } from '@ez2bms/chart-core';
   import { baseName } from '../../bridge';
-  import { t, tParts } from '../../i18n/i18n.svelte';
+  import { errorText, t, tParts } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import { toast } from '../../state/toasts.svelte';
   import type { ChartSlot } from '../../state/project.svelte';
@@ -101,7 +101,7 @@
       midi = { name: baseName(path), smf };
       midiTracks = smf.tracks.flatMap((track, i) => (track.notes ? [i] : []));
     } catch (e) {
-      toast(t('strip.notMidi', { error: e instanceof Error ? e.message : String(e) }), 'error');
+      toast(t('strip.notMidi', { error: errorText(e) }), 'error');
     }
   }
 

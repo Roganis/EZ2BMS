@@ -20,7 +20,7 @@
     type ArtJob,
   } from '@ez2bms/chart-core';
   import { joinPath, type ArtPixels } from '../../bridge';
-  import { t, tParts } from '../../i18n/i18n.svelte';
+  import { errorText, t, tParts } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import { imageSize, imageUrl, type ArtKind } from '../../state/art.svelte';
   import type { Project } from '../../state/project.svelte';
@@ -57,7 +57,7 @@
         img = { path, url, ...size };
       })
       .catch((e: unknown) => {
-        if (!gone) loadError = e instanceof Error ? e.message : String(e);
+        if (!gone) loadError = errorText(e);
       });
     return () => {
       gone = true;
@@ -200,7 +200,7 @@
         cutError = '';
       } catch (e) {
         cut = null;
-        cutError = e instanceof Error ? e.message : String(e);
+        cutError = errorText(e);
       }
     }
     running = false;

@@ -91,6 +91,8 @@ export const song = {
   'category.skipped': 'The {modes} pager skips this bank.',
 
   'plate.label': 'Title plate',
+  // The tint the player mixed from their own colours.
+  'plate.tintCustom': 'Custom',
   'plate.actualSize': 'actual size - the title the song wheel and the result screen show',
   // {chars}: the characters the fonts lack; {n}: how many.
   'plate.missing':

@@ -7,6 +7,7 @@
 // tier, hidden notes) can be given per file; what is not given is guessed, and
 // the preview says what was guessed so the wizard can offer to change it.
 
+import { said, saying } from '../../i18n/say';
 import type { OpenNote } from '../../lint/lint';
 import type { ChartData, Tier } from '../../model/types';
 import { chartBaseName, deriveSongKey } from '../../modes/filenames';
@@ -153,7 +154,9 @@ export function importBmsSong(input: BmsSongInput): BmsSongImport {
       songNotes.push({
         rule: 'import-skipped',
         severity: 'warning',
-        message: `${f.name}: ${clash} is already the ${conv.mode} ${conv.tier} chart - choose another tier for it`,
+        ...saying(
+          said('bms.clash', { file: f.name, other: clash, mode: conv.mode, tier: conv.tier }),
+        ),
       });
       continue;
     }
@@ -167,7 +170,7 @@ export function importBmsSong(input: BmsSongInput): BmsSongImport {
       conv.notes.unshift({
         rule: 'bms-encoding',
         severity: 'info',
-        message: `Its text encoding was a guess (${decoded.encoding}): if the title or sound names look wrong, import it again with another`,
+        ...saying(said('bms.encoding-guess', { encoding: decoded.encoding })),
       });
     charts.push({
       file: '',

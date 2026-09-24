@@ -11,6 +11,9 @@
 // `RMID` wrapper is unwrapped. Format 2 (independent sequences) and SMPTE
 // time division have no single tempo map to cut a chart by, and are refused.
 
+import { said } from '../../i18n/say';
+import { SaidError } from '../said-error';
+
 export interface SmfNote {
   /** Ticks from the start (division ticks a quarter note). */
   tick: number;
@@ -44,7 +47,7 @@ export interface Smf {
   tempos: SmfTempo[];
 }
 
-export class SmfError extends Error {}
+export class SmfError extends SaidError {}
 
 const DEFAULT_US = 500_000;
 
@@ -65,16 +68,15 @@ export function parseSmf(input: Uint8Array): Smf {
     }
   }
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (bytes.length < 14 || tag(0) !== 'MThd') throw new SmfError('not a MIDI file (no MThd)');
+  if (bytes.length < 14 || tag(0) !== 'MThd') throw new SmfError(said('midi.not-midi'));
   const hlen = dv.getUint32(4);
   const format = dv.getUint16(8);
   const ntracks = dv.getUint16(10);
   const division = dv.getUint16(12);
-  if (format === 2)
-    throw new SmfError('a format 2 MIDI file (separate sequences) has no one tempo to cut by');
-  if (format > 2) throw new SmfError(`MIDI format ${format} is not one EZ2BMS reads`);
-  if (division & 0x8000) throw new SmfError('SMPTE time (not beats) has no tempo to cut by');
-  if (!division) throw new SmfError('a division of 0 ticks a quarter note');
+  if (format === 2) throw new SmfError(said('midi.format-2'));
+  if (format > 2) throw new SmfError(said('midi.format', { format }));
+  if (division & 0x8000) throw new SmfError(said('midi.smpte'));
+  if (!division) throw new SmfError(said('midi.division'));
   const smf: Smf = { format: format as 0 | 1, ppq: division, tracks: [], notes: [], tempos: [] };
   let p = 8 + hlen;
   for (let t = 0; t < ntracks && p + 8 <= bytes.length; t++) {

@@ -2,6 +2,7 @@
 // them. The project lives outside EZ2PORT's songs folder; Publish writes the
 // package there.
 
+import { errorText } from '../i18n/i18n.svelte';
 import {
   ChartDoc,
   chartBaseName,
@@ -251,7 +252,7 @@ export class Project {
         renamed = slot.file;
         slot.file = to;
       } catch (e) {
-        this.renameFailures.push(`${slot.file}: ${e instanceof Error ? e.message : String(e)}`);
+        this.renameFailures.push(`${slot.file}: ${errorText(e)}`);
       }
     }
     await this.backend.writeText(joinPath(this.dir, slot.file), slot.bmson(), true);

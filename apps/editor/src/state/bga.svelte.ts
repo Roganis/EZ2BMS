@@ -14,7 +14,7 @@ import {
 } from '@ez2bms/chart-core';
 import { SvelteMap } from 'svelte/reactivity';
 import { baseName, joinPath } from '../bridge';
-import { t } from '../i18n/i18n.svelte';
+import { errorText, t } from '../i18n/i18n.svelte';
 import type { App } from './app.svelte';
 import type { Project } from './project.svelte';
 import { chartTiming } from './timing';
@@ -79,7 +79,7 @@ export class BgaState {
       }
       if (names[0]) await this.patch({ file: names[0], startMs: undefined });
     } catch (e) {
-      toast(t('song.importFailed', { error: e instanceof Error ? e.message : String(e) }), 'error');
+      toast(t('song.importFailed', { error: errorText(e) }), 'error');
     }
   }
 
@@ -99,7 +99,7 @@ export class BgaState {
       const info = await backend
         .readRange(abs, 0, 0)
         .then(({ size }) => probeMovie(read, size))
-        .catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
+        .catch((e: unknown) => ({ error: errorText(e) }));
       this.probes.set(abs, info);
     })();
     return undefined;

@@ -2,7 +2,7 @@
 // The work is port/publish.ts's; this only holds where the dialog is.
 
 import type { Finding } from '@ez2bms/chart-core';
-import { t } from '../i18n/i18n.svelte';
+import { errorText, t } from '../i18n/i18n.svelte';
 import {
   preparePublish,
   publishErrors,
@@ -61,8 +61,7 @@ export class PublishState {
       const review = await preparePublish(this.app, root);
       if (n === this.seq) this.stage = { kind: 'ready', review };
     } catch (e) {
-      if (n === this.seq)
-        this.stage = { kind: 'failed', message: e instanceof Error ? e.message : String(e) };
+      if (n === this.seq) this.stage = { kind: 'failed', message: errorText(e) };
     }
   }
 
@@ -97,7 +96,7 @@ export class PublishState {
     } catch (e) {
       this.stage = {
         kind: 'failed',
-        message: t('publish.failed', { error: e instanceof Error ? e.message : String(e) }),
+        message: t('publish.failed', { error: errorText(e) }),
         review,
       };
     }
@@ -113,7 +112,7 @@ export class PublishState {
       toast(t('publish.retired', { key }), 'ok');
       this.stage = { ...s, written: { ...s.written, retire: undefined } };
     } catch (e) {
-      toast(e instanceof Error ? e.message : String(e), 'error');
+      toast(errorText(e), 'error');
     }
   }
 

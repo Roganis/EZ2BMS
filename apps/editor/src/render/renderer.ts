@@ -9,6 +9,7 @@ import {
   groupKeyOf,
   holdPreview,
   keptRecordsOf,
+  sayText,
   type KeptRecord,
   multiplierAt,
   scrollEventsOf,
@@ -30,7 +31,7 @@ import {
 } from '@ez2bms/chart-core';
 import { Application, Container, FillGradient, Graphics, Sprite } from 'pixi.js';
 import { channelHue } from '../colors';
-import { t } from '../i18n/i18n.svelte';
+import { i18n, t } from '../i18n/i18n.svelte';
 import { beamColor, noteVariant, targetSway, type GameSkin, type SkinBlend } from '../skin/game';
 import { GameSkinTextures } from './gameskin';
 import {
@@ -1408,7 +1409,9 @@ export class PlayfieldRenderer {
   /** Kept records by position, labelled, kept until the chart changes. */
   private keptOf(doc: ChartDoc): { y: number; label: string; recs: KeptRecord[] }[] {
     const c = this.keptCache;
-    if (c.doc === doc && c.version === doc.version) return c.groups;
+    // Labelled in the language chosen: a switch labels them again.
+    const lang = `${i18n.locale}${i18n.pseudo ? '*' : ''}`;
+    if (c.doc === doc && c.version === doc.version && c.lang === lang) return c.groups;
     const byY = new Map<number, KeptRecord[]>();
     // Scroll changes that play are drawn with the chart's own flags.
     for (const k of keptRecordsOf(doc.data)) {
@@ -1419,8 +1422,9 @@ export class PlayfieldRenderer {
     }
     c.doc = doc;
     c.version = doc.version;
+    c.lang = lang;
     c.groups = [...byY].map(([y, recs]) => {
-      const shorts = [...new Set(recs.map((r) => r.short))];
+      const shorts = [...new Set(recs.map((r) => sayText(r.shortSaid)))];
       const label =
         shorts.length === 1
           ? shorts[0]! + (recs.length > 1 ? ` ×${recs.length}` : '')
@@ -1432,6 +1436,7 @@ export class PlayfieldRenderer {
   private readonly keptCache = {
     doc: undefined as ChartDoc | undefined,
     version: -1,
+    lang: '',
     groups: [] as { y: number; label: string; recs: KeptRecord[] }[],
   };
   private keptHits: { x: number; y: number; w: number; h: number; recs: KeptRecord[] }[] = [];

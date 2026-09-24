@@ -12,7 +12,7 @@ import {
   type Game,
 } from '@ez2bms/chart-core';
 import { dirName, joinPath, type ExportBackup, type ExportReport } from '../bridge';
-import { t } from '../i18n/i18n.svelte';
+import { errorText, t } from '../i18n/i18n.svelte';
 import { prepareBms, writeBmsFolder, type BmsChoices, type BmsReview } from '../port/bms';
 import { prepareCabinet, writeCabinet, type CabinetReview } from '../port/cabinet';
 import type { App } from './app.svelte';
@@ -134,7 +134,7 @@ export class Exporter {
     } catch (e) {
       this.game = null;
       this.target = null;
-      this.gameError = e instanceof Error ? e.message : String(e);
+      this.gameError = errorText(e);
     } finally {
       this.loadingGame = false;
     }
@@ -214,8 +214,7 @@ export class Exporter {
       });
       if (n === this.seq) this.cabinet = { kind: 'ready', review };
     } catch (e) {
-      if (n === this.seq)
-        this.cabinet = { kind: 'failed', message: e instanceof Error ? e.message : String(e) };
+      if (n === this.seq) this.cabinet = { kind: 'failed', message: errorText(e) };
     }
   }
 
@@ -244,7 +243,7 @@ export class Exporter {
     } catch (e) {
       this.cabinet = {
         kind: 'failed',
-        message: t('export.failed', { error: e instanceof Error ? e.message : String(e) }),
+        message: t('export.failed', { error: errorText(e) }),
       };
     } finally {
       this.progress = null;
@@ -265,7 +264,7 @@ export class Exporter {
       this.backups = await this.app.backend.export.backups(root);
     } catch (e) {
       this.backups = [];
-      this.backupsError = e instanceof Error ? e.message : String(e);
+      this.backupsError = errorText(e);
     }
   }
 
@@ -292,10 +291,7 @@ export class Exporter {
         );
       await this.loadBackups();
     } catch (e) {
-      toast(
-        t('export.restore.failed', { error: e instanceof Error ? e.message : String(e) }),
-        'error',
-      );
+      toast(t('export.restore.failed', { error: errorText(e) }), 'error');
     }
   }
 
@@ -312,7 +308,7 @@ export class Exporter {
     try {
       return { review: prepareBms(this.app, slots, $state.snapshot(this.bmsChoices)) };
     } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) };
+      return { error: errorText(e) };
     }
   });
 
@@ -328,7 +324,7 @@ export class Exporter {
     } catch (e) {
       this.bmsStage = {
         kind: 'failed',
-        message: t('export.failed', { error: e instanceof Error ? e.message : String(e) }),
+        message: t('export.failed', { error: errorText(e) }),
       };
     } finally {
       this.progress = null;

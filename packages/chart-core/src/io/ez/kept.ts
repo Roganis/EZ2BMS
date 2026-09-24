@@ -14,6 +14,7 @@
 //   6 scroll  - kept only when its f32 is not a number (timing/scroll.ts).
 // Any record, of any type, keeps the original's stage open until its tick.
 
+import { said, sayEnglish, type Said } from '../../i18n/say';
 import type { ChartData, Extra } from '../../model/types';
 import { EZ_BEATS, EZ_BPM, EZ_MARK, EZ_SCROLL, EZ_VOLUME } from './ezff';
 import { legacyScroll } from '../../timing/scroll';
@@ -31,12 +32,20 @@ export interface KeptRecord {
   short: string;
   /** A sentence: what it is and what each engine does with it. */
   long: string;
+  /** `short` and `long` are English; these say them in the language chosen (i18n/say.ts). */
+  shortSaid: Said;
+  longSaid: Said;
   /** A scroll change that plays (and is drawn with the chart's own): its multiplier. */
   scroll?: number;
 }
 
 const num = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+
+/** The tag and the sentence, each in English and as said. */
+function described(short: Said, long: Said) {
+  return { short: sayEnglish(short), long: sayEnglish(long), shortSaid: short, longSaid: long };
+}
 
 /** One kept record, described; undefined when it has no usable track, type or position. */
 export function describeKept(rec: unknown, index: number): KeptRecord | undefined {
@@ -46,48 +55,50 @@ export function describeKept(rec: unknown, index: number): KeptRecord | undefine
   const track = num(o.track);
   const type = num(o.type);
   if (y === undefined || y < 0 || track === undefined || type === undefined) return undefined;
-  const on = `track ${track}`;
   const base = { index, y, track, type };
   switch (type) {
     case EZ_VOLUME: {
-      const v = num(o.value) ?? 0;
+      const value = num(o.value) ?? 0;
       return {
         ...base,
         kind: 'volume',
-        short: `vol ${v}`,
-        long: `Volume ${v} on ${on}: the cabinet mixes the track at it; EZ2PORT plays every track at full level`,
+        ...described(
+          said('ez.record.volume.tag', { value }),
+          said('ez.record.volume', { value, track }),
+        ),
       };
     }
     case EZ_BEATS: {
-      const v = num(o.value) ?? 0;
+      const value = num(o.value) ?? 0;
       return {
         ...base,
         kind: 'beats',
-        short: `beats ${v}`,
-        long: `Beats per measure ${v} on ${on}: kept for the cabinet; EZ2PORT does not read it`,
+        ...described(
+          said('ez.record.beats.tag', { value }),
+          said('ez.record.beats', { value, track }),
+        ),
       };
     }
     case EZ_MARK:
       return {
         ...base,
         kind: 'mark',
-        short: 'mark',
-        long: `A mark on ${on}: kept for the cabinet; EZ2PORT does not read it`,
+        ...described(said('ez.record.mark.tag'), said('ez.record.mark', { track })),
       };
     case 7:
       return {
         ...base,
         kind: 'stop',
-        short: 'stop',
-        long: `A stop record on ${on}: kept for the cabinet; the game only logs it`,
+        ...described(said('ez.record.stop.tag'), said('ez.record.stop', { track })),
       };
-    case EZ_BPM:
+    case EZ_BPM: {
+      const bpm = num(o.bpm) ?? '?';
       return {
         ...base,
         kind: 'tempo',
-        short: `bpm ${num(o.bpm) ?? '?'}`,
-        long: `A tempo of ${num(o.bpm) ?? '?'} on ${on}: outside 0-1000, so the engine drops it; kept for the cabinet`,
+        ...described(said('ez.record.tempo.tag', { bpm }), said('ez.record.tempo', { bpm, track })),
       };
+    }
     case EZ_SCROLL: {
       const s = legacyScroll(o);
       return s
@@ -95,22 +106,25 @@ export function describeKept(rec: unknown, index: number): KeptRecord | undefine
             ...base,
             kind: 'scroll',
             scroll: s.rate,
-            short: `×${Number(s.rate.toFixed(3))}`,
-            long: `A scroll change (×${s.rate}) on ${on}, kept by an older import: it plays and publishes; Issues makes it the chart's own`,
+            ...described(
+              said('ez.record.scroll.tag', { rate: Number(s.rate.toFixed(3)) }),
+              said('ez.record.scroll', { rate: s.rate, track }),
+            ),
           }
         : {
             ...base,
             kind: 'scroll',
-            short: '× NaN',
-            long: `A scroll record on ${on} whose multiplier is not a number: kept for the cabinet, not played or published`,
+            ...described(said('ez.record.nan.tag'), said('ez.record.nan', { track })),
           };
     }
     default:
       return {
         ...base,
         kind: 'other',
-        short: `#${type}`,
-        long: `A record of type ${type} on ${on}, a kind EZ2BMS does not know: kept for the cabinet`,
+        ...described(
+          said('ez.record.other.tag', { type }),
+          said('ez.record.other', { type, track }),
+        ),
       };
   }
 }

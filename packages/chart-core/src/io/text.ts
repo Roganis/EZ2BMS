@@ -6,6 +6,9 @@
 // be valid UTF-8 (a lone Shift-JIS byte is not) - EZ2PORT's title plate and
 // song.ini are UTF-8.
 
+import { said } from '../i18n/say';
+import { SaidError } from './said-error';
+
 const BOM = [0xef, 0xbb, 0xbf];
 
 export interface DecodedText {
@@ -13,7 +16,7 @@ export interface DecodedText {
   hadBom: boolean;
 }
 
-export class TextEncodingError extends Error {}
+export class TextEncodingError extends SaidError {}
 
 /** Decode strict UTF-8 (throws TextEncodingError on invalid bytes), stripping a BOM. */
 export function decodeUtf8(bytes: Uint8Array): DecodedText {
@@ -22,7 +25,7 @@ export function decodeUtf8(bytes: Uint8Array): DecodedText {
   try {
     return { text: new TextDecoder('utf-8', { fatal: true }).decode(body), hadBom };
   } catch {
-    throw new TextEncodingError('not valid UTF-8');
+    throw new TextEncodingError(said('text.not-utf8'));
   }
 }
 

@@ -27,6 +27,7 @@
 // (scroll, volume...). EZ2PORT reads no BMS, so there is no oracle; the
 // reason is in docs/ez2port-compat.md.
 
+import { said, saying, type Said } from '../../i18n/say';
 import { encodeLegacy, fitsLegacy } from '../legacy-text';
 import type { OpenNote } from '../../lint/lint';
 import type { ChartData, NoteId, NoteRec, Tier } from '../../model/types';
@@ -34,12 +35,13 @@ import { modeDef } from '../../modes/registry';
 import type { ModeId } from '../../modes/ids';
 import { ChartClock, chartSounds, type SampleLookup } from '../../publish/chart-plan';
 import type { KeysoundRegistry } from '../../publish/keysounds';
+import { SaidError } from '../said-error';
 import { inverseMap, type BmsChannelMap } from './convert';
 import { bmsId } from './parse';
 
 export type BmsTextEncoding = 'shift_jis' | 'euc-kr' | 'utf-8';
 
-export class BmsWriteError extends Error {}
+export class BmsWriteError extends SaidError {}
 
 export interface BmsWriteOptions {
   mode: ModeId;
@@ -120,8 +122,8 @@ export function writeBms(
   registry: KeysoundRegistry,
 ): BmsWritten {
   const notes: OpenNote[] = [];
-  const say = (rule: string, severity: OpenNote['severity'], message: string) =>
-    notes.push({ rule, severity, message });
+  const say = (rule: string, severity: OpenNote['severity'], s: Said) =>
+    notes.push({ rule, severity, ...saying(s) });
   const info = chart.info;
   const res = info.resolution && info.resolution > 0 ? info.resolution : 240;
   const M = 4 * res;
@@ -135,7 +137,10 @@ export function writeBms(
   const maxId = base * base - 1;
   if (used.length > maxId)
     throw new BmsWriteError(
-      `${used.length} keysounds: a BMS names at most ${maxId}${base === 36 ? ' (base 36; base 62 takes 3843)' : ''}`,
+      said(base === 36 ? 'bmsw.too-many-sounds.36' : 'bmsw.too-many-sounds', {
+        n: used.length,
+        max: maxId,
+      }),
     );
   const idOf = new Map(used.map((ks, i) => [ks, bmsId(i + 1, base)]));
 
@@ -231,12 +236,12 @@ export function writeBms(
     put(y, '09', stopDefs.get(v)!);
   }
   if (bpmDefs.size > maxId || stopDefs.size > maxId)
-    throw new BmsWriteError(`more than ${maxId} different tempi or stops`);
+    throw new BmsWriteError(said('bmsw.too-many-defs', { max: maxId }));
   if (o.bga) put(Math.max(0, Math.round(o.bga.y)), '04', '01');
 
   const last = objs.reduce((m, x) => Math.max(m, x.measure), 0);
   if (last > 999)
-    throw new BmsWriteError(`measure ${last}: a BMS has measures 000-999 (${last + 1} needed)`);
+    throw new BmsWriteError(said('bmsw.measures', { measure: last, needed: last + 1 }));
 
   // Headers.
   const x = (k: string) => {
@@ -313,50 +318,25 @@ export function writeBms(
     say(
       'bms-encoding',
       'warning',
-      `${unmappable.join(' ')} cannot be written in ${encoding === 'euc-kr' ? 'EUC-KR (CP949)' : 'Shift-JIS'}: written as ?`,
+      said('bmsw.unmappable', {
+        chars: unmappable.join(' '),
+        encoding: encoding === 'euc-kr' ? 'EUC-KR (CP949)' : 'Shift-JIS',
+      }),
     );
-  if (velPan)
-    say(
-      'bms-velpan',
-      'info',
-      `${velPan} notes have a velocity or pan: BMS has neither, so they play at full volume, centred`,
-    );
+  if (velPan) say('bms-velpan', 'info', said('bmsw.velpan', { n: velPan }));
   if (unmapped)
     say(
       'bms-lanes',
       'warning',
-      `${unmapped} notes are on lanes the ${o.map.label} map has no channel for: written as background`,
+      said('bmsw.unmapped', { n: unmapped, map: o.map.said ?? o.map.label }),
     );
-  if (dupes)
-    say(
-      'bms-lanes',
-      'warning',
-      `${dupes} notes share a lane and a spot with another: written as background`,
-    );
-  if (shortened.length)
-    say(
-      'bms-holds',
-      'warning',
-      `${shortened.length} long notes end where the next on their lane starts: written a pulse shorter, as BMS cannot put both there`,
-    );
-  if (fractional)
-    say(
-      'bms-stop',
-      'info',
-      `${fractional} STOPs are not a whole number of 1/192 measures: written as decimals (beatoraja reads them; LR2 rounds them down)`,
-    );
+  if (dupes) say('bms-lanes', 'warning', said('bmsw.dupes', { n: dupes }));
+  if (shortened.length) say('bms-holds', 'warning', said('bmsw.holds', { n: shortened.length }));
+  if (fractional) say('bms-stop', 'info', said('bmsw.stops', { n: fractional }));
   if (chart.scrollEvents.length)
-    say(
-      'bms-scroll',
-      'info',
-      `${chart.scrollEvents.length} scroll change${chart.scrollEvents.length === 1 ? ' is' : 's are'} not written: LR2 has none, and beatoraja's #SCROLL is not what EZ2PORT does (it eases to the new speed)`,
-    );
+    say('bms-scroll', 'info', said('bmsw.scroll', { n: chart.scrollEvents.length }));
   if (Array.isArray(chart.extra.x_ez_records) && chart.extra.x_ez_records.length)
-    say(
-      'bms-kept',
-      'info',
-      `The game chart's own records (scroll, volume...) are not written: BMS has no place for them`,
-    );
+    say('bms-kept', 'info', said('bmsw.kept'));
   const ext = [...byLine.keys()].some((k) => /^\d{3}[1256][789]$/.test(k)) ? '.bme' : '.bms';
   return { text, bytes, encoding, base, ext, notes, unmappable, shortened };
 }

@@ -20,8 +20,10 @@ import {
   type SongEntry,
 } from '../../ez2data/songdb';
 import { parseSongTitles, type SongTitle } from '../../ez2data/songtext';
+import { said, sayText, type Said } from '../../i18n/say';
 import type { Tier } from '../../model/types';
 import { MODES, type ModeId } from '../../modes/ids';
+import { errorSaid } from '../said-error';
 import { gamePath, type EzSongSource, type EzTables } from './import';
 import { eziResolve, parseEzi } from './ezi';
 
@@ -62,9 +64,17 @@ export interface Game {
   /** The port's titles, by key and by folder (lower case). */
   titles: Map<string, SongTitle>;
   tables?: EzTables;
-  /** Why the executable gave no chart keys (only matters for encrypted charts). */
+  /**
+   * Why the executable gave no chart keys (only matters for encrypted
+   * charts), in the language chosen when the folder was opened;
+   * `tablesErrorSaid` says it again in whatever language is chosen by then.
+   */
   tablesError?: string;
-  /** Problems reading the folder (a table that would not decrypt...). */
+  tablesErrorSaid?: Said;
+  /**
+   * Problems reading the folder (a table that would not decrypt...), in the
+   * language chosen when it was opened: they are shown there and then.
+   */
   problems: string[];
 }
 
@@ -105,7 +115,7 @@ export async function openGame(
   const songdbFiles: Game['songdbFiles'] = {};
   let songdbTables: Uint8Array | undefined;
   let tables: EzTables | undefined;
-  let tablesError: string | undefined = exe ? undefined : 'no executable is set';
+  let noTables: Said | string | undefined = exe ? undefined : said('ez.no-exe');
   if (exe) {
     try {
       tables = {
@@ -114,7 +124,7 @@ export async function openGame(
         ini: keyTableFromExe(exe, 'ini'),
       };
     } catch (e) {
-      tablesError = e instanceof Error ? e.message : String(e);
+      noTables = errorSaid(e);
     }
     try {
       songdbTables = exeRead(exe, SONGDB_TABLE_VA, SONGDB_TABLE_SIZE);
@@ -124,7 +134,7 @@ export async function openGame(
   }
   if (!tables && opts.tables) {
     tables = opts.tables;
-    tablesError = undefined;
+    noTables = undefined;
   }
   const byDir = new Map<string, GameSong>();
   for (const m of MODES) {
@@ -141,7 +151,7 @@ export async function openGame(
     try {
       db = readSongdb(bytes, exe);
     } catch (e) {
-      problems.push(`${m.portName}'s song.bin: ${e instanceof Error ? e.message : String(e)}`);
+      problems.push(sayText(said('ez.songdb', { mode: m.portName, error: errorSaid(e) })));
       continue;
     }
     songdbs[m.id] = db;
@@ -162,6 +172,14 @@ export async function openGame(
   const songs = [...byDir.values()]
     .filter((s) => s.charts.length)
     .sort((a, b) => (a.title?.title ?? a.dir).localeCompare(b.title?.title ?? b.dir));
+  // Said now, for whoever shows it now; kept as said, for an import note
+  // (a chart turning out to be encrypted) that says it again later.
+  const why =
+    typeof noTables === 'object'
+      ? { tablesError: sayText(noTables), tablesErrorSaid: noTables }
+      : noTables
+        ? { tablesError: noTables }
+        : {};
   return {
     fs,
     sound,
@@ -172,7 +190,7 @@ export async function openGame(
     ...(songdbTables ? { songdbTables } : {}),
     titles,
     ...(tables ? { tables } : {}),
-    ...(tablesError ? { tablesError } : {}),
+    ...why,
     problems,
   };
 }
@@ -246,6 +264,7 @@ export async function ezSongSource(game: Game, song: GameSong): Promise<EzSongSo
     charts,
     ...(game.tables ? { tables: game.tables } : {}),
     ...(game.tablesError ? { tablesError: game.tablesError } : {}),
+    ...(game.tablesErrorSaid ? { tablesErrorSaid: game.tablesErrorSaid } : {}),
     gds: game.gds,
     songdbs: game.songdbs,
     ...(song.title ? { title: song.title } : {}),

@@ -521,7 +521,7 @@ New areas of work (details and checks are completed at M9.9):
   the rest follows in M9.7 (Korean) and M9.8 (Japanese), with the words
   chosen in `docs/i18n-glossary.md`.
 - **every English string moved into the catalogs** (M9.5, M9.6): about
-  1,200 in the editor and 300 in chart-core, converted by several assistant
+  1,050 messages in the editor and 380 in chart-core, converted by several assistant
   helpers working area by area in parallel, each told to keep the English
   exactly as it was. Lint findings and import notes now carry a message key
   beside their English, so a song file's notes are said in the language
@@ -539,7 +539,9 @@ What is checked so far for translations:
   random songs gave the same findings, word for word; the helpers compared
   every other message they converted with the text it replaced;
 - switching language live, following a Korean system, and the
-  pseudo-language, end to end.
+  pseudo-language, end to end; and a sweep of every screen in the
+  pseudo-language finding no English outside the catalogs but names and
+  the demo song's data.
 
 ---
 

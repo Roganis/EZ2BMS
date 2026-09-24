@@ -21,6 +21,7 @@
 //   keeps it (and kept), else the port's defaults are used; Debounce likewise
 //   from settings.ini.
 
+import { errorText } from '../i18n/i18n.svelte';
 import {
   DEFAULT_DEBOUNCE_MS,
   formatKeyconf,
@@ -246,7 +247,7 @@ export class InputHub {
       const audio = this.app.audio;
       void (audio.calibrated ? Promise.resolve() : audio.calibrate())
         .then(() => this.app.backend.input.hold(this.held))
-        .catch((e: unknown) => (this.padError = e instanceof Error ? e.message : String(e)));
+        .catch((e: unknown) => (this.padError = errorText(e)));
     }
     cancelAnimationFrame(this.raf);
     if (!this.users.size) {

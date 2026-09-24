@@ -17,7 +17,7 @@ import {
   type Tier,
 } from '@ez2bms/chart-core';
 import { joinPath } from '../bridge';
-import { t } from '../i18n/i18n.svelte';
+import { errorText, t } from '../i18n/i18n.svelte';
 import type { App } from './app.svelte';
 import type { ChartSlot, Project } from './project.svelte';
 import { songwideToast, stepOf, type SongwideStep } from './songwide';
@@ -149,7 +149,7 @@ export class SongState {
       try {
         await this.app.backend.renameFile(joinPath(p.dir, slot.file), joinPath(p.dir, trashed));
       } catch (e) {
-        const error = e instanceof Error ? e.message : String(e);
+        const error = errorText(e);
         toast(t('song.removeFailed', { file: slot.file, error }), 'error');
         return;
       }
@@ -174,7 +174,7 @@ export class SongState {
           toast(
             t('song.restoreFailed', {
               file: slot.file,
-              error: e instanceof Error ? e.message : String(e),
+              error: errorText(e),
             }),
             'error',
           ),

@@ -23,7 +23,7 @@ import {
 } from '@ez2bms/chart-core';
 import { ThumbCache } from '../audio/thumbs';
 import { baseName, joinPath, type Imported } from '../bridge';
-import { t } from '../i18n/i18n.svelte';
+import { errorText, t } from '../i18n/i18n.svelte';
 import type { App } from './app.svelte';
 import type { ChartSlot, Project } from './project.svelte';
 import { songwideToast, stepOf, type SongwideStep } from './songwide';
@@ -67,10 +67,7 @@ export class SoundsState {
     try {
       res = await this.app.backend.importFiles(p.dir, paths);
     } catch (e) {
-      toast(
-        t('sounds.importFailed', { error: e instanceof Error ? e.message : String(e) }),
-        'error',
-      );
+      toast(t('sounds.importFailed', { error: errorText(e) }), 'error');
       return;
     }
     // Local bookkeeping in this function; nothing renders from these sets.
@@ -191,7 +188,7 @@ export class SoundsState {
       toast(
         t('sounds.cantRename', {
           file: baseName(from),
-          reason: e instanceof Error ? e.message : String(e),
+          reason: errorText(e),
         }),
         'error',
       );

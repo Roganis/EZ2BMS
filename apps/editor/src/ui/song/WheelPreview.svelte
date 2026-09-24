@@ -19,7 +19,7 @@
     type WheelArt,
     type WheelEntry,
   } from '../../render/wheel';
-  import { t, tParts } from '../../i18n/i18n.svelte';
+  import { errorText, t, tParts } from '../../i18n/i18n.svelte';
   import { loadSelectArt, SELECT_FILES } from '../../skin/select';
   import { app } from '../../state/app.svelte';
   import type { Project } from '../../state/project.svelte';
@@ -70,7 +70,7 @@
       .catch((e: unknown) => {
         if (!live) return;
         plate = null;
-        plateError = e instanceof Error ? e.message : String(e);
+        plateError = errorText(e);
       });
     return () => (live = false);
   });

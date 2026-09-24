@@ -96,6 +96,6 @@ export function chartTier(info: ChartInfo, fileName: string): Tier {
 }
 
 /** True when the hint uses the old BMS-derived lane numbering (beat-*). */
-export function isLegacyHint(hint: string | undefined): boolean {
+export function isLegacyHint(hint: string | undefined): hint is string {
   return !!hint && hint.toLowerCase().startsWith('beat-');
 }

@@ -14,6 +14,7 @@
 // sound's ASCII name is used instead. The encoding is chosen once for the
 // song, so every chart names the files the same way.
 
+import { said, saying } from '../../i18n/say';
 import type { OpenNote } from '../../lint/lint';
 import type { ChartData, Tier } from '../../model/types';
 import type { ModeId } from '../../modes/ids';
@@ -148,10 +149,15 @@ export function exportBmsSong(charts: readonly BmsSongChart[], o: BmsSongOptions
     notes.push({
       rule: 'bms-missing-sound',
       severity: 'warning',
-      message: `${missing.length} sound${missing.length === 1 ? ' is' : 's are'} not in the song folder (${missing
-        .slice(0, 5)
-        .map((p) => p.want)
-        .join(', ')}${missing.length > 5 ? '...' : ''}): named in the BMS, not copied`,
+      ...saying(
+        said('bmsw.missing-sound', {
+          n: missing.length,
+          names: `${missing
+            .slice(0, 5)
+            .map((p) => p.want)
+            .join(', ')}${missing.length > 5 ? '...' : ''}`,
+        }),
+      ),
     });
 
   for (const c of charts) {
@@ -186,7 +192,8 @@ export function exportBmsSong(charts: readonly BmsSongChart[], o: BmsSongOptions
     const path = unique(`${stem(c.file)}${written.ext}`);
     out.files.push({ path, bytes: written.bytes });
     out.charts.push({ file: c.file, path, written });
-    for (const n of written.notes) notes.push({ ...n, message: `${path}: ${n.message}` });
+    for (const n of written.notes)
+      notes.push({ ...n, ...saying(said('bmsw.file', { file: path, note: n.said ?? n.message })) });
   }
   return out;
 }

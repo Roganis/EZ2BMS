@@ -14,6 +14,8 @@
 // Everything little-endian. The file is plaintext here; the cipher is separate
 // (ez2data/crypt.ts).
 
+import { said } from '../../i18n/say';
+import { SaidError } from '../said-error';
 import { encodeUtf8 } from '../text';
 
 export type EzffVersion = 4 | 5 | 6 | 7 | 8;
@@ -66,7 +68,8 @@ export interface EzffChart {
   tracks: EzffTrack[];
 }
 
-export class EzffError extends Error {}
+/** A .ez that cannot be read (said to whoever gave it); the writer's are EZ2BMS's own mistakes. */
+export class EzffError extends SaidError {}
 
 const HDR = 0x96;
 const TRK = 0x4e;
@@ -103,16 +106,16 @@ function trimName(b: Uint8Array): Uint8Array {
 }
 
 export function readEzff(bytes: Uint8Array): EzffChart {
-  if (bytes.length < HDR) throw new EzffError('too short for an EZFF header');
+  if (bytes.length < HDR) throw new EzffError(said('ez.read.short'));
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (String.fromCharCode(...bytes.subarray(0, 4)) !== 'EZFF') {
-    throw new EzffError('not EZFF (is it still encrypted?)');
+    throw new EzffError(said('ez.read.not-ezff'));
   }
   const version = bytes[5]!;
   const rec = recordSize(version);
-  if (!rec) throw new EzffError(`unsupported EZFF version ${version}`);
+  if (!rec) throw new EzffError(said('ez.read.version', { version }));
   const trackCount = dv.getUint16(0x8c, true);
-  if (trackCount > 96) throw new EzffError(`implausible track count ${trackCount}`);
+  if (trackCount > 96) throw new EzffError(said('ez.read.tracks', { n: trackCount }));
   const chart: EzffChart = {
     version: version as EzffVersion,
     name: trimName(bytes.subarray(0x06, 0x06 + 64)),
@@ -125,9 +128,9 @@ export function readEzff(bytes: Uint8Array): EzffChart {
   };
   let o = HDR;
   for (let t = 0; t < trackCount; t++) {
-    if (o + TRK > bytes.length) throw new EzffError(`track ${t} header runs past the end`);
+    if (o + TRK > bytes.length) throw new EzffError(said('ez.read.track-header', { track: t }));
     if (String.fromCharCode(...bytes.subarray(o, o + 4)) !== 'EZTR') {
-      throw new EzffError(`track ${t} header is not EZTR`);
+      throw new EzffError(said('ez.read.not-eztr', { track: t }));
     }
     const track: EzffTrack = {
       name: trimName(bytes.subarray(o + 6, o + 6 + 64)),
@@ -136,7 +139,7 @@ export function readEzff(bytes: Uint8Array): EzffChart {
     };
     const size = dv.getUint32(o + 0x4a, true);
     o += TRK;
-    if (size > bytes.length - o) throw new EzffError(`track ${t} data runs past the end`);
+    if (size > bytes.length - o) throw new EzffError(said('ez.read.track-data', { track: t }));
     const count = Math.floor(size / rec);
     for (let j = 0; j < count; j++) track.records.push(readRecord(dv, o + j * rec, version));
     o += size;

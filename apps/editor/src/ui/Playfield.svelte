@@ -2,7 +2,7 @@
   // The canvas. Scroll to move through the chart, Ctrl+scroll to zoom.
   import { columnsFor, eraseNotes, laneForChannel, modeDef, placeNote } from '@ez2bms/chart-core';
   import { onMount } from 'svelte';
-  import { i18n, t } from '../i18n/i18n.svelte';
+  import { errorText, i18n, t, tSaid } from '../i18n/i18n.svelte';
   import { PointerTool, type StripHooks, type ToolHost } from '../input/pointer';
   import { PlayfieldRenderer } from '../render/renderer';
   import { toast } from '../state/toasts.svelte';
@@ -253,7 +253,7 @@
         ro = new ResizeObserver(() => r.resize(host.clientWidth, host.clientHeight));
         ro.observe(host);
       })
-      .catch((e: unknown) => (failed = e instanceof Error ? e.message : String(e)));
+      .catch((e: unknown) => (failed = errorText(e)));
     window.addEventListener('keydown', onKeyCapture, true);
     return () => {
       window.removeEventListener('keydown', onKeyCapture, true);
@@ -346,7 +346,9 @@
   function onMove(e: PointerEvent) {
     v.hoverLane = renderer?.laneAt(e.offsetX)?.x ?? null;
     const kept = v.mode === 'edit' ? renderer?.keptAt(e.offsetX, e.offsetY) : undefined;
-    keptTip = kept ? { x: e.offsetX, y: e.offsetY, lines: kept.map((k) => k.long) } : null;
+    keptTip = kept
+      ? { x: e.offsetX, y: e.offsetY, lines: kept.map((k) => tSaid(k.longSaid)) }
+      : null;
     app.strips.hoverOn(slot.doc, hoverSlice(e));
     const h = host_();
     if (h) tool.move(e, h);

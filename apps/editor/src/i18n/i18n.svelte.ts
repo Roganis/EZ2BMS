@@ -87,6 +87,16 @@ export function tCore(m: { message: string; said?: Said }): string {
   return textOf(m);
 }
 
+/**
+ * What a thrown error says, in the current language where it can: chart-core's
+ * errors carry `said` (io/said-error.ts), the host's are worded by the bridge
+ * (bridge/hosterror.ts); anything else says its own message.
+ */
+export function errorText(e: unknown): string {
+  if (e instanceof Error && 'said' in e) return tCore(e as Error & { said?: Said });
+  return e instanceof Error ? e.message : String(e);
+}
+
 /** A chart-core message (a fix's label, a hold kind's description), reactive like `t`. */
 export function tSaid(s: Said): string {
   void i18n.locale;

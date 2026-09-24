@@ -22,15 +22,19 @@ import type {
   StopEvent,
   Tier,
 } from '../../model/types';
+import { said, sayEnglish, type Said } from '../../i18n/say';
+import { SaidError } from '../said-error';
 import { decodeUtf8 } from '../text';
 import { isBmson021, upgradeBmson021 } from './v021';
 
-export class BmsonError extends Error {}
+export class BmsonError extends SaidError {}
 
 export interface ParseWarning {
   /** JSON path, e.g. `$.sound_channels[3].notes[12].y`. */
   path: string;
+  /** What is wrong there, in English; `said` says it in the language chosen (i18n/say.ts). */
   message: string;
+  said?: Said;
 }
 
 export interface ParseResult {
@@ -47,11 +51,15 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
+/** What a typed member should have been (the open.bad.* message that says so). */
+type Expected =
+  'string' | 'number' | 'strings' | 'judgement' | 'life' | 'tier' | 'boolean' | 'byte';
+
 class Reader {
   warnings: ParseWarning[] = [];
 
-  warn(path: string, message: string): void {
-    this.warnings.push({ path, message });
+  warn(path: string, s: Said): void {
+    this.warnings.push({ path, message: sayEnglish(s), said: s });
   }
 
   /** Copy every member not in `known` into a new extra (undefined if none). */
@@ -69,7 +77,7 @@ class Reader {
     o: Obj,
     key: string,
     check: (v: unknown) => v is T,
-    what: string,
+    what: Expected,
     extra: Extra,
     path: string,
   ): T | undefined {
@@ -77,7 +85,7 @@ class Reader {
     const v = o[key];
     if (check(v)) return v;
     extra[key] = v;
-    this.warn(`${path}.${key}`, `expected ${what}; kept as written`);
+    this.warn(`${path}.${key}`, said(`open.bad.${what}`));
     return undefined;
   }
 }
@@ -139,13 +147,13 @@ const BGA_EVENT_KEYS = new Set(['y', 'id']);
 
 function readInfo(r: Reader, o: unknown): ChartInfo {
   if (!isObj(o)) {
-    r.warn('$.info', 'missing or not an object');
+    r.warn('$.info', said('open.bad.info'));
     return { extra: {} };
   }
   const extra: Extra = r.rest(o, INFO_KEYS) ?? {};
   const p = '$.info';
-  const s = (k: string) => r.typed(o, k, str, 'a string', extra, p);
-  const n = (k: string) => r.typed(o, k, isNum, 'a number', extra, p);
+  const s = (k: string) => r.typed(o, k, str, 'string', extra, p);
+  const n = (k: string) => r.typed(o, k, isNum, 'number', extra, p);
   const info: ChartInfo = { extra };
   const set = <K extends keyof ChartInfo>(k: K, v: ChartInfo[K] | undefined) => {
     if (v !== undefined) info[k] = v;
@@ -153,7 +161,7 @@ function readInfo(r: Reader, o: unknown): ChartInfo {
   set('title', s('title'));
   set('subtitle', s('subtitle'));
   set('artist', s('artist'));
-  set('subartists', r.typed(o, 'subartists', strArr, 'an array of strings', extra, p));
+  set('subartists', r.typed(o, 'subartists', strArr, 'strings', extra, p));
   set('genre', s('genre'));
   set('modeHint', s('mode_hint'));
   set('chartName', s('chart_name'));
@@ -167,18 +175,11 @@ function readInfo(r: Reader, o: unknown): ChartInfo {
   set('bannerImage', s('banner_image'));
   set('previewMusic', s('preview_music'));
   set('resolution', n('resolution'));
-  const jd = r.typed(
-    o,
-    'judgement_deltas',
-    isJudgement,
-    'exactly KOOL/COOL/GOOD/MISS numbers',
-    extra,
-    p,
-  );
+  const jd = r.typed(o, 'judgement_deltas', isJudgement, 'judgement', extra, p);
   if (jd) set('judgementDeltas', { KOOL: jd.KOOL, COOL: jd.COOL, GOOD: jd.GOOD, MISS: jd.MISS });
-  const ld = r.typed(o, 'life_deltas', isLife, 'exactly COOL/GOOD/MISS/FAIL numbers', extra, p);
+  const ld = r.typed(o, 'life_deltas', isLife, 'life', extra, p);
   if (ld) set('lifeDeltas', { COOL: ld.COOL, GOOD: ld.GOOD, MISS: ld.MISS, FAIL: ld.FAIL });
-  set('tier', r.typed(o, 'x_tier', tier, 'NM, HD, SHD or EX', extra, p));
+  set('tier', r.typed(o, 'x_tier', tier, 'tier', extra, p));
   return info;
 }
 
@@ -191,14 +192,14 @@ function readTimed<T extends { y: number; extra?: Extra }>(
 ): T[] {
   if (arr === undefined) return [];
   if (!Array.isArray(arr)) {
-    r.warn(path, 'not an array; ignored');
+    r.warn(path, said('open.bad.list'));
     return [];
   }
   const out: T[] = [];
   arr.forEach((o, i) => {
     const p = `${path}[${i}]`;
     if (!isObj(o) || !isNum(o.y)) {
-      r.warn(p, 'not an event with a numeric y; dropped');
+      r.warn(p, said('open.bad.event'));
       return;
     }
     const ev = build(o, r.rest(o, known), p);
@@ -226,16 +227,16 @@ export function parseBmson(input: Uint8Array | string, opts: ParseOptions = {}):
   try {
     doc = JSON.parse(text);
   } catch (e) {
-    throw new BmsonError(`not JSON: ${(e as Error).message}`);
+    throw new BmsonError(said('open.not-json', { error: (e as Error).message }));
   }
-  if (!isObj(doc)) throw new BmsonError('not a JSON object');
+  if (!isObj(doc)) throw new BmsonError(said('open.not-object'));
   let upgradedFrom: string | undefined;
   if (isBmson021(doc)) {
     doc = upgradeBmson021(doc);
     upgradedFrom = '0.21';
   }
   if (!isObj(doc) || typeof doc.version !== 'string') {
-    throw new BmsonError('no "version", and not bmson 0.21 either: not a bmson EZ2BMS can read');
+    throw new BmsonError(said('open.not-bmson'));
   }
 
   const r = new Reader();
@@ -250,7 +251,7 @@ export function parseBmson(input: Uint8Array | string, opts: ParseOptions = {}):
 
   const bpmEvents = readTimed<BpmEvent>(r, doc.bpm_events, '$.bpm_events', BPM_KEYS, (o, x, p) => {
     if (!isNum(o.bpm)) {
-      r.warn(p, 'BPM event without a numeric bpm; dropped');
+      r.warn(p, said('open.bad.bpm'));
       return undefined;
     }
     return withExtra({ y: o.y as number, bpm: o.bpm }, x);
@@ -263,7 +264,7 @@ export function parseBmson(input: Uint8Array | string, opts: ParseOptions = {}):
     STOP_KEYS,
     (o, x, p) => {
       if (!isNum(o.duration)) {
-        r.warn(p, 'stop without a numeric duration; dropped');
+        r.warn(p, said('open.bad.stop'));
         return undefined;
       }
       return withExtra({ y: o.y as number, duration: o.duration }, x);
@@ -278,7 +279,7 @@ export function parseBmson(input: Uint8Array | string, opts: ParseOptions = {}):
     SCROLL_KEYS,
     (o, x, p) => {
       if (!isNum(o.rate)) {
-        r.warn(p, 'scroll change without a numeric rate; dropped');
+        r.warn(p, said('open.bad.scroll'));
         return undefined;
       }
       return withExtra({ y: o.y as number, rate: o.rate }, x);
@@ -290,39 +291,38 @@ export function parseBmson(input: Uint8Array | string, opts: ParseOptions = {}):
   let nextNote = opts.firstNoteId ?? 1;
   let nextCh = opts.firstChannelId ?? 1;
   if (doc.sound_channels !== undefined && !Array.isArray(doc.sound_channels)) {
-    r.warn('$.sound_channels', 'not an array; ignored');
+    r.warn('$.sound_channels', said('open.bad.list'));
   }
   const rawChannels = Array.isArray(doc.sound_channels) ? doc.sound_channels : [];
   rawChannels.forEach((c, ci) => {
     const cp = `$.sound_channels[${ci}]`;
     if (!isObj(c)) {
-      r.warn(cp, 'not an object; dropped');
+      r.warn(cp, said('open.bad.channel'));
       return;
     }
     const extra = r.rest(c, CHANNEL_KEYS) ?? {};
-    const name = r.typed(c, 'name', str, 'a string', extra, cp) ?? '';
-    const color = r.typed(c, 'x_color', str, 'a string', extra, cp);
+    const name = r.typed(c, 'name', str, 'string', extra, cp) ?? '';
+    const color = r.typed(c, 'x_color', str, 'string', extra, cp);
     const ch: SoundChannel = { id: nextCh++, name };
     if (color !== undefined) ch.color = color;
     if (Object.keys(extra).length) ch.extra = extra;
     channels.push(ch);
     const rawNotes = c.notes === undefined ? [] : c.notes;
     if (!Array.isArray(rawNotes)) {
-      r.warn(`${cp}.notes`, 'not an array; ignored');
+      r.warn(`${cp}.notes`, said('open.bad.list'));
       return;
     }
     rawNotes.forEach((n, ni) => {
       const np = `${cp}.notes[${ni}]`;
       if (!isObj(n) || !isNum(n.x) || !isNum(n.y)) {
-        r.warn(np, 'note without numeric x and y; dropped');
+        r.warn(np, said('open.bad.note'));
         return;
       }
       const nx = r.rest(n, NOTE_KEYS) ?? {};
       // l and c are required by bmson and always present in the model, so a
       // wrongly typed one cannot be kept verbatim: it falls back to the default.
-      if ('l' in n && !isNum(n.l)) r.warn(`${np}.l`, 'expected a number; replaced with 0');
-      if ('c' in n && typeof n.c !== 'boolean')
-        r.warn(`${np}.c`, 'expected a boolean; replaced with false');
+      if ('l' in n && !isNum(n.l)) r.warn(`${np}.l`, said('open.bad.l'));
+      if ('c' in n && typeof n.c !== 'boolean') r.warn(`${np}.c`, said('open.bad.c'));
       const note: NoteRec = {
         id: nextNote++,
         ch: ch.id,
@@ -331,17 +331,17 @@ export function parseBmson(input: Uint8Array | string, opts: ParseOptions = {}):
         l: isNum(n.l) ? n.l : 0,
         c: typeof n.c === 'boolean' ? n.c : false,
       };
-      const up = r.typed(n, 'up', (v): v is boolean => typeof v === 'boolean', 'a boolean', nx, np);
+      const up = r.typed(n, 'up', (v): v is boolean => typeof v === 'boolean', 'boolean', nx, np);
       if (up !== undefined) note.up = up;
-      const xStop = r.typed(n, 'x_stop', isNum, 'a number', nx, np);
+      const xStop = r.typed(n, 'x_stop', isNum, 'number', nx, np);
       if (xStop !== undefined) note.xStop = xStop;
       const byte = (v: unknown): v is number =>
         Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 255;
-      const vel = r.typed(n, 'x_vel', byte, 'an integer 0-255', nx, np);
+      const vel = r.typed(n, 'x_vel', byte, 'byte', nx, np);
       if (vel !== undefined) note.vel = vel;
-      const pan = r.typed(n, 'x_pan', byte, 'an integer 0-255', nx, np);
+      const pan = r.typed(n, 'x_pan', byte, 'byte', nx, np);
       if (pan !== undefined) note.pan = pan;
-      const kind = r.typed(n, 'x_kind', byte, 'an integer 0-255', nx, np);
+      const kind = r.typed(n, 'x_kind', byte, 'byte', nx, np);
       if (kind !== undefined) note.kind = kind;
       if (Object.keys(nx).length) note.extra = nx;
       notes.push(note);
@@ -351,7 +351,7 @@ export function parseBmson(input: Uint8Array | string, opts: ParseOptions = {}):
   let bga: BgaData | null = null;
   if (doc.bga !== undefined) {
     if (!isObj(doc.bga)) {
-      r.warn('$.bga', 'not an object; ignored');
+      r.warn('$.bga', said('open.bad.object'));
     } else {
       const b = doc.bga;
       const headerArr = Array.isArray(b.bga_header) ? b.bga_header : [];
@@ -359,7 +359,7 @@ export function parseBmson(input: Uint8Array | string, opts: ParseOptions = {}):
       headerArr.forEach((h, i) => {
         const hp = `$.bga.bga_header[${i}]`;
         if (!isObj(h) || !isNum(h.id) || !str(h.name)) {
-          r.warn(hp, 'BGA header without numeric id and string name; dropped');
+          r.warn(hp, said('open.bad.bga-header'));
           return;
         }
         header.push(withExtra({ id: h.id, name: h.name }, r.rest(h, BGA_HEADER_KEYS)));
@@ -367,7 +367,7 @@ export function parseBmson(input: Uint8Array | string, opts: ParseOptions = {}):
       const ev = (key: string) =>
         readTimed<BgaEvent>(r, b[key], `$.bga.${key}`, BGA_EVENT_KEYS, (o, x, p) => {
           if (!isNum(o.id)) {
-            r.warn(p, 'BGA event without a numeric id; dropped');
+            r.warn(p, said('open.bad.bga-event'));
             return undefined;
           }
           return withExtra({ y: o.y as number, id: o.id }, x);
@@ -388,7 +388,7 @@ export function parseBmson(input: Uint8Array | string, opts: ParseOptions = {}):
   // was not an array), so an unedited save gives the same bytes.
   if (scrollEvents.length) delete extra.x_scroll_events;
   else if (doc.x_scroll_events !== undefined && !rawScroll)
-    r.warn('$.x_scroll_events', 'not a list of scroll changes; kept as it is');
+    r.warn('$.x_scroll_events', said('open.bad.scrolls'));
   const chart: ChartData = {
     version: doc.version,
     info,

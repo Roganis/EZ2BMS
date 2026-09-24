@@ -7,7 +7,7 @@
 import type { UpdateInfo } from '../bridge';
 import type { App } from './app.svelte';
 import { checkDue, offer } from './updatecheck';
-import { t } from '../i18n/i18n.svelte';
+import { errorText, t } from '../i18n/i18n.svelte';
 import { ask, toast } from './toasts.svelte';
 
 /** How long after start the daily look waits (the song and audio come first). */
@@ -71,7 +71,7 @@ export class Updates {
         );
     } catch (e) {
       this.stage = 'failed';
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = errorText(e);
       this.app.backend.diag.log('warn', `update check failed: ${this.error}`);
       if (manual) toast(t('update.checkFailed', { error: this.error }), 'error');
     }
@@ -94,7 +94,7 @@ export class Updates {
       await this.app.backend.updates.restart();
     } catch (e) {
       this.stage = 'failed';
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = errorText(e);
       this.app.backend.diag.log('error', `update install failed: ${this.error}`);
     }
   }

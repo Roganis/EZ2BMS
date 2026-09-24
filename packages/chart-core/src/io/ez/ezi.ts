@@ -15,6 +15,8 @@
 // give each note of the sibling .ez its own sample (docs/ez2port-compat.md).
 
 import { decodeCp949, strtolInt } from '../../ez2data/initext';
+import { said, type Said } from '../../i18n/say';
+import { SaidError } from '../said-error';
 
 export interface EziEntry {
   /** The chart's key index. */
@@ -34,12 +36,12 @@ export interface Ezi {
   legacy: number;
 }
 
-export class EziError extends Error {
+export class EziError extends SaidError {
   constructor(
     readonly code: 'note' | 'empty',
-    message: string,
+    what: Said,
   ) {
-    super(message);
+    super(what);
   }
 }
 
@@ -85,7 +87,7 @@ export function parseEzi(bytes: Uint8Array, opts: { legacyNames?: boolean } = {}
     const legacy = opts.legacyNames ? legacyNoteIndex(t) : undefined;
     const note = legacy ?? strtolInt(t);
     if (note < 0 || note >= EZI_SLOTS) {
-      throw new EziError('note', `note ${t} is outside the keysound table (0-${EZI_SLOTS - 1})`);
+      throw new EziError('note', said('ez.ezi.note', { note: t, max: EZI_SLOTS - 1 }));
     }
     const mode = strtolInt(latin(modeToken));
     const name = next(NAME);
@@ -101,7 +103,7 @@ export function parseEzi(bytes: Uint8Array, opts: { legacyNames?: boolean } = {}
     }
     out.entries.push(e);
   }
-  if (!out.entries.length) throw new EziError('empty', 'no keysounds listed');
+  if (!out.entries.length) throw new EziError('empty', said('ez.ezi.empty'));
   return out;
 }
 

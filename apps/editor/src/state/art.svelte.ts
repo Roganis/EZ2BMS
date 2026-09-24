@@ -19,7 +19,7 @@ import {
   type PlateSpec,
 } from '@ez2bms/chart-core';
 import { baseName, joinPath, type ArtPixels, type PlatePixels } from '../bridge';
-import { t } from '../i18n/i18n.svelte';
+import { errorText, t } from '../i18n/i18n.svelte';
 import type { App } from './app.svelte';
 import type { Project } from './project.svelte';
 import { toast } from './toasts.svelte';
@@ -130,7 +130,7 @@ export class ArtState {
       else if (names.length) text = t('art.already');
       if (text) toast(text, skipped.length ? 'warn' : 'ok');
     } catch (e) {
-      toast(t('song.importFailed', { error: e instanceof Error ? e.message : String(e) }), 'error');
+      toast(t('song.importFailed', { error: errorText(e) }), 'error');
       return [];
     }
     const first = names[0];
@@ -207,7 +207,7 @@ export class ArtState {
       report({ missing: px.missing, text: plateText(s, song).title });
       return px;
     } catch (e) {
-      const error = e instanceof Error ? e.message : String(e);
+      const error = errorText(e);
       if (!(e instanceof PublishError)) report({ missing: [], error });
       throw e;
     }
@@ -221,9 +221,7 @@ export class ArtState {
     const art = p.art;
     const plate = await this.renderPlate(p).catch((e: unknown) => {
       if (e instanceof PublishError) throw e;
-      throw new PublishError(
-        t('plate.failed', { error: e instanceof Error ? e.message : String(e) }),
-      );
+      throw new PublishError(t('plate.failed', { error: errorText(e) }));
     });
     const out: PackageArt = { songnameAbm: encodeAbm(plate.rgb, plate.w, plate.h) };
     for (const kind of ['disc', 'eyecatch'] as const) {
@@ -235,7 +233,7 @@ export class ArtState {
           t(disc ? 'art.disc.missing' : 'art.eyecatch.missing', { file: a.src }),
         );
       const px = await this.pixels(p, a.path, a.job).catch((e: unknown) => {
-        const error = e instanceof Error ? e.message : String(e);
+        const error = errorText(e);
         throw new PublishError(t(disc ? 'art.disc.failed' : 'art.eyecatch.failed', { error }));
       });
       out[kind === 'disc' ? 'discAbm' : 'eyecatchAbm'] = encodeAbm(px.rgb, px.w, px.h);

@@ -10,7 +10,7 @@
     setScrollAt,
     setStopAt,
   } from '@ez2bms/chart-core';
-  import { t, tParts } from '../../i18n/i18n.svelte';
+  import { t, tParts, tSaid } from '../../i18n/i18n.svelte';
   import { app } from '../../state/app.svelte';
   import type { ChartSlot } from '../../state/project.svelte';
 
@@ -144,9 +144,9 @@
       <summary>{t('timing.kept', { n: data.kept.length })}</summary>
       <p class="hint">{t('timing.keptHint')}</p>
       {#each data.kept.slice(0, 200) as k (k.index)}
-        <div class="krow" title={k.long}>
+        <div class="krow" title={tSaid(k.longSaid)}>
           <button class="at" onclick={() => (app.view.cursor = k.y)}>{pos(k.y)}</button>
-          <span>{k.short}</span>
+          <span>{tSaid(k.shortSaid)}</span>
           <span class="trk">{t('timing.track', { n: k.track })}</span>
         </div>
       {/each}

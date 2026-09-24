@@ -35,6 +35,7 @@ import type { Gds } from '../../ez2data/gds';
 import { decodeCp949 } from '../../ez2data/initext';
 import { songdbFind, versionCategory, type SongDb } from '../../ez2data/songdb';
 import type { SongTitle } from '../../ez2data/songtext';
+import { said, saying, type Said } from '../../i18n/say';
 import type { OpenNote, Severity } from '../../lint/lint';
 import { newChart } from '../../model/defaults';
 import type { ChartData, Extra, NoteRec, ScrollEvent, SoundChannel, Tier } from '../../model/types';
@@ -44,6 +45,7 @@ import { columnsFromGds, modeDef } from '../../modes/registry';
 import { newSongFile, type SongFile } from '../../song/songfile';
 import { f32FromWord, scrollEventFromLegacy } from '../../timing/scroll';
 import { f32Decimal } from '../../util/f32';
+import { errorSaid, SaidError } from '../said-error';
 import {
   EZ_BEATS,
   EZ_BPM,
@@ -81,6 +83,8 @@ export interface EzSongSource {
   tables?: EzTables;
   /** Why there are no tables, said when a chart turns out to be encrypted. */
   tablesError?: string;
+  /** The same, to say again in another language (an import note keeps it); used first. */
+  tablesErrorSaid?: Said;
   /** A mode's .gds from the game: its lanes as the game plays them. */
   gds?: Partial<Record<ModeId, Gds>>;
   /** A mode's song table: levels and categories. */
@@ -125,7 +129,7 @@ export interface EzSongImport {
   notes: OpenNote[];
 }
 
-export class EzImportError extends Error {}
+export class EzImportError extends SaidError {}
 
 const TIER_INDEX: Record<Tier, number> = { NM: 0, HD: 1, SHD: 2, EX: 3 };
 const f32 = Math.fround;
@@ -148,8 +152,9 @@ export function gamePath(dir: string, name: string): string {
 function plain(kind: 'ez' | 'ezi' | 'ini', bytes: Uint8Array, src: EzSongSource) {
   if (looksPlaintext(kind, bytes)) return bytes;
   if (!src.tables) {
+    const why = src.tablesErrorSaid ?? src.tablesError;
     throw new EzImportError(
-      `it is encrypted, and the keys are in the unpacked EZ2AC executable (${src.tablesError ?? 'none is set'})`,
+      why === undefined ? said('ez.encrypted.no-exe') : said('ez.encrypted', { why }),
     );
   }
   return ez2Decrypt(bytes, src.tables[kind]);
@@ -166,30 +171,33 @@ export function importEzSong(src: EzSongSource): EzSongImport {
   const taken = new Set<string>();
   for (const c of src.charts) {
     const id = parseChartName(c.file);
-    const skip = (why: string) =>
-      songNotes.push({ rule: 'import-skipped', severity: 'warning', message: `${c.file}: ${why}` });
+    const skip = (s: Said) =>
+      songNotes.push({ rule: 'import-skipped', severity: 'warning', ...saying(s) });
+    const file = c.file;
     if (!id?.mode) {
-      skip('not a chart of a mode EZ2BMS edits (the radio and CV2 modes have none)');
+      skip(said('ez.skip.mode', { file }));
       continue;
     }
     if (id.players !== 1) {
-      skip('a two-player chart; the one-player file is what the game plays');
+      skip(said('ez.skip.players', { file }));
       continue;
     }
     if (!id.tier) {
-      skip('a stage or variant chart, not one of the four tiers');
+      skip(said('ez.skip.tier', { file }));
       continue;
     }
     const slot = `${id.mode}/${id.tier}`;
     if (taken.has(slot)) {
-      skip(`a second ${modeNames(id.mode).label} ${id.tier} chart`);
+      skip(said('ez.skip.second', { file, mode: modeNames(id.mode).label, tier: id.tier }));
       continue;
     }
     try {
       charts.push(importChart(src, c, id.mode, id.tier, key, samples));
       taken.add(slot);
     } catch (e) {
-      skip(e instanceof Error ? e.message : String(e));
+      // Whatever the reader said, kept as it said it: a note the song file
+      // stores is said again later, in whatever language is chosen then.
+      skip(said('ez.skip.error', { file, error: errorSaid(e) }));
     }
   }
   const song = newSongFile(key);
@@ -204,7 +212,7 @@ export function importEzSong(src: EzSongSource): EzSongImport {
     songNotes.push({
       rule: 'import-key',
       severity: 'info',
-      message: `The song's key is ${key}: "${origKey}" and "${deriveSongKey(title)}" are the game's own, and publishing under one would replace that song`,
+      ...saying(said('ez.key', { key, orig: origKey, derived: deriveSongKey(title) })),
     });
   }
   const noteList = [
@@ -276,6 +284,9 @@ class SampleNamer {
   }
 }
 
+/** Adds a note about the chart being imported. */
+type Say = (rule: string, severity: Severity, s: Said, at?: number) => void;
+
 function importChart(
   src: EzSongSource,
   c: EzChartSource,
@@ -285,20 +296,16 @@ function importChart(
   samples: SampleNamer,
 ): ImportedChart {
   const notes: OpenNote[] = [];
-  const say = (rule: string, severity: Severity, message: string, at?: number) =>
-    notes.push({ rule, severity, message, ...(at !== undefined ? { at } : {}) });
+  const say: Say = (rule, severity, s, at) =>
+    notes.push({ rule, severity, ...saying(s), ...(at !== undefined ? { at } : {}) });
   const ez = readEzff(plain('ez', c.ez, src));
   let ezi: Map<number, EziEntry> = new Map();
   if (c.ezi) {
     const parsed = parseEzi(plain('ezi', c.ezi, src), { legacyNames: true });
     ezi = eziTable(parsed);
     if (parsed.legacy)
-      say(
-        'import-legacy-ezi',
-        'info',
-        `Its keysound list names ${parsed.legacy} notes like MIDI keys (C#0): read as notes, which EZ2PORT does not do (it plays them all as note 0)`,
-      );
-  } else say('import-no-ezi', 'error', 'It has no .ezi: none of its notes has a sound');
+      say('import-legacy-ezi', 'info', said('ez.legacy-ezi', { n: parsed.legacy }));
+  } else say('import-no-ezi', 'error', said('ez.no-ezi'));
   const ini: ParsedSongIni = parseSongIni(c.ini ? plain('ini', c.ini, src) : new Uint8Array());
 
   // Positions: pulses per tick at a resolution that makes every tick whole.
@@ -320,22 +327,18 @@ function importChart(
     MISS: f32Decimal(d.life.MISS),
     FAIL: f32Decimal(d.life.FAIL),
   };
-  if (!c.ini)
-    say(
-      'import-no-ini',
-      'info',
-      "It has no .ini: the engine's own judgement (6/24/36/72) and gauge, as the game plays it",
-    );
+  if (!c.ini) say('import-no-ini', 'info', said('ez.no-ini'));
 
   // Level: the song table's, else the .ini's.
   const entry = src.songdbs?.[mode] && songdbFind(src.songdbs[mode]!, src.dir);
   const tableLevel = entry?.steps[TIER_INDEX[tier]]?.level ?? 0;
   let level = tableLevel > 0 ? tableLevel : ini.level;
   if (!(level >= 1 && level <= 20)) {
+    const set = Math.min(20, Math.max(1, level || 1));
     say(
       'import-level',
       'warning',
-      `Its level ${tableLevel > 0 || c.ini ? level : '(none)'} is not 1-20, which EZ2PORT's song list needs: set to ${Math.min(20, Math.max(1, level || 1))}`,
+      tableLevel > 0 || c.ini ? said('ez.level', { level, set }) : said('ez.level.none', { set }),
     );
     level = Math.min(20, Math.max(1, Number.isFinite(level) ? level : 1));
   }
@@ -424,67 +427,40 @@ function importChart(
   data.channels = [...channels.values()];
 
   // Said once each.
-  if (scrolls.length)
-    say(
-      'import-scroll',
-      'info',
-      `${scrolls.length} scroll-speed change${scrolls.length === 1 ? '' : 's'}: EZ2PORT scrolls faster or slower from there; kept as the chart's scroll changes`,
-    );
+  if (scrolls.length) say('import-scroll', 'info', said('ez.scroll', { n: scrolls.length }));
   const oddScroll = counts.get(EZ_SCROLL) ?? 0;
-  if (oddScroll)
-    say(
-      'import-kept',
-      'info',
-      `${oddScroll} scroll record${oddScroll === 1 ? '' : 's'} whose multiplier is not a number: kept for a cabinet export, not played or published`,
-    );
-  const other: [number, string][] = [
-    [EZ_VOLUME, 'track volume'],
-    [EZ_BEATS, 'beats-per-measure'],
-    [EZ_MARK, 'mark'],
-    [7, 'stop (the engine ignores them)'],
-    [EZ_BPM, 'tempo outside 0-1000 BPM (the engine ignores them)'],
-  ];
-  for (const [type, what] of other) {
+  if (oddScroll) say('import-kept', 'info', said('ez.kept.scroll', { n: oddScroll }));
+  const other = [
+    [EZ_VOLUME, 'ez.kept.volume'],
+    [EZ_BEATS, 'ez.kept.beats'],
+    [EZ_MARK, 'ez.kept.mark'],
+    [7, 'ez.kept.stop'],
+    [EZ_BPM, 'ez.kept.tempo'],
+  ] as const;
+  for (const [type, key] of other) {
     const n = counts.get(type) ?? 0;
-    if (n)
-      say(
-        'import-kept',
-        'info',
-        `${n} ${what} record${n === 1 ? '' : 's'}: kept in the chart, not published`,
-      );
+    if (n) say('import-kept', 'info', said(key, { n }));
   }
   const unknown = [...counts].filter(([t]) => t > 7).reduce((a, [, n]) => a + n, 0);
-  if (unknown)
-    say(
-      'import-kept',
-      'info',
-      `${unknown} records of kinds EZ2BMS does not know: kept, not published`,
-    );
-  if (bgHolds)
-    say(
-      'import-kept',
-      'info',
-      `${bgHolds} background note${bgHolds === 1 ? ' has' : 's have'} a length: kept as x_len; publishing writes them as taps, as the game plays them`,
-    );
+  if (unknown) say('import-kept', 'info', said('ez.kept.unknown', { n: unknown }));
+  if (bgHolds) say('import-kept', 'info', said('ez.kept.length', { n: bgHolds }));
   if (missing.size)
     say(
       'import-missing-sound',
       'warning',
-      `${missing.size} keysound${missing.size === 1 ? ' is' : 's are'} not in the game folder: ${[...missing].slice(0, 6).join(', ')}${missing.size > 6 ? '...' : ''}`,
+      said('ez.missing-sound', {
+        n: missing.size,
+        names: `${[...missing].slice(0, 6).join(', ')}${missing.size > 6 ? '...' : ''}`,
+      }),
     );
   if (unlisted.size)
     say(
       'import-missing-sound',
       'warning',
-      `Notes use keysound slot${unlisted.size === 1 ? '' : 's'} ${[...unlisted].slice(0, 8).join(', ')}, which the .ezi does not list: the game plays nothing for them`,
+      said('ez.unlisted', { n: unlisted.size, slots: [...unlisted].slice(0, 8).join(', ') }),
     );
   const shared = [...slotsOf.values()].filter((s) => s.size > 1).length;
-  if (shared)
-    say(
-      'import-shared-voice',
-      'info',
-      `${shared} keysound${shared === 1 ? ' is' : 's are'} listed in more than one slot; in EZ2BMS (and a re-publish) each file is one voice, so two of them at once cut each other`,
-    );
+  if (shared) say('import-shared-voice', 'info', said('ez.shared-voice', { n: shared }));
 
   data.extra.x_ez = {
     file: c.file,
@@ -514,7 +490,7 @@ function importChart(
 function importTempo(
   ez: EzffChart,
   yOf: (tick: number) => number,
-  say: (rule: string, severity: Severity, message: string, at?: number) => void,
+  say: Say,
 ): { init: number; events: { y: number; bpm: number }[]; used: Set<EzffRecord> } {
   const used = new Set<EzffRecord>();
   const byTick = new Map<number, EzffRecord[]>();
@@ -534,12 +510,7 @@ function importTempo(
     .sort((a, b) => a[0] - b[0])
     .map(([tick, rs]) => ({ y: yOf(tick), bpm: f32Decimal(rs.at(-1)!.bpm!) }));
   const doubled = [...byTick.values()].filter((rs) => rs.length > 1).length;
-  if (doubled)
-    say(
-      'import-tempo',
-      'info',
-      `${doubled} tick${doubled === 1 ? ' has' : 's have'} two tempo records: the one EZ2PORT plays (the last) is kept`,
-    );
+  if (doubled) say('import-tempo', 'info', said('ez.tempo', { n: doubled }));
   return { init: f32Decimal(init), events, used };
 }
 

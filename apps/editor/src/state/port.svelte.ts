@@ -2,7 +2,7 @@
 // of ez2play can do, and the test run in progress.
 
 import type { Located, Probe, RunEvent } from '../bridge';
-import { t } from '../i18n/i18n.svelte';
+import { errorText, t } from '../i18n/i18n.svelte';
 import type { App } from './app.svelte';
 
 export interface LogLine {
@@ -40,7 +40,7 @@ export class PortState {
       try {
         this.probe = await b.port.probe(s.data.ez2play);
       } catch (e) {
-        this.probeError = e instanceof Error ? e.message : String(e);
+        this.probeError = errorText(e);
       }
     }
     await this.app.input.loadControls();

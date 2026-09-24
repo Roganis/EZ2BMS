@@ -4,7 +4,7 @@
   // quick fix has a button for it (one undo step in its chart), and a rule
   // found in several places can be fixed everywhere at once.
   import type { Finding, Severity } from '@ez2bms/chart-core';
-  import { t, tCore, tSaid } from '../../i18n/i18n.svelte';
+  import { errorText, t, tCore, tSaid } from '../../i18n/i18n.svelte';
   import { applyFix, fixAll } from '../../port/fixes';
   import { songFindings } from '../../port/lint';
   import { app } from '../../state/app.svelte';
@@ -61,7 +61,7 @@
       if ((await applyFix(app, f)) && f.chart)
         toast(t('issues.fixed', { fix: tSaid(f.fix!.said) }), 'ok');
     } catch (e) {
-      toast(t('issues.fixFailed', { error: e instanceof Error ? e.message : String(e) }), 'error');
+      toast(t('issues.fixFailed', { error: errorText(e) }), 'error');
     }
   }
   const name = (rule: string) => rule.replace(/-/g, ' ');

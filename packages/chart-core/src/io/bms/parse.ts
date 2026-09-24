@@ -17,6 +17,8 @@
 //   by default each takes 1. A missing `#ENDIF` before the next `#IF` of the
 //   same random is closed for it (a common slip), and said.
 
+import { said, sayEnglish, type Said } from '../../i18n/say';
+
 export interface BmsLine {
   measure: number;
   /** Two characters, upper-case. */
@@ -50,7 +52,8 @@ export interface BmsDoc {
   measureLength: Map<number, string>;
   lines: BmsLine[];
   randoms: BmsRandom[];
-  warnings: { line: number; message: string }[];
+  /** Problems with a line, in English; `said` says each in the language chosen (i18n/say.ts). */
+  warnings: { line: number; message: string; said?: Said }[];
 }
 
 export interface BmsParseOptions {
@@ -87,7 +90,8 @@ export function parseBms(text: string, opts: BmsParseOptions = {}): BmsDoc {
     if (m && m[1] === '62') doc.base = 62;
   }
   const id = (s: string) => (doc.base === 62 ? s : s.toUpperCase());
-  const warn = (line: number, message: string) => doc.warnings.push({ line, message });
+  const warn = (line: number, s: Said) =>
+    doc.warnings.push({ line, message: sayEnglish(s), said: s });
   const stack: Frame[] = [];
   const active = () =>
     stack.every((f) => (f.kind === 'if' ? f.active : f.kind === 'switch' ? f.active : true));
@@ -124,19 +128,19 @@ export function parseBms(text: string, opts: BmsParseOptions = {}): BmsDoc {
             value = Math.min(max, Math.max(1, v));
           }
           doc.randoms.push({ line: n, max, value, fixed: word === 'SETRANDOM' });
-        } else if (on) warn(n, `#${word} without a number`);
+        } else if (on) warn(n, said('bms.random-number', { header: `#${word}` }));
         stack.push({ kind: 'random', value });
         return;
       }
       case 'IF': {
         const r = topRandom();
         if (!r) {
-          warn(n, '#IF with no #RANDOM before it: its lines are skipped');
+          warn(n, said('bms.if-no-random'));
           stack.push({ kind: 'if', active: false, taken: true });
           return;
         }
         if (stack.at(-1)?.kind === 'if') {
-          warn(n, '#IF before the last #IF was closed: closed for it');
+          warn(n, said('bms.if-open'));
           stack.pop();
         }
         const on = r.value !== 0 && r.value === num();
@@ -145,7 +149,7 @@ export function parseBms(text: string, opts: BmsParseOptions = {}): BmsDoc {
       }
       case 'ELSEIF': {
         const f = stack.at(-1);
-        if (f?.kind !== 'if') return warn(n, '#ELSEIF with no #IF');
+        if (f?.kind !== 'if') return warn(n, said('bms.elseif'));
         const r = topRandom();
         f.active = !f.taken && !!r && r.value !== 0 && r.value === num();
         f.taken ||= f.active;
@@ -153,7 +157,7 @@ export function parseBms(text: string, opts: BmsParseOptions = {}): BmsDoc {
       }
       case 'ELSE': {
         const f = stack.at(-1);
-        if (f?.kind !== 'if') return warn(n, '#ELSE with no #IF');
+        if (f?.kind !== 'if') return warn(n, said('bms.else'));
         f.active = !f.taken;
         f.taken = true;
         return;
@@ -162,13 +166,13 @@ export function parseBms(text: string, opts: BmsParseOptions = {}): BmsDoc {
       case 'END': {
         if (word === 'END' && !/^IF\b/i.test(arg)) break;
         const at = stack.map((f) => f.kind).lastIndexOf('if');
-        if (at < 0) return warn(n, '#ENDIF with no #IF');
+        if (at < 0) return warn(n, said('bms.endif'));
         stack.length = at;
         return;
       }
       case 'ENDRANDOM': {
         const at = stack.map((f) => f.kind).lastIndexOf('random');
-        if (at < 0) return warn(n, '#ENDRANDOM with no #RANDOM');
+        if (at < 0) return warn(n, said('bms.endrandom'));
         stack.length = at;
         return;
       }
@@ -189,7 +193,7 @@ export function parseBms(text: string, opts: BmsParseOptions = {}): BmsDoc {
       case 'CASE':
       case 'DEF': {
         const f = stack.at(-1);
-        if (f?.kind !== 'switch') return warn(n, `#${word} outside a #SWITCH`);
+        if (f?.kind !== 'switch') return warn(n, said('bms.case', { header: `#${word}` }));
         if (f.skipped) return;
         // Falls through: once a case matched, the ones after it run too, until #SKIP.
         if (f.matched || (word === 'DEF' ? f.value !== 0 : f.value !== 0 && f.value === num())) {
@@ -199,7 +203,7 @@ export function parseBms(text: string, opts: BmsParseOptions = {}): BmsDoc {
       }
       case 'SKIP': {
         const f = stack.at(-1);
-        if (f?.kind !== 'switch') return warn(n, '#SKIP outside a #SWITCH');
+        if (f?.kind !== 'switch') return warn(n, said('bms.skip'));
         if (f.active) {
           f.active = false;
           f.skipped = true;
@@ -209,7 +213,7 @@ export function parseBms(text: string, opts: BmsParseOptions = {}): BmsDoc {
       case 'ENDSW':
       case 'ENDSWITCH': {
         const at = stack.map((f) => f.kind).lastIndexOf('switch');
-        if (at < 0) return warn(n, '#ENDSW with no #SWITCH');
+        if (at < 0) return warn(n, said('bms.endsw'));
         stack.length = at;
         return;
       }
@@ -228,8 +232,7 @@ export function parseBms(text: string, opts: BmsParseOptions = {}): BmsDoc {
       }
       const slots: string[] = [];
       for (let k = 0; k + 1 < data.length; k += 2) slots.push(id(data.slice(k, k + 2)));
-      if (data.length % 2)
-        warn(n, `#${obj[1]}${channel}: an odd number of characters; the last is ignored`);
+      if (data.length % 2) warn(n, said('bms.odd', { object: `#${obj[1]}${channel}` }));
       const key = `${measure}:${channel}`;
       const prev = merged.get(key);
       // BGM keeps every line (each is a column of its own); anything else merges.
@@ -250,11 +253,11 @@ export function parseBms(text: string, opts: BmsParseOptions = {}): BmsDoc {
         else if (d === 'BPM' || d === 'EXBPM') {
           const v = Number.parseFloat(arg);
           if (Number.isFinite(v)) doc.bpm.set(key, v);
-          else warn(n, `#${word} is not a number`);
+          else warn(n, said('bms.not-number', { header: `#${word}` }));
         } else {
           const v = Number.parseFloat(arg);
           if (Number.isFinite(v)) doc.stop.set(key, v);
-          else warn(n, `#${word} is not a number`);
+          else warn(n, said('bms.not-number', { header: `#${word}` }));
         }
         return;
       }
