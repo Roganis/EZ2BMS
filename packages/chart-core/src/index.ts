@@ -71,6 +71,8 @@ export * from './lint/lint';
 export * from './lint/cabinet';
 export * from './lint/fixes';
 export * from './sound/resolve';
+export * from './input/bindspec';
+export * from './input/keyconf';
 export * from './sound/grouping';
 export * from './sound/usage';
 export * from './sound/rename';
