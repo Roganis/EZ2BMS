@@ -106,14 +106,15 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 
 ## Play
 
-| Command                                                    | Keys           | Palette |
-| ---------------------------------------------------------- | -------------- | ------- |
-| Controls and timing… (keys, controllers, offsets)          |                |         |
-| Mute / unmute background sounds                            | `Ctrl+Shift+M` |         |
-| Play / stop from the cursor                                | `Space`        |         |
-| Play again from where playback last started                | `Shift+Space`  |         |
-| Solo the lane under the pointer (again to clear)           | `Ctrl+Shift+S` |         |
-| Test play from the cursor (your keys, judged like EZ2PORT) | `Shift+Tab`    |         |
+| Command                                                                            | Keys           | Palette |
+| ---------------------------------------------------------------------------------- | -------------- | ------- |
+| Controls and timing… (keys, controllers, offsets)                                  |                |         |
+| Mute / unmute background sounds                                                    | `Ctrl+Shift+M` |         |
+| Play / stop from the cursor                                                        | `Space`        |         |
+| Play again from where playback last started                                        | `Shift+Space`  |         |
+| Record: play along from the cursor, then keep the take (R again stops, or retakes) | `R`            |         |
+| Solo the lane under the pointer (again to clear)                                   | `Ctrl+Shift+S` |         |
+| Test play from the cursor (your keys, judged like EZ2PORT)                         | `Shift+Tab`    |         |
 
 ## Chart
 

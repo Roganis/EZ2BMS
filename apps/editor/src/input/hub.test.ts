@@ -122,7 +122,9 @@ describe('the input hub', () => {
     backend.devPad!.button(pad, 0, false, (now - 20) * 1e6);
     backend.devPad!.button(pad, 0, true, (now - MAX_AGE_MS - 50) * 1e6);
     await flush();
-    expect(got[0]).toEqual({ channel: CH('Key1'), down: true, ms: now - 30 });
+    // Stamped in ns and back: equal to the float's last bit or so.
+    expect(got[0]).toMatchObject({ channel: CH('Key1'), down: true });
+    expect(got[0]!.ms).toBeCloseTo(now - 30, 6);
     expect(got[1]!.ms).toBeCloseTo(now - 20, 6);
     // Too old: taken as when it arrived.
     expect(got[2]!.down).toBe(true);

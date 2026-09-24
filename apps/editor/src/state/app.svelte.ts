@@ -6,6 +6,7 @@ import { AudioClient } from '../audio/client.svelte';
 import { createBackend, type AudioInfo, type Backend } from '../bridge';
 import { InputHub } from '../input/hub.svelte';
 import { PlayController } from '../play/controller.svelte';
+import { Recorder } from '../play/recorder.svelte';
 import { PortState } from './port.svelte';
 import { Autosave, formatWhen } from './autosave';
 import { Commands } from '../commands/registry';
@@ -33,6 +34,7 @@ export class App {
   readonly audio: AudioClient;
   readonly input: InputHub;
   readonly play: PlayController;
+  readonly recorder: Recorder;
   readonly port: PortState;
   readonly autosave: Autosave;
   readonly skin: SkinState;
@@ -58,6 +60,7 @@ export class App {
     this.audio = new AudioClient(backend, this.view, this.settings);
     this.input = new InputHub(this);
     this.play = new PlayController(this);
+    this.recorder = new Recorder(this);
     this.port = new PortState(this);
     this.autosave = new Autosave(backend);
     this.skin = new SkinState(backend);

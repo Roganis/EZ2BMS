@@ -189,6 +189,11 @@ export class AudioClient {
     await this.backend.audio.setEvents(events);
   }
 
+  /** The chart's clock (f32 tempo, STOPs as gaps) once `slot` is synced: what a take snaps by. */
+  timelineFor(slot: ChartSlot): PlanTimeline | undefined {
+    return this.planSlot === slot ? this.timeline : undefined;
+  }
+
   /** Song milliseconds at a pulse, as EZ2PORT will play it. */
   msAt(slot: ChartSlot, pulse: number): number {
     if (!this.timeline || this.planSlot !== slot) return 0;
@@ -293,6 +298,13 @@ export class AudioClient {
     // Never backwards: a late buffer must not make the cursor jitter.
     this.lastMs = Math.max(this.lastMs, ms);
     return this.lastMs;
+  }
+
+  /** A whole sound on a voice, now (a recorded press on a lane: it cuts the lane's last). */
+  async triggerSample(name: string, voice: number): Promise<void> {
+    const id = this.loaded.get(name)?.id;
+    if (id === null || id === undefined) return;
+    await this.backend.audio.trigger({ sample: id, voice, offset_ms: 0, until_ms: null });
   }
 
   /** Hear a sound (or part of one) now, cutting the last audition. */

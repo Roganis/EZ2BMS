@@ -79,7 +79,18 @@ export interface FieldState {
   stripGhost: { strip: number; y: number } | null;
   /** Cuts the stem's onsets would make, drawn on that strip. */
   stripSuggest: { strip: number; ys: readonly number[] } | null;
+  /**
+   * A recorded take not yet in the chart (play/recorder.svelte.ts), snapped
+   * as it will land; with `states` in review: what each note would become.
+   */
+  take: {
+    notes: readonly { x: number; y: number; l: number }[];
+    states: readonly ('ok' | 'clash' | 'silent')[] | null;
+  } | null;
 }
+
+/** A take's notes: fine, on a note already there, or with nothing to key. */
+const TAKE_COLOR = { ok: 0x7dffb2, clash: 0xff5c7a, silent: 0x8a8fa8 } as const;
 
 /** Background slices alternate between two tints so neighbours read apart. */
 const SLICE_TINTS = [0x58e1ff, 0x9d7bff];
@@ -1291,6 +1302,7 @@ export class PlayfieldRenderer {
       }
     }
     this.ghostText.end();
+    if (s.take) this.drawTake(g, s.take, l, vp, noteH);
     if (s.marquee) {
       const m = s.marquee;
       const x = Math.min(m.x0, m.x1);
@@ -1299,6 +1311,36 @@ export class PlayfieldRenderer {
         .fill({ color: NEON, alpha: 0.07 })
         .stroke({ width: 1, color: NEON, alpha: 0.8 });
     }
+  }
+
+  /**
+   * A take's ghost notes: outlined, in the take's colour (or, in review, by
+   * what each would become), holds as a faint bar. Only what is on screen.
+   */
+  private drawTake(
+    g: Graphics,
+    take: NonNullable<FieldState['take']>,
+    l: Layout,
+    vp: Viewport,
+    noteH: number,
+  ): void {
+    const lanes = [...l.lanes, ...l.offLanes];
+    take.notes.forEach((n, i) => {
+      const lane = lanes.find((g2) => g2.x === n.x);
+      if (!lane) return;
+      const y = vp.yOf(n.y);
+      const ye = n.l > 0 ? vp.yOf(n.y + n.l) : y;
+      if (y < -noteH || ye > l.height + noteH) return;
+      const c = TAKE_COLOR[take.states?.[i] ?? 'ok'];
+      if (n.l > 0)
+        g.rect(lane.left + lane.width * 0.2, ye, lane.width * 0.6, y - ye).fill({
+          color: c,
+          alpha: 0.22,
+        });
+      g.roundRect(lane.left + 2, y - noteH / 2, lane.width - 4, noteH, 3)
+        .fill({ color: c, alpha: 0.28 })
+        .stroke({ width: 1.5, color: c, alpha: 0.95 });
+    });
   }
 }
 

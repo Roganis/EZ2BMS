@@ -36,6 +36,14 @@ export function registerPlayCommands(app: App): void {
       },
     },
     {
+      id: 'play.record',
+      title: 'Record: play along from the cursor, then keep the take (R again stops, or retakes)',
+      group: 'Play',
+      keys: ['R'],
+      enabled: () => !!app.slot && !app.play.active,
+      run: () => app.recorder.toggle(),
+    },
+    {
       id: 'input.controls',
       title: 'Controls and timing… (keys, controllers, offsets)',
       group: 'Play',

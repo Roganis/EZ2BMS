@@ -10,6 +10,7 @@
   import { chartTiming } from '../state/timing';
   import Minimap from './Minimap.svelte';
   import PlayHud from './PlayHud.svelte';
+  import RecordPanel from './RecordPanel.svelte';
   import ResultCard from './ResultCard.svelte';
   import RunLog from './RunLog.svelte';
   import StripPanel from './strip/StripPanel.svelte';
@@ -299,6 +300,9 @@
       hoverSlice: app.strips.hover,
       stripGhost: app.strips.ghost,
       stripSuggest: suggested,
+      take: app.recorder.active
+        ? { notes: app.recorder.ghosts, states: app.recorder.review?.states ?? null }
+        : null,
     });
   });
 
@@ -378,6 +382,9 @@
   <Minimap {slot} {lo} {hi} />
   {#if app.play.hud && (app.play.active || v.mode === 'play')}
     <PlayHud hud={app.play.hud} box={fieldBox} active={!!app.play.active} />
+  {/if}
+  {#if app.recorder.active}
+    <RecordPanel box={fieldBox} />
   {/if}
   {#if app.port.logOpen}
     <RunLog />

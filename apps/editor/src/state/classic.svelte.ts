@@ -127,6 +127,12 @@ export class ClassicState {
     return true;
   }
 
+  /** Splits made on Classic's behalf (a recorded take's): un-keying heals them too. */
+  remember(doc: ChartDoc, splits: Iterable<NoteId>): void {
+    const s = this.madeOf(doc);
+    for (const id of splits) s.add(id);
+  }
+
   /** Delete in Classic mode: back to the background (and heal splits Classic made). */
   unkey(doc: ChartDoc, ids: Iterable<NoteId>): void {
     const r = classicUnkey(doc, ids, { ...this.env(), healable: this.madeOf(doc) });

@@ -29,7 +29,30 @@ export interface SettingsData {
   strips: Record<string, string[]>;
   /** Keyboard and controller bindings (input/hub.svelte.ts). */
   controls: Controls;
+  /** Record mode (play/recorder.svelte.ts). */
+  record: RecordOptions;
 }
+
+export interface RecordOptions {
+  /** Beats of count-in before the cursor. */
+  countIn: number;
+  /** Click every beat while recording. */
+  metronome: boolean;
+  /** Mute the chart's own lane sounds while recording (never in Classic). */
+  muteLanes: boolean;
+  /** A press held this long or longer is a hold. */
+  holdMinMs: number;
+  /** Snap to the editor's grid, or to EZ2's own (1/48 beat). */
+  quantize: 'grid' | 'exact';
+}
+
+export const DEFAULT_RECORD: RecordOptions = {
+  countIn: 4,
+  metronome: false,
+  muteLanes: false,
+  holdMinMs: 200,
+  quantize: 'grid',
+};
 
 /**
  * EZ2BMS's own bindings, in keys.ini's grammar (chart-core input/keyconf.ts),
@@ -58,6 +81,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   audioCacheMB: 2048,
   strips: {},
   controls: { ini: null, debounceMs: null },
+  record: DEFAULT_RECORD,
 };
 
 export class Settings {
