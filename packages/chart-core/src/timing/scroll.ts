@@ -135,3 +135,113 @@ export function scrollEventFromLegacy(s: {
   if (Object.keys(extra).length) e.extra = extra;
   return e;
 }
+
+// ---- the field's arithmetic: ez2/scroll.c, f32 where the port is f32 --------
+
+const f = Math.fround;
+
+/** MeasureScale outside modes 6/7/8/9/12: 1.6 px per tick (EZ2_SCROLL_MEASURE_SCALE). */
+export const SCROLL_MEASURE_SCALE = f(1.6);
+/** The beat the tempo query reports, in ticks (EZ2_SCROLL_BEAT). */
+export const SCROLL_BEAT = 48;
+/** The live rate closes a tenth of the gap to its target each frame (EZ2_SCROLL_CHASE). */
+export const SCROLL_CHASE = f(0.1);
+
+/** The lane-independent half of the field's scroll (`ez2_scroll`). */
+export interface ScrollState {
+  /** MeasureScale. */
+  base: number;
+  /** The live rate, eased toward the target. */
+  rate: number;
+  beat: number;
+}
+
+/** ez2_scroll_init: the live rate starts on the target, not eased up to it. */
+export function scrollInit(measureScale: number, beat: number, target: number): ScrollState {
+  return {
+    base: f(measureScale) !== 0 ? f(measureScale) : SCROLL_MEASURE_SCALE,
+    beat: beat > 0 ? Math.trunc(beat) : SCROLL_BEAT,
+    rate: f(target),
+  };
+}
+
+/**
+ * ez2_scroll_target: what the live rate chases - the speed dial (a percent,
+ * an int in the port) times the chart's multiplier, the percent scaled first.
+ */
+export function scrollTarget(percent: number, multiplier: number): number {
+  return f(f(f(Math.trunc(percent)) * f(0.01)) * f(multiplier));
+}
+
+/** ez2_scroll_tick: one frame of the chase, with no snap (the original has none). */
+export function scrollChase(rate: number, target: number): number {
+  const d = f(f(target) - rate);
+  return d !== 0 ? f(f(d * SCROLL_CHASE) + rate) : rate;
+}
+
+/**
+ * ez2_scroll_offset: pixels between a note and the cursor (positive: still
+ * above the judgement line), from chart ticks - never milliseconds. Doubles
+ * inside, as the port computes it, rounded to f32 at the end.
+ */
+export function scrollOffset(
+  s: ScrollState,
+  noteTick: number,
+  nowTick: number,
+  noteRate = 1,
+  laneRate = 1,
+): number {
+  const k = 48 / (s.beat > 0 ? s.beat : SCROLL_BEAT);
+  return f(k * (noteTick - nowTick) * f(noteRate) * (s.base * f(laneRate) * s.rate));
+}
+
+/** ez2_scroll_y: the note's y on a field whose judgement line is at `judgeY`. */
+export function scrollY(
+  s: ScrollState,
+  judgeY: number,
+  noteTick: number,
+  nowTick: number,
+  noteRate = 1,
+  laneRate = 1,
+): number {
+  return f(f(judgeY) - scrollOffset(s, noteTick, nowTick, noteRate, laneRate));
+}
+
+/** A scroll change on the tick axis: what the port keeps from each record. */
+export interface ScrollPoint {
+  tick: number;
+  /** The multiplier as the f32 the record carries. */
+  mult: number;
+}
+
+/**
+ * The chart's changes as the port holds them: the first EZ_SCROLL_MAX, sorted
+ * by tick (reference/play.c). A package carries them all on track 0 in
+ * order, so the first ones kept are the earliest; ties keep the list's
+ * order. `tickOf` places a pulse on the tick axis (STOP gaps included).
+ */
+export function scrollPoints(
+  chart: Pick<ChartData, 'scrollEvents' | 'extra'>,
+  tickOf: (y: number) => number,
+): ScrollPoint[] {
+  return scrollEventsOf(chart)
+    .slice(0, EZ_SCROLL_MAX)
+    .map((s) => ({ tick: tickOf(s.y), mult: f(s.rate) }))
+    .sort((a, b) => a.tick - b.tick);
+}
+
+/**
+ * The chart's multiplier at a (fractional) tick, as scroll_mult_advance
+ * walks it: the last change at or before the tick, 1.0 before the first
+ * (the port resets it every stage).
+ */
+export function multiplierAt(points: readonly ScrollPoint[], tick: number): number {
+  let lo = 0;
+  let hi = points.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (points[mid]!.tick <= tick) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo ? points[lo - 1]!.mult : 1;
+}

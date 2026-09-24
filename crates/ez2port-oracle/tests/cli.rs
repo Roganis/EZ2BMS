@@ -75,6 +75,18 @@ fn keyconf_reads_alternates_quotes_and_turntables_over_the_defaults() {
 }
 
 #[test]
+fn scroll_answers_each_line_of_a_script() {
+    // 250% at a multiplier of 1.5 is 3.75; the live rate starts on its
+    // target and closes a tenth of the gap per tick (ez2/scroll.c).
+    let v = run_with_stdin(&["scroll"], "target 250 1.5\ninit 1.6 48 2.5\ntick 3.75\n");
+    assert_eq!(v, serde_json::json!([3.75, 2.5, 2.625]));
+    let bad = oracle().arg("scroll").stdin(Stdio::piped()).stdout(Stdio::piped()).spawn();
+    let mut child = bad.unwrap();
+    child.stdin.take().unwrap().write_all(b"nonsense 1\n").unwrap();
+    assert_eq!(child.wait_with_output().unwrap().status.code(), Some(2));
+}
+
+#[test]
 fn bindspec_parses_every_kind_and_refuses_a_broken_device_token() {
     let v = run_with_stdin(&["bindspec"], "Left Ctrl\n0810:e501#2/h0.downright\n0810:e501/b\n");
     assert_eq!(v[0]["kind"], 1);

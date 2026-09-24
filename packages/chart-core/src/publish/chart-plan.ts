@@ -38,7 +38,7 @@ import {
 } from '../io/ez/ezff';
 import { cp949Field } from '../io/legacy-text';
 import { EngineTempo } from '../timing/engine-tempo';
-import { EZ_SCROLL_TYPE, scrollPlacement, wordFromF32 } from '../timing/scroll';
+import { EZ_SCROLL_TYPE, scrollEventsOf, scrollPlacement, wordFromF32 } from '../timing/scroll';
 import { TICKS_PER_BEAT, TICKS_PER_MEASURE, TickConverter } from '../timing/ticks';
 import type { Column } from '../modes/registry';
 import { BackingAllocator } from './tracks';
@@ -479,6 +479,16 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
   const tracks: EzffRecord[][] = Array.from({ length: Math.max(trackCount, 64) }, () => []);
   tracks[0]!.push(...tempoRecords);
   for (const k of kept) tracks[k.track]!.push(k.rec);
+  // A package carries every scroll change on track 0 - the port collects
+  // them from any track (reference/play.c) - including those an older import
+  // kept as records. The cabinet has them on their own tracks (above).
+  if (!cabinet)
+    for (const s of scrollEventsOf(chart))
+      tracks[0]!.push({
+        tick: clock.tick(s.y),
+        type: EZ_SCROLL_TYPE,
+        raw: [wordFromF32(s.rate), 0],
+      });
   if (cabinet) {
     cabinet.scroll = chart.scrollEvents.length;
     cabinet.kept = kept.length - cabinet.scroll;
@@ -552,12 +562,22 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
 
   // ---- close the stage after the last sound. A game chart keeps the length
   // it had (the original's end of stage is its own; only EZ2PORT's is known).
+  // EZ2PORT takes the scroll records out before it finds the stage's end
+  // (play.c: "THE SCROLL EVENTS COME FIRST"), so a change after the last
+  // sound does not keep a package's stage open: the closing record is still
+  // needed. The original queues them with everything else, so for the
+  // cabinet every record counts.
   let lastTick = 0;
-  for (const t of tracks) for (const r of t) lastTick = Math.max(lastTick, r.tick);
+  let lastEnd = 0;
+  for (const t of tracks)
+    for (const r of t) {
+      lastTick = Math.max(lastTick, r.tick);
+      if (r.type !== EZ_SCROLL_TYPE) lastEnd = Math.max(lastEnd, r.tick);
+    }
   const tailTick = Math.ceil(tempo.tickAtMs(endMs));
-  if (!game && tailTick > lastTick) {
+  if (!game && tailTick > (cabinet ? lastTick : lastEnd)) {
     tracks[0]!.push({ tick: tailTick, type: EZ_BPM, bpm: tempo.bpmAt(tailTick) });
-    lastTick = tailTick;
+    lastTick = Math.max(lastTick, tailTick);
   }
 
   for (const t of tracks) t.sort((a, b) => a.tick - b.tick);

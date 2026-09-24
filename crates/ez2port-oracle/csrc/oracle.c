@@ -43,6 +43,8 @@
  *                             and formatted back
  *   portcfg FILE              a settings.ini read over the defaults: whether
  *                             it was read, and the input Debounce
+ *   scroll                    stdin: a script of ez2/scroll.c calls (below);
+ *                             one JSON array of what each line returned
  */
 #include "ez2/abm.h"
 #include "ez2/bmson.h"
@@ -59,6 +61,7 @@
 #include "ez2/pvi.h"
 #include "ez2/ranking.h"
 #include "ez2/score.h"
+#include "ez2/scroll.h"
 #include "ez2/selectwheel.h"
 #include "ez2/songdb.h"
 #include "ez2/songini.h"
@@ -1339,6 +1342,57 @@ static int cmd_bindspec(void)
     return 0;
 }
 
+/* ---- scroll ------------------------------------------------------------------ */
+
+/* The field's placement arithmetic, one call per stdin line, each answer an
+ * element of one JSON array (f32 results as %.9g, which reads back exactly):
+ *
+ *   target PERCENT MULT          ez2_scroll_target
+ *   init BASE BEAT TARGET        ez2_scroll_init; answers the live rate
+ *   tick TARGET                  ez2_scroll_tick; answers the live rate
+ *   offset NOTE NOW NRATE LRATE  ez2_scroll_offset (ticks as doubles)
+ *   y JUDGE NOTE NOW NRATE LRATE ez2_scroll_y
+ */
+static int cmd_scroll(void)
+{
+    char line[512];
+    ez2_scroll s;
+    int first = 1;
+
+    ez2_scroll_init(&s, EZ2_SCROLL_MEASURE_SCALE, EZ2_SCROLL_BEAT, 1.0f);
+    printf("[");
+    while (fgets(line, sizeof line, stdin)) {
+        char op[16];
+        double a = 0, b = 0, c = 0, d = 0, e = 0;
+        int n = sscanf(line, "%15s %lf %lf %lf %lf %lf", op, &a, &b, &c, &d, &e);
+        float r;
+
+        if (n < 1)
+            continue;
+        if (!strcmp(op, "target") && n == 3)
+            r = ez2_scroll_target((int)a, (float)b);
+        else if (!strcmp(op, "init") && n == 4) {
+            ez2_scroll_init(&s, (float)a, (int)b, (float)c);
+            r = s.rate;
+        } else if (!strcmp(op, "tick") && n == 2) {
+            ez2_scroll_tick(&s, (float)a);
+            r = s.rate;
+        } else if (!strcmp(op, "offset") && n == 5)
+            r = ez2_scroll_offset(&s, a, b, (float)c, (float)d);
+        else if (!strcmp(op, "y") && n == 6)
+            r = ez2_scroll_y(&s, (float)a, b, c, (float)d, (float)e);
+        else {
+            fprintf(stderr, "scroll: bad line: %s", line);
+            return 2;
+        }
+        printf("%s", first ? "" : ",");
+        jfloat(r);
+        first = 0;
+    }
+    printf("]\n");
+    return 0;
+}
+
 int ez2bms_oracle_main(int argc, char **argv)
 {
     const char *c = argc > 1 ? argv[1] : "";
@@ -1383,6 +1437,7 @@ int ez2bms_oracle_main(int argc, char **argv)
         return cmd_keyconf(argc == 3);
     if (!strcmp(c, "bindspec") && argc == 2) return cmd_bindspec();
     if (!strcmp(c, "portcfg") && argc == 3) return cmd_portcfg(argv[2]);
+    if (!strcmp(c, "scroll") && argc == 2) return cmd_scroll();
     if (!strcmp(c, "bmson-import") && argc >= 5 && argc <= 7) {
         /* [KEY] [--rgba]: --rgba reads the art from test RGBA files */
         int images = !strcmp(argv[argc - 1], "--rgba");
@@ -1408,6 +1463,7 @@ int ez2bms_oracle_main(int argc, char **argv)
             "       ez2port-oracle select-chase COUNT FROM TO TICKS\n"
             "       ez2port-oracle select-swing DIFFS\n"
             "       ez2port-oracle keyconf [bare] | bindspec   (text on stdin)\n"
-            "       ez2port-oracle portcfg FILE\n");
+            "       ez2port-oracle portcfg FILE\n"
+            "       ez2port-oracle scroll   (script on stdin)\n");
     return 2;
 }

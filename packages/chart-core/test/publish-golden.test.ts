@@ -7,6 +7,11 @@
 // notes, and sample lengths that make backing tracks fill up and choke.
 // GOLDEN_UPDATE=1 rewrites them - only ever for a change meant to move
 // publish output, said so in the commit.
+//
+// M8 moved it once, on purpose: a package now carries scroll changes,
+// including the type-6 records an import kept (these charts have one). The
+// hashes from before are kept as they were, and the same charts with those
+// records taken out must still compile to them: nothing else moved.
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -22,6 +27,11 @@ import { KeysoundRegistry } from '../src/publish/keysounds';
 import { eziText } from '../src/publish/text';
 
 const FILE = resolve(import.meta.dirname, 'fixtures/synthetic/publish-golden.json');
+/** Recorded before M8; never rewritten. */
+const BEFORE_SCROLL = resolve(
+  import.meta.dirname,
+  'fixtures/synthetic/publish-golden-noscroll.json',
+);
 const MODES: ModeId[] = ['5k-only', 'scratch', 'ruby', '5k', '7k', '10k', '14k'];
 
 /** mulberry32: a small seeded PRNG, so the charts are the same on every run. */
@@ -111,8 +121,12 @@ function goldenChart(seed: number): { chart: ChartData; mode: ModeId; samples: S
   return { chart, mode, samples };
 }
 
-function hashOf(seed: number): string {
+function hashOf(seed: number, noScroll = false): string {
   const { chart, mode, samples } = goldenChart(seed);
+  if (noScroll && Array.isArray(chart.extra.x_ez_records))
+    chart.extra.x_ez_records = chart.extra.x_ez_records.filter(
+      (k) => (k as { type: number }).type !== 6,
+    );
   const reg = new KeysoundRegistry();
   const plan = compileChart(chart, {
     columns: modeDef(mode).columns,
@@ -150,5 +164,10 @@ describe('EZ2PORT publish output is pinned', () => {
     }
     expect(existsSync(FILE), 'the recorded hashes (GOLDEN_UPDATE=1 records them)').toBe(true);
     expect(now).toEqual(JSON.parse(readFileSync(FILE, 'utf8')));
+  });
+
+  it('without scroll changes, the bytes from before EZ2BMS published them', () => {
+    const now = Object.fromEntries(seeds.map((s) => [s, hashOf(s, true)]));
+    expect(now).toEqual(JSON.parse(readFileSync(BEFORE_SCROLL, 'utf8')));
   });
 });

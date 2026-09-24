@@ -41,6 +41,8 @@ row is proven by a test against the vendored engine core
 | Cabinet keysounds: 16-bit PCM rewrapped untouched, anything else cut as a publish cuts it                                                                                                                            | `ez2bms-audio` `export.rs`                    | `ez2port-oracle` `tests/audio.rs` - read by `ez2_ssf_parse` with the same samples                                                                                                                                                                                                                                                                       |
 | `keys.ini` and one binding token (a key, a pad button, a hat direction, an axis, the mouse, `vtt`): channels, alternates, quoting, comments, sections, the turntables, the first bad line, and the text written back | `input/{keyconf,bindspec}.ts`                 | `input.oracle.test.ts` - fixed and random files and tokens through `ez2_keyconf_parse`/`format` and `ez2_bindspec_parse`/`format`                                                                                                                                                                                                                       |
 | `settings.ini`'s `Debounce` (the only value EZ2BMS takes from it): read in 255-byte pieces as `fgets` reads it, `;` comments, `[`/`#` lines, the key in any case, `atoi`, 0-100 only, the last one winning           | `input/portcfg.ts`                            | `input.oracle.test.ts` - fixed and random files through `ez2_portcfg_load` (oracle `portcfg`)                                                                                                                                                                                                                                                           |
+| Scroll-speed changes: the rate the field chases (speed × the chart's multiplier), the chase of a tenth of the gap per frame, a note's offset and y                                                                   | `timing/scroll.ts`                            | `scroll.oracle.test.ts` - random scripts through `ez2_scroll_target`/`_tick`/`_offset`/`_y`, bit for bit                                                                                                                                                                                                                                                |
+| A package's scroll changes: every one (the chart's own, and those an older import kept) as a type-6 record on track 0 with the rate's f32                                                                            | `publish/chart-plan.ts`                       | `scroll.oracle.test.ts` - random charts with tempo changes, STOPs and kept records, read back by `ez2_chart_parse` at the ticks and words the chart says                                                                                                                                                                                                |
 
 ## Deliberate differences
 
@@ -412,6 +414,33 @@ Where EZ2BMS departs, deliberately:
 - a debounced edge with nothing after it waits for the next event, as in
   the port (a request in `ez2port-requests.md` §11), where re-reading once
   the window ends would free it.
+
+## Scroll-speed changes (M8; the play loop not in the oracle)
+
+The field's arithmetic is `ez2/scroll.c`, oracle-checked above. What feeds
+it is the play loop (`reference/play.c`), which the oracle does not build,
+so these follow its code:
+
+- **The multiplier in force** is the last change at or before the cursor's
+  fractional tick, 1.0 before the first; the port resets it every stage
+  (`scroll_mult_advance`). EZ2BMS: `multiplierAt`.
+- **Two changes on one tick:** the port sorts with `qsort`, which does not
+  say which of the two comes last. EZ2BMS takes the later one in the
+  chart's list, and lint (`scroll-same-tick`) warns when they differ.
+- **At most 4096** are kept, the first collected (tracks in order, records
+  in order). A package has them all on track 0 by tick, so the earliest
+  stay; lint (`scroll-count`) warns past 4096.
+- **They do not keep the stage open.** The port takes type-6 records out
+  before it finds the stage's end, where the original queues them with
+  everything else. A package's closing record is written after the last
+  sound whatever scroll changes come later; a cabinet export counts them,
+  as the original does.
+- **Where they go:** a package puts every one on track 0 with a second word
+  of 0 (the port reads only the first). A cabinet export puts each on the
+  track, and with the second word, it was imported with.
+- **The port's bmson importer does not read `x_scroll_events`**: a raw bmson
+  dropped in the songs folder plays without them. EZ2BMS writes packages,
+  so its own charts are not affected (a request in `ez2port-requests.md`).
 
 ## Port behaviour worth knowing
 
