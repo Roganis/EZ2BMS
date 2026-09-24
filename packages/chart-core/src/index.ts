@@ -1,0 +1,103 @@
+// @ez2bms/chart-core - public surface. Everything here is pure TypeScript with
+// no DOM and no Tauri: it runs the same in the editor, in Vitest and in Node.
+export const CHART_CORE_VERSION = '0.2.0';
+
+export * from './model/types';
+export * from './model/defaults';
+export * from './modes/ids';
+export * from './io/text';
+export * from './io/legacy-text';
+export * from './io/bmson/parse';
+export * from './io/bmson/serialize';
+export * from './io/bmson/mode-resolve';
+export * from './io/bmson/legacy-remap';
+export * from './io/bmson/open';
+export * from './io/bmson/v021';
+export { stableStringify, JsonValueError } from './util/stable-json';
+export * from './timing/timing-map';
+export * from './timing/ticks';
+export * from './timing/engine-tempo';
+export * from './timing/plan-timeline';
+export * from './timing/measures';
+export * from './timing/snap';
+export * from './timing/rescale';
+export * from './io/ez/ezff';
+export * from './io/ez/ezi';
+export * from './io/ez/import';
+export * from './io/ez/game';
+export * from './io/bms';
+export { lowerBound, upperBound } from './util/sorted';
+export * from './modes/lanes';
+export * from './modes/registry';
+export * from './modes/layout';
+export * from './modes/filenames';
+export * from './ez2data/gds';
+export * from './ez2data/pvi';
+export * from './ez2data/abm';
+export * from './ez2data/crypt';
+export * from './ez2data/keytable';
+export * from './ez2data/mixparam';
+export * from './ez2data/selectwheel';
+export * from './ez2data/songdb';
+export * from './ez2data/songtext';
+export { ciEq, decodeCp949 } from './ez2data/initext';
+export * from './edit/note-index';
+export * from './edit/doc';
+export * from './edit/commands';
+export * from './edit/classic';
+export * from './edit/record';
+export * from './slice/view';
+export * from './slice/ops';
+export * from './slice/midi';
+export * from './io/midi/smf';
+export * from './publish/keysounds';
+export * from './publish/songini-read';
+export * from './publish/rankings';
+export * from './publish/tracks';
+export * from './publish/chart-plan';
+export * from './publish/playback';
+export * from './publish/audible';
+export * from './publish/text';
+export * from './publish/package';
+export * from './publish/cabinet';
+export * from './publish/plate';
+export * from './publish/preview';
+export * from './publish/bga';
+export * from './media/movie';
+export * from './engine/songini';
+export * from './engine/score';
+export * from './engine/holdpreview';
+export * from './engine/session';
+export * from './engine/strum';
+export * from './engine/judge-sim';
+export * from './lint/lint';
+export * from './lint/cabinet';
+export * from './lint/fixes';
+export * from './sound/resolve';
+export * from './input/bindspec';
+export * from './input/keyconf';
+export * from './input/scancodes';
+export * from './input/channels';
+export * from './input/mapper';
+export * from './input/portcfg';
+export * from './input/calibrate';
+export * from './sound/grouping';
+export * from './sound/usage';
+export * from './sound/rename';
+export * from './song';
+export { synthChart, synthDoc, synthSoundName, type SynthOptions } from './dev/synth';
+export {
+  synthGame,
+  synthGds,
+  synthPe,
+  synthSsf,
+  SYNTH_EZ_TABLES,
+  SYNTH_SONGDB_TABLES,
+  type SynthGame,
+} from './dev/synthgame';
+export * from './timing/scroll';
+export * from './io/ez/kept';
+export * from './i18n/translate';
+export * from './i18n/core';
+export * from './i18n/say';
+export * from './io/said-error';

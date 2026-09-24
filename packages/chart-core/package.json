@@ -1,0 +1,27 @@
+{
+  "name": "@ez2bms/chart-core",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Chart model, timing, EZ2 formats, editing, engine emulation and publishing - pure TypeScript, no DOM",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bench": "vitest bench --run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "fast-check": "^4.10.2",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "intl-messageformat": "^10.7.18"
+  }
+}

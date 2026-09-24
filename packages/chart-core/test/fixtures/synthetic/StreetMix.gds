@@ -1,0 +1,81 @@
+; Synthetic .gds in the documented format (EZ2PORT docs/gds-slots.md).
+; Written by hand for tests - not copied from any game install.
+[General]
+NumberOfSlot=2
+MaxBaseStage=3
+
+[Slot1]
+NumberOfTrack=7
+Track1 =
+{
+    Key=15,16
+    SongTrack=10
+}
+Track2 =
+{
+    Key=10,-1
+    SongTrack=3
+}
+Track3 =
+{
+    Key=11,-1
+    SongTrack=4
+}
+Track4 =
+{
+    Key=12,-1
+    SongTrack=5
+}
+Track5 =
+{
+    Key=13,-1
+    SongTrack=6
+}
+Track6 =
+{
+    Key=14,-1
+    SongTrack=7
+}
+Track7 =
+{
+    Key=17,-1
+    SongTrack=11
+}
+
+[Slot2]
+NumberOfTrack=7
+Track1 =
+{
+    Key=23,24
+    SongTrack=10
+}
+Track2 =
+{
+    Key=18,-1
+    SongTrack=3
+}
+Track3 =
+{
+    Key=19,-1
+    SongTrack=4
+}
+Track4 =
+{
+    Key=20,-1
+    SongTrack=5
+}
+Track5 =
+{
+    Key=21,-1
+    SongTrack=6
+}
+Track6 =
+{
+    Key=22,-1
+    SongTrack=7
+}
+Track7 =
+{
+    Key=25,-1
+    SongTrack=11
+}

@@ -1,0 +1,13 @@
+[package]
+name = "ez2bms-launch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "EZ2BMS: find EZ2PORT's ez2play, learn what it supports, and run a chart in it"
+
+[dependencies]
+# A cabinet export's backup manifest (gamepatch.rs).
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

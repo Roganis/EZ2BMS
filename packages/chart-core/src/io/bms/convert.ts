@@ -1,0 +1,596 @@
+// A parsed BMS -> an EZ2BMS chart.
+//
+// Timing is exact where BMS is: a slot's position is a fraction of its
+// measure, and a measure's length (`#mmm02`) is read as the rational it
+// stands for (continued fractions: 0.75 is 3/4, 0.333 is 1/3), so every
+// position is a rational number of beats. The resolution is the least one
+// (a multiple of 240, at most 9600) that makes them all whole; a file that
+// would need more is placed at 240 pulses a beat and the worst rounding is
+// said. (BmsTWO does the same, with the same floor.)
+//
+// - BPM: `#BPM` is the start; channel 03 (a hex integer) and 08 (`#BPMxx`/
+//   `#EXBPMxx`) change it. One at the very start becomes the start tempo.
+// - STOP: channel 09, `#STOPxx` in 1/192 of a 4/4 measure - res * v / 48
+//   pulses. (EZ2 has no stops: publishing turns them into gaps.)
+// - Notes: 01 is background; 1x/2x are lanes by the channel map (lanes the
+//   map does not place go to the background, and are said); 3x/4x (hidden
+//   notes, heard only when hit) are left out unless asked for; 5x/6x are
+//   long notes by #LNTYPE 1 (pairs) or 2 (runs of slots); `#LNOBJ` ends the
+//   note before it on its channel; D/E (mines) are left out.
+// - BGA: channel 04 events, with `#BMPxx` headers; a movie becomes the song's
+//   BGA (M3), images are kept but EZ2PORT plays none.
+//
+// EZ2PORT reads no BMS, so there is no oracle here; the reason is written in
+// docs/ez2port-compat.md, and the tests check the timing against the BMS
+// memo's own arithmetic.
+
+import { said, sayEnglish, saying, type Said } from '../../i18n/say';
+import type { OpenNote, Severity } from '../../lint/lint';
+import { newChart } from '../../model/defaults';
+import type { BgaData, ChartData, NoteRec, SoundChannel, Tier } from '../../model/types';
+import { LANES } from '../../modes/lanes';
+import { modeDef } from '../../modes/registry';
+import type { ModeId } from '../../modes/ids';
+import { bmsIdNumber, type BmsDoc } from './parse';
+
+// ---- channel maps ---------------------------------------------------------------
+
+export type BmsMapId = 'ez2' | 'keys' | 'custom';
+
+export interface BmsChannelMap {
+  id: BmsMapId;
+  /**
+   * Its name, in English; `said` says it in the language chosen, when it is
+   * words rather than a name (Keys in order).
+   */
+  label: string;
+  said?: Said;
+  /** BMS channel (11-19, 21-29) -> bmson x; missing = background. */
+  lanes: Record<string, number>;
+}
+
+/**
+ * EZ2's own BME channels - each lane's `bme` in modes/lanes.ts, the one table
+ * both the reader and the BMS export use: keys 11-15 and 21-25, turntables
+ * 16/26, pedals 17/27, effectors 18/19/28/29 (what EZ2 conversions and
+ * BmsTWO's EZ2 docs use).
+ */
+export const EZ2_BME_MAP: BmsChannelMap = {
+  id: 'ez2',
+  label: 'EZ2 BME',
+  lanes: Object.fromEntries(LANES.map((l) => [l.bme, l.x])),
+};
+
+const KEYS_IN_ORDER = said('bms.map.keys');
+
+/** The BMS keys of each side, in play order: 1-5, then 6 and 7 (IIDX/beat). */
+const SIDE_KEYS = [
+  ['11', '12', '13', '14', '15', '18', '19'],
+  ['21', '22', '23', '24', '25', '28', '29'],
+] as const;
+
+/**
+ * IIDX/beat style: each side's keys in their BMS order onto the mode's key
+ * lanes left to right, the turntables onto the turntables. A single mode takes
+ * the 1P keys; a double mode (10K, 14K, Andromeda, Catch) splits its key
+ * lanes into a left and a right half, one per side - so a 5+5 file lands on
+ * 10K's 1P and 2P keys, and a 7+7 file on SpaceMix's fourteen keys in order.
+ * Differs from EZ2 BME where EZ2 orders keys differently (SpaceMix's and
+ * Andromeda's effectors sit between the two sides), and in leaving 17/27 -
+ * EZ2's pedals, IIDX's free zone - to the background.
+ */
+export function keysInOrderMap(mode: ModeId): BmsChannelMap {
+  const cols = modeDef(mode).columns.filter(
+    (c) => c.kind === 'white' || c.kind === 'blue' || c.kind === 'effector',
+  );
+  const lanes: Record<string, number> = { '16': 1, '26': 2 };
+  const double = cols.some((c) => c.side === 2);
+  const halves = double
+    ? [cols.slice(0, Math.ceil(cols.length / 2)), cols.slice(Math.ceil(cols.length / 2))]
+    : [cols];
+  halves.forEach((half, side) =>
+    half.forEach((c, i) => {
+      const ch = SIDE_KEYS[side]![i];
+      if (ch) lanes[ch] = c.x;
+    }),
+  );
+  return { id: 'keys', label: sayEnglish(KEYS_IN_ORDER), said: KEYS_IN_ORDER, lanes };
+}
+
+/**
+ * A map the other way, for writing BMS: each of the mode's lanes -> its
+ * channel (the first channel that names it). A lane the map does not place is
+ * missing, and its notes are written as background.
+ */
+export function inverseMap(map: BmsChannelMap, mode: ModeId): Map<number, string> {
+  const out = new Map<number, string>();
+  const lanes = new Set(modeDef(mode).columns.map((c) => c.x));
+  for (const [ch, x] of Object.entries(map.lanes).sort(([a], [b]) => a.localeCompare(b)))
+    if (lanes.has(x) && !out.has(x)) out.set(x, ch);
+  return out;
+}
+
+// ---- rationals ------------------------------------------------------------------
+
+const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : Math.abs(a));
+const lcm = (a: number, b: number) => (a / gcd(a, b)) * b;
+
+/** n/d, reduced, d > 0. */
+class Q {
+  constructor(
+    readonly n: number,
+    readonly d: number,
+  ) {}
+  static of(n: number, d = 1): Q {
+    const g = gcd(n, d) || 1;
+    return d < 0 ? new Q(-n / g, -d / g) : new Q(n / g, d / g);
+  }
+  add(o: Q): Q {
+    return Q.of(this.n * o.d + o.n * this.d, this.d * o.d);
+  }
+  mul(o: Q): Q {
+    return Q.of(this.n * o.n, this.d * o.d);
+  }
+  get value(): number {
+    return this.n / this.d;
+  }
+}
+
+/**
+ * The rational a measure length stands for: the first continued-fraction
+ * convergent within 1/2000 of a measure (0.333 -> 1/3; 0.140625 -> 9/64).
+ */
+export function measureRational(x: number): { n: number; d: number } {
+  let [h0, h1, k0, k1] = [0, 1, 1, 0];
+  let v = x;
+  for (let i = 0; i < 20; i++) {
+    const a = Math.floor(v);
+    [h0, h1] = [h1, a * h1 + h0];
+    [k0, k1] = [k1, a * k1 + k0];
+    if (Math.abs(h1 / k1 - x) < 1 / 2000 || v - a < 1e-12) break;
+    v = 1 / (v - a);
+  }
+  return { n: h1, d: k1 };
+}
+
+// ---- conversion -----------------------------------------------------------------
+
+export interface BmsConvertOptions {
+  mode?: ModeId;
+  tier?: Tier;
+  map?: BmsChannelMap;
+  /** Hidden notes (3x/4x) as background sounds, not left out. */
+  hiddenAsBackground?: boolean;
+  /** The file name, for tier keywords. */
+  file?: string;
+  /** A #WAV name -> the file as it is in the folder (any case, another extension), or undefined. */
+  resolve?: (name: string) => string | undefined;
+}
+
+export interface ConvertedBms {
+  data: ChartData;
+  mode: ModeId;
+  tier: Tier;
+  notes: OpenNote[];
+  /** Files the chart plays or shows, as the folder has them: sounds, BGA files, the stage image, the preview. */
+  sounds: string[];
+  bga: string[];
+  stagefile?: string;
+  preview?: string;
+  /** Which lanes the notes use under the map (to choose a mode by). */
+  lanesUsed: number[];
+}
+
+const MAX_RES = 9600;
+const MOVIE = /\.(mp4|m4v|mov|webm|mkv|wmv|asf|avi|mpg|mpeg)$/i;
+
+interface Obj {
+  q: Q; // beats from the start
+  ch: string;
+  id: string;
+  /** For LNTYPE 2: the slot's end. */
+  end: Q;
+}
+
+export function convertBms(doc: BmsDoc, opts: BmsConvertOptions = {}): ConvertedBms {
+  const notes: OpenNote[] = [];
+  const say = (rule: string, severity: Severity, s: Said) =>
+    notes.push({ rule, severity, ...saying(s) });
+  for (const w of doc.warnings)
+    say('bms-read', 'warning', said('bms.line', { line: w.line, problem: w.said ?? w.message }));
+
+  // Measure starts, in beats.
+  const lastMeasure = Math.max(0, ...doc.lines.map((l) => l.measure), ...doc.measureLength.keys());
+  /** Each measure's length in beats. */
+  const beats: Q[] = [];
+  for (let m = 0; m <= lastMeasure + 1; m++) {
+    const s = doc.measureLength.get(m);
+    const v = s === undefined ? 1 : Number.parseFloat(s);
+    if (!(v > 0))
+      say('bms-read', 'warning', said('bms.measure-length', { measure: m, length: String(s) }));
+    const r = v > 0 ? measureRational(v) : { n: 1, d: 1 };
+    beats.push(Q.of(4 * r.n, r.d));
+  }
+  const starts: Q[] = [Q.of(0)];
+  for (let m = 0; m <= lastMeasure + 1; m++) starts.push(starts[m]!.add(beats[m]!));
+
+  // Every object, at its beat.
+  const objs: Obj[] = [];
+  for (const l of doc.lines) {
+    const n = l.slots.length;
+    const len = beats[l.measure]!;
+    l.slots.forEach((id, i) => {
+      if (id === '00') return;
+      const q = starts[l.measure]!.add(len.mul(Q.of(i, n)));
+      objs.push({ q, ch: l.channel, id, end: starts[l.measure]!.add(len.mul(Q.of(i + 1, n))) });
+    });
+  }
+
+  // The resolution that makes every position whole.
+  let res = 240;
+  let exact = true;
+  for (const o of objs) {
+    const need = lcm(res, o.q.d);
+    if (need > MAX_RES || !Number.isSafeInteger(need)) {
+      exact = false;
+      break;
+    }
+    res = need;
+  }
+  if (!exact) res = 240;
+  let worst = 0;
+  const yOf = (q: Q) => {
+    const y = q.value * res;
+    const r = Math.round(y);
+    worst = Math.max(worst, Math.abs(r - y));
+    return r;
+  };
+
+  // Map, mode, tier.
+  const map = opts.map ?? EZ2_BME_MAP;
+  const lanesUsed = new Set<number>();
+  for (const o of objs) {
+    const p = playable(o.ch);
+    if (!p) continue;
+    const x = map.lanes[p];
+    if (x) lanesUsed.add(x);
+  }
+  const mode = opts.mode ?? guessMode(lanesUsed);
+  const modeLanes = new Set(modeDef(mode).columns.map((c) => c.x));
+  const tier = opts.tier ?? guessTier(doc, opts.file ?? '');
+
+  const h = (k: string) => doc.headers.get(k);
+  const data: ChartData = newChart({
+    mode,
+    tier,
+    title: h('TITLE') ?? '',
+    artist: h('ARTIST') ?? '',
+    genre: h('GENRE') ?? '',
+    bpm: 130,
+  });
+  const info = data.info;
+  info.subtitle = h('SUBTITLE') ?? '';
+  if (h('SUBARTIST')) info.subartists = [h('SUBARTIST')!];
+  info.resolution = res;
+  const lv = Number.parseInt(h('PLAYLEVEL') ?? '', 10);
+  if (Number.isFinite(lv) && lv >= 1 && lv <= 20) info.level = lv;
+  else {
+    info.level = Math.min(20, Math.max(1, Number.isFinite(lv) ? lv : 1));
+    const level = h('PLAYLEVEL');
+    say(
+      'bms-level',
+      'warning',
+      level === undefined
+        ? said('bms.level.none', { set: info.level })
+        : said('bms.level', { level, set: info.level }),
+    );
+  }
+  for (const k of ['RANK', 'DEFEXRANK', 'TOTAL', 'PLAYER', 'DIFFICULTY', 'LNMODE'])
+    if (h(k) !== undefined) info.extra[`x_bms_${k.toLowerCase()}`] = h(k);
+
+  // Tempo.
+  const start = Number.parseFloat(h('BPM') ?? '');
+  let initBpm = start > 0 ? start : 130;
+  if (!(start > 0)) say('bms-read', 'warning', said('bms.no-bpm', { bpm: initBpm }));
+  const tempo = new Map<number, number>();
+  const stops = new Map<number, number>();
+  let badRefs = 0;
+  for (const o of objs) {
+    if (o.ch === '03') {
+      const v = Number.parseInt(o.id, 16);
+      if (v > 0) tempo.set(yOf(o.q), v);
+    } else if (o.ch === '08') {
+      const v = doc.bpm.get(o.id);
+      if (v !== undefined && v > 0) tempo.set(yOf(o.q), v);
+      else badRefs++;
+    } else if (o.ch === '09') {
+      const v = doc.stop.get(o.id);
+      if (v !== undefined && v > 0)
+        stops.set(yOf(o.q), (stops.get(yOf(o.q)) ?? 0) + Math.round((res * v) / 48));
+      else badRefs++;
+    }
+  }
+  if (tempo.has(0)) {
+    initBpm = tempo.get(0)!;
+    tempo.delete(0);
+  }
+  info.initBpm = initBpm;
+  data.bpmEvents = [...tempo].sort((a, b) => a[0] - b[0]).map(([y, bpm]) => ({ y, bpm }));
+  data.stopEvents = [...stops]
+    .sort((a, b) => a[0] - b[0])
+    .map(([y, duration]) => ({ y, duration }));
+  if (badRefs) say('bms-read', 'warning', said('bms.bad-refs', { n: badRefs }));
+  if (stops.size) say('bms-stop', 'info', said('bms.stops', { n: stops.size }));
+
+  // Sounds.
+  const channels = new Map<string, SoundChannel>();
+  const sounds = new Set<string>();
+  const undefinedWav = new Set<string>();
+  const unfound = new Set<string>();
+  const channelFor = (wid: string): SoundChannel => {
+    const written = doc.wav.get(wid);
+    let name: string;
+    if (written === undefined) {
+      undefinedWav.add(wid);
+      name = `wav ${wid}.wav`;
+    } else {
+      const found = opts.resolve ? opts.resolve(written) : written;
+      if (found === undefined) unfound.add(written);
+      else sounds.add(found);
+      name = (found ?? written).replace(/\\/g, '/');
+    }
+    let ch = channels.get(name.toLowerCase());
+    if (!ch) channels.set(name.toLowerCase(), (ch = { id: 0, name }));
+    return ch;
+  };
+
+  // Notes.
+  const out: NoteRec[] = [];
+  /** Each note's channel, numbered once all are known. */
+  const soundOf = new Map<NoteRec, SoundChannel>();
+  let nextId = 1;
+  const add = (o: Obj, x: number, l = 0) => {
+    const n: NoteRec = { id: nextId++, ch: 0, x, y: yOf(o.q), l, c: false };
+    out.push(n);
+    soundOf.set(n, channelFor(o.id));
+    return n;
+  };
+  const counts = {
+    hidden: 0,
+    mines: 0,
+    offMode: 0,
+    unmapped: new Set<string>(),
+    other: new Set<string>(),
+  };
+  const lnobj = doc.lnobj;
+  /** Last lane note per channel (for #LNOBJ). */
+  const lastOn = new Map<string, NoteRec>();
+  const byChannel = new Map<string, Obj[]>();
+  for (const o of objs) {
+    const l = byChannel.get(o.ch) ?? [];
+    l.push(o);
+    byChannel.set(o.ch, l);
+  }
+  const sorted = [...objs].sort((a, b) => a.q.value - b.q.value);
+  for (const o of sorted) {
+    const c = o.ch;
+    if (c === '01') add(o, 0);
+    else if (/^[12][1-9]$/.test(c)) {
+      if (lnobj.has(o.id)) {
+        const prev = lastOn.get(c);
+        if (prev && !prev.l) prev.l = Math.max(0, yOf(o.q) - prev.y);
+        lastOn.delete(c);
+        continue;
+      }
+      const x = laneX(c, map, modeLanes, counts);
+      const n = add(o, x);
+      if (x) lastOn.set(c, n);
+    } else if (/^[34][1-9]$/.test(c)) {
+      counts.hidden++;
+      if (opts.hiddenAsBackground) add(o, 0);
+    } else if (/^[DE][1-9]$/.test(c)) counts.mines++;
+    else if (/^[56][1-9]$/.test(c))
+      continue; // below
+    else if (!['03', '04', '06', '07', '08', '09'].includes(c)) counts.other.add(c);
+  }
+  // Long notes on 5x/6x.
+  for (const [c, list] of byChannel) {
+    if (!/^[56][1-9]$/.test(c)) continue;
+    const lane = `${Number(c[0]) - 4}${c[1]}`;
+    const x = laneX(lane, map, modeLanes, counts);
+    const objsSorted = [...list].sort((a, b) => a.q.value - b.q.value);
+    if (doc.lntype === 2) {
+      // A run of filled slots is one note, held to the end of its last slot.
+      let run: Obj | undefined;
+      let runEnd: Q | undefined;
+      for (const o of objsSorted) {
+        if (run && runEnd && Math.abs(o.q.value - runEnd.value) < 1e-9) {
+          runEnd = o.end;
+          continue;
+        }
+        if (run && runEnd) add(run, x, x ? yOf(runEnd) - yOf(run.q) : 0);
+        run = o;
+        runEnd = o.end;
+      }
+      if (run && runEnd) add(run, x, x ? yOf(runEnd) - yOf(run.q) : 0);
+    } else {
+      for (let i = 0; i < objsSorted.length; i += 2) {
+        const a = objsSorted[i]!;
+        const b = objsSorted[i + 1];
+        add(a, x, x && b ? yOf(b.q) - yOf(a.q) : 0);
+        if (!b) say('bms-read', 'warning', said('bms.ln-end', { channel: c }));
+      }
+    }
+  }
+  if (doc.lntype !== 1 && doc.lntype !== 2)
+    say('bms-read', 'warning', said('bms.lntype', { lntype: doc.lntype }));
+
+  // Channels in the order of their #WAV ids.
+  const wavIndex = (name: string) => {
+    for (const [k, v] of doc.wav)
+      if (
+        v.replace(/\\/g, '/').toLowerCase() === name.toLowerCase() ||
+        (opts.resolve?.(v) ?? v).toLowerCase() === name.toLowerCase()
+      )
+        return bmsIdNumber(k, doc.base);
+    const m = /^wav (..)\.wav$/.exec(name);
+    return m ? bmsIdNumber(m[1]!, doc.base) : 1e9;
+  };
+  const list = [...channels.values()].sort(
+    (a, b) => wavIndex(a.name) - wavIndex(b.name) || a.name.localeCompare(b.name),
+  );
+  list.forEach((ch, i) => (ch.id = i + 1));
+  for (const n of out) n.ch = soundOf.get(n)!.id;
+  data.channels = list;
+  data.notes = out.sort((a, b) => a.y - b.y || a.x - b.x || a.id - b.id);
+
+  // BGA.
+  const bgaFiles = new Set<string>();
+  const bgaEvents = (ch: string) =>
+    objs.filter((o) => o.ch === ch).map((o) => ({ y: yOf(o.q), id: bmsIdNumber(o.id, doc.base) }));
+  const bga: BgaData = {
+    header: [...doc.bmp].map(([k, v]) => {
+      const found = opts.resolve ? (opts.resolve(v) ?? v) : v;
+      bgaFiles.add(found);
+      return { id: bmsIdNumber(k, doc.base), name: found.replace(/\\/g, '/') };
+    }),
+    bga: bgaEvents('04'),
+    layer: bgaEvents('07'),
+    poor: bgaEvents('06'),
+  };
+  if (bga.bga.length || bga.layer.length) {
+    data.bga = bga;
+    const used = new Set(bga.bga.map((e) => e.id));
+    const movie = bga.header.some((x) => used.has(x.id) && MOVIE.test(x.name));
+    if (!movie) say('bms-bga', 'info', said('bms.bga-images'));
+  }
+
+  // Said once each.
+  if (!exact) say('bms-rounding', 'warning', said('bms.rounding', { worst: worst.toFixed(2) }));
+  if (counts.hidden)
+    say(
+      'bms-hidden',
+      'info',
+      said(opts.hiddenAsBackground ? 'bms.hidden.background' : 'bms.hidden', { n: counts.hidden }),
+    );
+  if (counts.mines) say('bms-mines', 'info', said('bms.mines', { n: counts.mines }));
+  if (counts.unmapped.size)
+    say(
+      'bms-lanes',
+      'warning',
+      said('bms.unmapped', {
+        n: counts.unmapped.size,
+        channels: [...counts.unmapped].sort().join(', '),
+        map: map.said ?? map.label,
+      }),
+    );
+  if (counts.offMode) say('bms-lanes', 'warning', said('bms.off-mode', { n: counts.offMode }));
+  if (counts.other.size)
+    say(
+      'bms-read',
+      'info',
+      said('bms.other-channels', {
+        n: counts.other.size,
+        channels: [...counts.other].sort().join(', '),
+      }),
+    );
+  for (const k of ['SCROLL', 'SPEED']) {
+    const any = [...doc.headers.keys()].some((x) => x.startsWith(k));
+    if (any) say('bms-read', 'info', said('bms.scroll', { header: `#${k}` }));
+  }
+  if (undefinedWav.size)
+    say(
+      'bms-sound',
+      'warning',
+      said('bms.undefined-wav', {
+        n: undefinedWav.size,
+        ids: [...undefinedWav].slice(0, 8).join(', '),
+      }),
+    );
+  if (unfound.size)
+    say(
+      'bms-sound',
+      'warning',
+      said('bms.missing-sound', {
+        n: unfound.size,
+        names: `${[...unfound].slice(0, 6).join(', ')}${unfound.size > 6 ? '...' : ''}`,
+      }),
+    );
+  const rnd = doc.randoms.filter((r) => r.value && !r.fixed);
+  if (rnd.length) {
+    // Each choice a message of its own, and the list one too: the
+    // separator is the language's (a Japanese list is joined with 、).
+    const choices = rnd
+      .map((r): Said => said('bms.random.choice', { line: r.line, value: r.value, max: r.max }))
+      .reduce((list, item) => said('bms.random.list', { list, item }));
+    say('bms-random', 'info', said('bms.random', { n: rnd.length, choices }));
+  }
+
+  const stage = h('STAGEFILE');
+  const preview = h('PREVIEW');
+  return {
+    data,
+    mode,
+    tier,
+    notes,
+    sounds: [...sounds],
+    bga: [...bgaFiles],
+    ...(stage ? { stagefile: opts.resolve ? (opts.resolve(stage) ?? stage) : stage } : {}),
+    ...(preview ? { preview: opts.resolve ? (opts.resolve(preview) ?? preview) : preview } : {}),
+    lanesUsed: [...lanesUsed].sort((a, b) => a - b),
+  };
+}
+
+/** A 1x/2x (or the 1x/2x a 5x/6x long note stands for) channel. */
+function playable(ch: string): string | undefined {
+  if (/^[12][1-9]$/.test(ch)) return ch;
+  if (/^[56][1-9]$/.test(ch)) return `${Number(ch[0]) - 4}${ch[1]}`;
+  return undefined;
+}
+
+function laneX(
+  ch: string,
+  map: BmsChannelMap,
+  modeLanes: Set<number>,
+  counts: { offMode: number; unmapped: Set<string> },
+): number {
+  const x = map.lanes[ch];
+  if (!x) {
+    counts.unmapped.add(ch);
+    return 0;
+  }
+  if (!modeLanes.has(x)) {
+    counts.offMode++;
+    return 0;
+  }
+  return x;
+}
+
+/** The smallest of StreetMix, 7StreetMix, ClubMix, SpaceMix that has every lane used; the fullest otherwise. */
+export function guessMode(used: ReadonlySet<number>): ModeId {
+  const order: ModeId[] = ['5k', '7k', '10k', '14k'];
+  let best: ModeId = '5k';
+  let bestHit = -1;
+  for (const m of order) {
+    const lanes = new Set(modeDef(m).columns.map((c) => c.x));
+    const hit = [...used].filter((x) => lanes.has(x)).length;
+    if (hit === used.size) return m;
+    if (hit > bestHit) [best, bestHit] = [m, hit];
+  }
+  return best;
+}
+
+/** `#DIFFICULTY` 1-2 NM, 3 HD, 4 SHD, 5 EX; else keywords in the file name or title; else NM. */
+export function guessTier(doc: BmsDoc, file: string): Tier {
+  const d = Number.parseInt(doc.headers.get('DIFFICULTY') ?? '', 10);
+  if (d === 3) return 'HD';
+  if (d === 4) return 'SHD';
+  if (d === 5) return 'EX';
+  if (d === 1 || d === 2) return 'NM';
+  const s =
+    `${file} ${doc.headers.get('TITLE') ?? ''} ${doc.headers.get('SUBTITLE') ?? ''}`.toLowerCase();
+  if (/insane|leggendaria|black|\[x\]|_x\b|\bex\b/.test(s)) return 'EX';
+  if (/another|\[a\]|_a\b|\bshd\b/.test(s)) return 'SHD';
+  if (/hyper|hard|\[h\]|_h\b|\bhd\b/.test(s)) return 'HD';
+  return 'NM';
+}

@@ -1,0 +1,33 @@
+{
+  "name": "@ez2bms/editor",
+  "version": "0.2.0",
+  "private": true,
+  "description": "EZ2BMS editor front end (Svelte 5 + PixiJS), hosted by Tauri",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@ez2bms/chart-core": "workspace:*",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
+    "pixi.js": "^8.21.0",
+    "svelte": "^5.57.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "@types/node": "^22.0.0",
+    "happy-dom": "^20.14.5",
+    "svelte-check": "^4.7.6",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  }
+}

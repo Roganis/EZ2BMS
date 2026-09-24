@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      # The oracle CLI lets chart-core tests compare against EZ2PORT's own code;
+      # render_specs lets them compare the sound model against the real mixer,
+      # preview our song preview against the port's importer; art and plate,
+      # our song art and title plates against the port's own.
+      - run: cargo build -p ez2port-oracle --release
+      - run: cargo build -p ez2bms-audio --examples --release
+      - run: cargo build -p ez2bms-media --examples --release
+      # The CJK font for plates in Korean, Japanese and Chinese (20 MB, pinned).
+      - uses: actions/cache@v4
+        with:
+          path: fonts/NotoSansCJK-Bold.ttc
+          key: fonts-${{ hashFiles('scripts/fetch-fonts.mjs') }}
+      - run: node scripts/fetch-fonts.mjs
+      - run: pnpm test
+        env:
+          EZ2PORT_ORACLE: ${{ github.workspace }}/target/release/ez2port-oracle
+      - run: node --test scripts/release-config.test.mjs
+      - run: pnpm --filter @ez2bms/editor exec playwright install --with-deps chromium
+      - run: pnpm e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/editor/test-results
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      # ALSA headers, for the audio crate's real-device backend (cpal); udev
+      # headers, so the SDL the input crate builds finds pads through udev as
+      # EZ2PORT's does (without them it falls back to watching /dev/input).
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev
+      - run: cargo fmt --all -- --check
+      - uses: actions/cache@v4
+        with:
+          path: fonts/NotoSansCJK-Bold.ttc
+          key: fonts-${{ hashFiles('scripts/fetch-fonts.mjs') }}
+      - run: node scripts/fetch-fonts.mjs
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test
+      - run: cargo build -p ez2bms-audio --features cpal
+      # SDL built from source (cmake) and driven with virtual joysticks.
+      - run: cargo test -p ez2bms-input --features sdl
+
+  # The desktop host needs webkit2gtk on Linux, so it has a job of its own.
+  tauri:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: >-
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends
+          libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libgtk-3-dev
+          librsvg2-dev libayatana-appindicator3-dev libasound2-dev libudev-dev
+      - run: cargo clippy -p ez2bms --all-targets -- -D warnings
+      - run: cargo test -p ez2bms
+      # A release build's settings (scripts/release-config.mjs) merged in as
+      # tauri build --config does: the host still builds and its tests pass
+      # with the updater on. The public key is a throwaway one; its private
+      # half was deleted when it was made.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/release-config.mjs "$RUNNER_TEMP/release-config.json"
+        env:
+          TAURI_UPDATER_PUBKEY: dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE1M0Q4ODZDODZDNjY2MDIKUldRQ1pzYUdiSWc5cFlSOHJYdngzVW1WQUVRQVlyM0RPQWRKS1hrZnNNNUlVMXpNa0NUeVpPdzYK
+          TAURI_SIGNING_PRIVATE_KEY: throwaway
+      - run: TAURI_CONFIG="$(cat "$RUNNER_TEMP/release-config.json")" cargo test -p ez2bms
+
+  # What runs on the owner's Windows machines: audio (WASAPI through cpal),
+  # the ez2play launcher (CREATE_NO_WINDOW), controllers (SDL built with MSVC)
+  # and the host (WebView2).
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p ez2bms-audio -p ez2bms-launch -p ez2bms-media -p ez2bms
+      - run: cargo build -p ez2bms-audio --features cpal
+      - run: cargo test -p ez2bms-input --features sdl

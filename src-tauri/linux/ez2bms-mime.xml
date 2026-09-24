@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The chart files EZ2BMS opens (tauri.conf.json fileAssociations). No
+     freedesktop type exists for either, so the .deb brings these; dpkg's
+     shared-mime-info trigger adds them to the database on install. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-bmson">
+    <comment>bmson chart</comment>
+    <sub-class-of type="application/json"/>
+    <glob pattern="*.bmson"/>
+  </mime-type>
+  <mime-type type="text/x-bms">
+    <comment>BMS chart</comment>
+    <sub-class-of type="text/plain"/>
+    <glob pattern="*.bms"/>
+    <glob pattern="*.bme"/>
+    <glob pattern="*.bml"/>
+    <glob pattern="*.pms"/>
+  </mime-type>
+</mime-info>

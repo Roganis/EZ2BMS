@@ -1,0 +1,89 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { registerBuiltins } from '../commands/builtin';
+  import { registerNoteCommands } from '../commands/notes';
+  import { registerPlayCommands } from '../commands/play';
+  import { registerPortCommands } from '../commands/port';
+  import { registerClassicCommands } from '../commands/classic';
+  import { registerSliceCommands } from '../commands/slice';
+  import { app } from '../state/app.svelte';
+  import AboutDialog from './AboutDialog.svelte';
+  import CommandPalette from './CommandPalette.svelte';
+  import ControlsDialog from './ControlsDialog.svelte';
+  import Editor from './Editor.svelte';
+  import ExportDialog from './export/ExportDialog.svelte';
+  import ImportWizard from './import/ImportWizard.svelte';
+  import NewChartDialog from './NewChartDialog.svelte';
+  import PrefsDialog from './PrefsDialog.svelte';
+  import PublishDialog from './PublishDialog.svelte';
+  import StartScreen from './StartScreen.svelte';
+  import Toasts from './Toasts.svelte';
+  import UpdateDialog from './UpdateDialog.svelte';
+
+  registerBuiltins(app);
+  registerNoteCommands(app);
+  registerPlayCommands(app);
+  registerPortCommands(app);
+  registerClassicCommands(app);
+  registerSliceCommands(app);
+
+  onMount(() => {
+    void app.init();
+    const onKey = (e: KeyboardEvent) => {
+      if (app.view.paletteOpen && e.key !== 'Escape') return;
+      // The Publish, Import, Export and Controls dialogs take their own keys.
+      if (
+        app.publish.open ||
+        app.importer.open ||
+        app.exporter.open ||
+        app.controls.open ||
+        app.diag.aboutOpen ||
+        app.prefsOpen ||
+        app.updates.dialogOpen
+      )
+        return;
+      app.commands.handleKey(e, app.view.covered);
+    };
+    const onUnload = (e: BeforeUnloadEvent) => {
+      if (app.project?.dirty) e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('beforeunload', onUnload);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('beforeunload', onUnload);
+    };
+  });
+</script>
+
+{#if app.project}
+  <Editor project={app.project} />
+{:else}
+  <StartScreen />
+{/if}
+{#if app.project && app.view.newChartOpen}
+  <NewChartDialog onclose={() => (app.view.newChartOpen = false)} />
+{/if}
+{#if app.project && app.publish.open}
+  <PublishDialog />
+{/if}
+{#if app.importer.open}
+  <ImportWizard />
+{/if}
+{#if app.project && app.exporter.open}
+  <ExportDialog />
+{/if}
+{#if app.controls.open}
+  <ControlsDialog />
+{/if}
+{#if app.diag.aboutOpen}
+  <AboutDialog />
+{/if}
+{#if app.prefsOpen}
+  <PrefsDialog />
+{/if}
+{#if app.updates.dialogOpen}
+  <UpdateDialog />
+{/if}
+<CommandPalette />
+<Toasts />

@@ -1,0 +1,195 @@
+/* EZ2BMS design tokens. The palette is derived from the EZ2 lane kinds so the
+ * chrome around the playfield speaks the same colour language as the field:
+ * white keys, blue keys, red turntable/effectors, gold pedal. */
+:root {
+  --bg-0: #05060a;
+  --bg-1: #0b0e17;
+  --bg-2: #121726;
+  --panel: rgba(14, 18, 32, 0.92);
+  --panel-edge: rgba(120, 190, 255, 0.28);
+  --ink: #e8eeff;
+  --ink-dim: #8a93b2;
+  --ink-faint: #4b5372;
+
+  --lane-white: #f2f2ff;
+  --lane-blue: #4d9eff;
+  --lane-red: #ed2e2e;
+  --lane-gold: #ffd11f;
+
+  --neon: #58e1ff;
+  --neon-2: #ff4fd8;
+  --ok: #56f39a;
+  --warn: #ffc247;
+  --err: #ff5470;
+
+  --glow: 0 0 12px rgba(88, 225, 255, 0.55);
+  --radius: 10px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --font-ui: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-num: 'JetBrains Mono', 'Cascadia Mono', ui-monospace, monospace;
+
+  color-scheme: dark;
+}
+
+/* Korean and Japanese UI: the system's own fonts, as no UI font is bundled
+ * (Linux needs its CJK fonts installed; docs say so). Han characters are
+ * shared between the two languages but drawn differently in each, and a
+ * browser falling back on its own may take the other language's font, so
+ * each language names its fonts first: Windows, macOS, then Noto. */
+:root:lang(ko) {
+  --font-ui:
+    'Inter', 'Segoe UI', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans CJK KR', 'Noto Sans KR',
+    system-ui, sans-serif;
+}
+:root:lang(ja) {
+  --font-ui:
+    'Inter', 'Segoe UI', 'Yu Gothic UI', 'Meiryo', 'Hiragino Sans', 'Noto Sans CJK JP',
+    'Noto Sans JP', system-ui, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg-0);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  overflow: hidden;
+  user-select: none;
+}
+
+#app {
+  height: 100%;
+}
+
+/* Drawer forms: label over control, neon focus. */
+.ez-form {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  font-size: 13px;
+}
+.ez-form .row {
+  display: grid;
+  gap: 4px;
+}
+.ez-form .cols {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 6px;
+}
+.ez-form label,
+.ez-form .lbl {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.ez-form input,
+.ez-form select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(88, 225, 255, 0.18);
+  background: #05070d;
+  color: var(--ink);
+  font: 13px var(--font-ui);
+  outline: none;
+}
+.ez-form input[type='number'] {
+  font-family: var(--font-num);
+}
+.ez-form input:focus,
+.ez-form select:focus {
+  border-color: var(--neon);
+  box-shadow: 0 0 0 2px rgba(88, 225, 255, 0.15);
+}
+.ez-form input[type='range'] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--neon);
+}
+.ez-form label.check {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12.5px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink-dim);
+}
+.ez-form label.check input {
+  width: auto;
+}
+.ez-form .hint {
+  color: var(--ink-dim);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.ez-form .warn {
+  color: var(--warn);
+  font-size: 12px;
+}
+.ez-form h3 {
+  margin: 6px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  border-top: 1px solid rgba(88, 225, 255, 0.1);
+  padding-top: 12px;
+}
+.ez-btn {
+  all: unset;
+  cursor: pointer;
+  text-align: center;
+  padding: 6px 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(88, 225, 255, 0.28);
+  color: var(--ink);
+  font-size: 12px;
+}
+.ez-btn:hover:not(:disabled) {
+  background: rgba(88, 225, 255, 0.1);
+  border-color: var(--neon);
+}
+.ez-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.ez-btn.danger:hover:not(:disabled) {
+  border-color: var(--err);
+  background: rgba(255, 84, 112, 0.1);
+}
+.ez-seg {
+  display: flex;
+  border: 1px solid rgba(88, 225, 255, 0.25);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.ez-seg button {
+  all: unset;
+  cursor: pointer;
+  flex: 1;
+  text-align: center;
+  padding: 5px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-dim);
+}
+.ez-seg button.on {
+  background: var(--neon);
+  color: #031018;
+}
+kbd {
+  font-family: var(--font-num);
+  font-size: 11px;
+  border: 1px solid var(--ink-faint);
+  border-radius: 4px;
+  padding: 0 4px;
+  color: var(--ink-dim);
+}

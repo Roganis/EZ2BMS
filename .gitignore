@@ -1,0 +1,22 @@
+node_modules/
+dist/
+target/
+coverage/
+fixtures-out/
+playwright-report/
+test-results/
+*.log
+.DS_Store
+.vite/
+src-tauri/gen/
+# Never commit anything read out of the game or its executable.
+*.ez
+*.ezi
+*.ssf
+*.ezw
+*.abm
+!**/test/fixtures/**/*.abm
+/game/
+/exe/
+# Fetched by scripts/fetch-fonts.mjs (20 MB; licence and hash in fonts/README.md).
+/fonts/NotoSansCJK-Bold.ttc

@@ -1,0 +1,792 @@
+//! The desktop host. The editor (apps/editor) does all chart work in
+//! TypeScript; these commands are what a browser cannot do: read and write
+//! files, play audio with EZ2PORT's rules, cut keysounds, and run EZ2PORT.
+//! Every command is mirrored by the web mock in `apps/editor/src/bridge/`.
+
+mod audio;
+mod diag;
+mod error;
+mod export;
+mod files;
+mod input;
+mod media;
+mod opened;
+mod port;
+mod update;
+
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+
+use serde::Serialize;
+use tauri::ipc::{Channel, Response};
+use tauri::{AppHandle, Emitter, Manager, State};
+
+use crate::audio::{
+    Audio, AudioInfo, Audition, Clicks, ClockDto, EventDto, Loaded, PreviewJob, TriggerDto,
+};
+use crate::error::{CmdError, CmdResult};
+use crate::files::{Entry, ImportKind, Imported, ProjectScan};
+use crate::input::{Input, InputInfo, Paused};
+use crate::media::Media;
+use crate::port::{
+    InspectionDto, Located, PackageDto, ProbeDto, PublishOptions, Published, RunEvent, Runs,
+    TestDto,
+};
+use ez2bms_input::PadEvent;
+use ez2bms_launch::ConfigFile;
+use ez2bms_media::text::PlateSpec;
+
+/// Which clock stream is current; older ones stop (a reloaded page opens a new one).
+static CLOCK_STREAM: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Serialize)]
+struct AppInfo {
+    version: &'static str,
+    commit: &'static str,
+    os: &'static str,
+    arch: &'static str,
+    config_dir: Option<PathBuf>,
+    cache_dir: Option<PathBuf>,
+    log_dir: Option<PathBuf>,
+    /// The run before this one, when it ended without closing (diag.rs).
+    previous_session: Option<diag::PreviousSession>,
+}
+
+#[tauri::command]
+fn app_info(app: AppHandle, session: State<'_, Arc<diag::Session>>) -> AppInfo {
+    AppInfo {
+        version: env!("CARGO_PKG_VERSION"),
+        commit: diag::COMMIT,
+        os: std::env::consts::OS,
+        arch: std::env::consts::ARCH,
+        config_dir: app.path().app_config_dir().ok(),
+        cache_dir: app.path().app_cache_dir().ok(),
+        log_dir: app.path().app_log_dir().ok(),
+        previous_session: session.previous.clone(),
+    }
+}
+
+// ---- files handed over by the system (opened.rs)
+
+/// The files the system gave EZ2BMS that the editor has not opened yet.
+#[tauri::command]
+fn opened_take(opened: State<'_, Arc<opened::Opened>>) -> Vec<PathBuf> {
+    opened.take()
+}
+
+// ---- updates (update.rs)
+
+#[tauri::command]
+fn update_unsupported(configured: State<'_, update::Configured>) -> Option<&'static str> {
+    update::unsupported(configured.0, std::env::var_os("APPIMAGE").is_some())
+}
+
+/// The newest published release, when it is newer than this build.
+#[tauri::command]
+async fn update_check(
+    app: AppHandle,
+    pending: State<'_, update::Pending>,
+) -> CmdResult<Option<update::UpdateDto>> {
+    use tauri_plugin_updater::UpdaterExt;
+    let err = |e: tauri_plugin_updater::Error| CmdError::Invalid(e.to_string());
+    let found = app.updater().map_err(err)?.check().await.map_err(err)?;
+    let dto = found.as_ref().map(update::UpdateDto::from);
+    *pending.0.lock().unwrap() = found;
+    Ok(dto)
+}
+
+/// Download what `update_check` found, check its signature, and install it.
+#[tauri::command]
+async fn update_install(
+    pending: State<'_, update::Pending>,
+    progress: Channel<update::ProgressDto>,
+) -> CmdResult<()> {
+    let u = pending.0.lock().unwrap().take();
+    let u = u.ok_or_else(|| {
+        CmdError::coded("no-update", &[], "no update to install: look for one first".into())
+    })?;
+    log::info!("installing {} over {}", u.version, u.current_version);
+    let mut done = 0u64;
+    u.download_and_install(
+        |chunk, total| {
+            done += chunk as u64;
+            let _ = progress.send(update::ProgressDto { done, total });
+        },
+        || log::info!("update downloaded"),
+    )
+    .await
+    .map_err(|e| CmdError::Invalid(e.to_string()))
+}
+
+#[tauri::command]
+fn update_restart(app: AppHandle) {
+    app.restart()
+}
+
+#[tauri::command]
+fn update_open_releases(app: AppHandle) -> CmdResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(update::RELEASES_PAGE, None::<&str>)
+        .map_err(|e| CmdError::Invalid(e.to_string()))
+}
+
+// ---- the log (diag.rs)
+
+/// A line from the editor into the log: script errors, and what it wants kept.
+#[tauri::command]
+fn diag_log(level: String, message: String) {
+    match level.as_str() {
+        "error" => log::error!(target: "editor", "{message}"),
+        "warn" => log::warn!(target: "editor", "{message}"),
+        _ => log::info!(target: "editor", "{message}"),
+    }
+}
+
+/// The last `max_bytes` of the log files, for a report.
+#[tauri::command]
+fn diag_tail(app: AppHandle, max_bytes: usize) -> CmdResult<String> {
+    let dir = app.path().app_log_dir().map_err(|e| CmdError::Invalid(e.to_string()))?;
+    Ok(diag::tail(&dir, max_bytes.min(4 << 20)))
+}
+
+/// Show the log folder in the file manager.
+#[tauri::command]
+fn diag_reveal_logs(app: AppHandle) -> CmdResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = app.path().app_log_dir().map_err(|e| CmdError::Invalid(e.to_string()))?;
+    std::fs::create_dir_all(&dir).map_err(|e| CmdError::io(&dir, e))?;
+    app.opener()
+        .open_path(dir.to_string_lossy(), None::<&str>)
+        .map_err(|e| CmdError::Invalid(e.to_string()))
+}
+
+// ---- files
+
+#[tauri::command]
+fn fs_read(path: PathBuf) -> CmdResult<Response> {
+    Ok(Response::new(files::read(&path)?))
+}
+
+/// Part of a file, for reading a movie's headers: `[u64 LE size]` + the bytes.
+#[tauri::command]
+fn fs_read_range(path: PathBuf, offset: u64, length: u64) -> CmdResult<Response> {
+    let (size, bytes) = files::read_range(&path, offset, length)?;
+    let mut out = size.to_le_bytes().to_vec();
+    out.extend_from_slice(&bytes);
+    Ok(Response::new(out))
+}
+
+/// Let the webview load one file through the asset protocol (the BGA's
+/// `<video>` preview): the scope starts empty and grows by the files shown.
+#[tauri::command]
+fn media_allow(app: AppHandle, path: PathBuf) -> CmdResult<()> {
+    app.asset_protocol_scope().allow_file(&path).map_err(|e| CmdError::Invalid(e.to_string()))
+}
+
+#[tauri::command]
+fn fs_read_text(path: PathBuf) -> CmdResult<String> {
+    String::from_utf8(files::read(&path)?)
+        .map_err(|_| CmdError::Invalid(format!("{} is not UTF-8", path.display())))
+}
+
+#[tauri::command]
+fn fs_write_text(path: PathBuf, text: String, backup: bool) -> CmdResult<()> {
+    files::write_atomic(&path, text.as_bytes(), backup)
+}
+
+#[tauri::command]
+fn fs_write_bytes(path: PathBuf, bytes: Vec<u8>, backup: bool) -> CmdResult<()> {
+    files::write_atomic(&path, &bytes, backup)
+}
+
+#[tauri::command]
+fn fs_list(dir: PathBuf) -> CmdResult<Vec<Entry>> {
+    files::list(&dir)
+}
+
+#[tauri::command]
+fn project_scan(dir: PathBuf) -> CmdResult<ProjectScan> {
+    files::scan_project(&dir)
+}
+
+/// Copy sound files (and the audio in folders) into the song folder.
+#[tauri::command]
+async fn fs_copy_into(
+    dir: PathBuf,
+    paths: Vec<PathBuf>,
+    kind: Option<ImportKind>,
+) -> CmdResult<Vec<Imported>> {
+    let kind = kind.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || files::copy_into(&dir, &paths, kind))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))
+}
+
+#[tauri::command]
+fn fs_rename(from: PathBuf, to: PathBuf) -> CmdResult<()> {
+    files::rename(&from, &to)
+}
+
+/// An imported song's folder, all or nothing (ez2bms-audio import.rs); the
+/// game's .ssf keysounds become .wav with their PCM untouched.
+#[tauri::command]
+async fn import_run(
+    dest: PathBuf,
+    job: files::ImportJobDto,
+    on_progress: Channel<[usize; 2]>,
+) -> CmdResult<files::ImportReportDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let job = job.into_job();
+        let r = ez2bms_audio::import::import_song(&dest, &job, &mut |done, total| {
+            let _ = on_progress.send([done, total]);
+        })?;
+        Ok(files::ImportReportDto::from(r))
+    })
+    .await
+    .map_err(|e| CmdError::Invalid(e.to_string()))?
+}
+
+// ---- exports (M6)
+
+/// For each cabinet keysound: how it would be made, and which file already in
+/// the game's folder holds exactly its audio (export.rs).
+#[tauri::command]
+async fn export_probe(sounds: Vec<export::ProbeSound>) -> CmdResult<Vec<export::ProbeResult>> {
+    tauri::async_runtime::spawn_blocking(move || export::probe(sounds))
+        .await
+        .map_err(|e| CmdError::Invalid(e.to_string()))
+}
+
+/// A cabinet export written into a game folder, all or nothing, with a backup.
+#[tauri::command]
+async fn export_game(
+    root: PathBuf,
+    job: export::ExportJobDto,
+    on_progress: Channel<[usize; 2]>,
+) -> CmdResult<ez2bms_launch::gamepatch::PatchReport> {
+    tauri::async_runtime::spawn_blocking(move || {
+        export::to_game(root, job, move |d, t| {
+            let _ = on_progress.send([d, t]);
+        })
+    })
+    .await
+    .map_err(|e| CmdError::Invalid(e.to_string()))?
+}
+
+/// An export into a new folder (shaped like the game, or a BMS song).
+#[tauri::command]
+async fn export_folder(
+    dest: PathBuf,
+    job: export::ExportJobDto,
+    on_progress: Channel<[usize; 2]>,
+) -> CmdResult<export::FolderReport> {
+    tauri::async_runtime::spawn_blocking(move || {
+        export::to_folder(dest, job, move |d, t| {
+            let _ = on_progress.send([d, t]);
+        })
+    })
+    .await
+    .map_err(|e| CmdError::Invalid(e.to_string()))?
+}
+
+#[tauri::command]
+fn export_backups(root: PathBuf) -> CmdResult<Vec<ez2bms_launch::gamepatch::BackupInfo>> {
+    export::backups(root)
+}
+
+#[tauri::command]
+async fn export_restore(
+    root: PathBuf,
+    stamp: String,
+    force: Option<bool>,
+) -> CmdResult<ez2bms_launch::gamepatch::RestoreReport> {
+    tauri::async_runtime::spawn_blocking(move || {
+        export::restore(root, stamp, force.unwrap_or(false))
+    })
+    .await
+    .map_err(|e| CmdError::Invalid(e.to_string()))?
+}
+
+// ---- song art
+
+/// The title plate (media.rs `Media::plate`).
+#[tauri::command]
+async fn media_plate(media: State<'_, Arc<Media>>, spec: PlateSpec) -> CmdResult<Response> {
+    let media = media.inner().clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || media.plate(&spec))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))??;
+    Ok(Response::new(bytes))
+}
+
+/// The disc or the eyecatch cut from an image: `[u32 w][u32 h]` + RGB.
+#[tauri::command]
+async fn media_art(
+    media: State<'_, Arc<Media>>,
+    path: PathBuf,
+    job: ez2bms_media::ArtJob,
+) -> CmdResult<Response> {
+    let media = media.inner().clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || media.art(&path, job))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))??;
+    Ok(Response::new(bytes))
+}
+
+// ---- settings (the front end owns the schema)
+
+fn settings_path(app: &AppHandle) -> CmdResult<PathBuf> {
+    Ok(app.path().app_config_dir().map_err(|e| CmdError::Io(e.to_string()))?.join("settings.json"))
+}
+
+#[tauri::command]
+fn settings_load(app: AppHandle) -> CmdResult<serde_json::Value> {
+    let p = settings_path(&app)?;
+    match std::fs::read(&p) {
+        Ok(b) => serde_json::from_slice(&b)
+            .map_err(|e| CmdError::Invalid(format!("{}: {e}", p.display()))),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::json!({})),
+        Err(e) => Err(CmdError::io(&p, e)),
+    }
+}
+
+#[tauri::command]
+fn settings_save(app: AppHandle, value: serde_json::Value) -> CmdResult<()> {
+    let text = serde_json::to_vec_pretty(&value).map_err(|e| CmdError::Invalid(e.to_string()))?;
+    files::write_atomic(&settings_path(&app)?, &text, true)
+}
+
+// ---- audio
+
+#[tauri::command]
+fn audio_info(audio: State<'_, Arc<Audio>>) -> AudioInfo {
+    audio.info()
+}
+
+#[tauri::command]
+async fn audio_load(audio: State<'_, Arc<Audio>>, paths: Vec<PathBuf>) -> CmdResult<Vec<Loaded>> {
+    let audio = audio.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || audio.load(&paths))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))
+}
+
+#[tauri::command]
+fn audio_peaks(audio: State<'_, Arc<Audio>>, id: u32, frames_per_px: f64) -> CmdResult<Response> {
+    Ok(Response::new(audio.peaks(id, frames_per_px)?))
+}
+
+/// Waveform thumbnails for many samples, off the main thread.
+#[tauri::command]
+async fn audio_thumbs(
+    audio: State<'_, Arc<Audio>>,
+    ids: Vec<u32>,
+    width: u32,
+) -> CmdResult<Response> {
+    let audio = audio.inner().clone();
+    let bytes =
+        tauri::async_runtime::spawn_blocking(move || audio.thumbs(&ids, width.min(4096) as usize))
+            .await
+            .map_err(|e| CmdError::Io(e.to_string()))?;
+    Ok(Response::new(bytes))
+}
+
+/// Part of a sample's waveform mipmap (see `Audio::peak_range`).
+#[tauri::command]
+fn audio_peak_range(
+    audio: State<'_, Arc<Audio>>,
+    id: u32,
+    level: u32,
+    from: u32,
+    count: u32,
+) -> CmdResult<Response> {
+    Ok(Response::new(audio.peak_range(id, level, from, count.min(1 << 20))?))
+}
+
+/// A sample's onsets and tempo, off the main thread (a second or so the
+/// first time for a long stem).
+#[tauri::command]
+async fn audio_analysis(audio: State<'_, Arc<Audio>>, id: u32) -> CmdResult<audio::AnalysisDto> {
+    let audio = audio.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || audio.analysis(id).map(|a| (&*a).into()))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))?
+}
+
+/// What the disk cache for long files holds.
+#[tauri::command]
+async fn audio_cache_info() -> CmdResult<audio::CacheDto> {
+    tauri::async_runtime::spawn_blocking(audio::cache_info)
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))
+}
+
+#[tauri::command]
+async fn audio_cache_set_cap(mb: u64) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || audio::cache_set_cap(mb << 20))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))
+}
+
+#[tauri::command]
+async fn audio_cache_clear() -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(audio::cache_clear)
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))
+}
+
+#[tauri::command]
+fn audio_set_events(audio: State<'_, Arc<Audio>>, events: Vec<EventDto>) -> CmdResult<()> {
+    audio.set_events(&events)
+}
+
+/// The whole song's loudness for the preview picker (renders it: off the main thread).
+#[tauri::command]
+async fn audio_preview_overview(
+    audio: State<'_, Arc<Audio>>,
+    events: Vec<EventDto>,
+    end_ms: f64,
+    width: u32,
+) -> CmdResult<Response> {
+    let audio = audio.inner().clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        audio.preview_overview(&events, end_ms, width.clamp(1, 8192) as usize)
+    })
+    .await
+    .map_err(|e| CmdError::Io(e.to_string()))??;
+    Ok(Response::new(bytes))
+}
+
+/// The preview, rendered for auditioning; trigger it on `voice` of the result.
+#[tauri::command]
+async fn audio_preview(audio: State<'_, Arc<Audio>>, job: PreviewJob) -> CmdResult<Audition> {
+    let audio = audio.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || audio.preview(&job))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))?
+}
+
+/// The metronome's clicks, put in the bank (Record mode, the latency test).
+#[tauri::command]
+fn audio_clicks(audio: State<'_, Arc<Audio>>) -> Clicks {
+    audio.clicks()
+}
+
+#[tauri::command]
+fn audio_play(audio: State<'_, Arc<Audio>>, from_ms: f64) {
+    audio.engine.play_from(audio.frame_at_ms(from_ms));
+}
+
+#[tauri::command]
+fn audio_seek(audio: State<'_, Arc<Audio>>, ms: f64) {
+    audio.engine.seek(audio.frame_at_ms(ms));
+}
+
+#[tauri::command]
+fn audio_stop(audio: State<'_, Arc<Audio>>) {
+    audio.engine.stop();
+}
+
+#[tauri::command]
+fn audio_trigger(audio: State<'_, Arc<Audio>>, trigger: TriggerDto) -> CmdResult<bool> {
+    audio.trigger(&trigger)
+}
+
+#[tauri::command]
+fn audio_set_master(audio: State<'_, Arc<Audio>>, gain: f32) {
+    audio.engine.set_master(gain);
+}
+
+#[tauri::command]
+fn audio_clock(audio: State<'_, Arc<Audio>>) -> ClockDto {
+    audio.clock()
+}
+
+/// Host time, for the front end's clock-offset pings.
+#[tauri::command]
+fn audio_now(audio: State<'_, Arc<Audio>>) -> u64 {
+    audio.engine.now_ns()
+}
+
+/// The clock every 8 ms until the page opens another stream or goes away.
+#[tauri::command]
+fn audio_clock_stream(audio: State<'_, Arc<Audio>>, on_clock: Channel<ClockDto>) {
+    let audio = audio.inner().clone();
+    let me = CLOCK_STREAM.fetch_add(1, Ordering::SeqCst) + 1;
+    std::thread::spawn(move || {
+        while CLOCK_STREAM.load(Ordering::SeqCst) == me {
+            if on_clock.send(audio.clock()).is_err() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(8));
+        }
+    });
+}
+
+// ---- EZ2PORT
+
+#[tauri::command]
+fn port_probe(path: PathBuf) -> CmdResult<ProbeDto> {
+    Ok(ProbeDto::from(&ez2bms_launch::probe(&path)?))
+}
+
+#[tauri::command]
+fn port_locate(start: PathBuf) -> Located {
+    port::locate(&start)
+}
+
+#[tauri::command]
+async fn port_publish(
+    songs_root: PathBuf,
+    package: PackageDto,
+    options: Option<PublishOptions>,
+) -> CmdResult<Published> {
+    let options = options.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || {
+        port::publish_with(&songs_root, &package, &options)
+    })
+    .await
+    .map_err(|e| CmdError::Io(e.to_string()))?
+}
+
+#[tauri::command]
+fn port_inspect(
+    songs_root: PathBuf,
+    key: String,
+    game_root: Option<PathBuf>,
+) -> CmdResult<InspectionDto> {
+    port::inspect(&songs_root, &key, game_root.as_deref())
+}
+
+#[tauri::command]
+fn port_retire(songs_root: PathBuf, key: String, song_ini: String) -> CmdResult<()> {
+    Ok(ez2bms_launch::retire_package(&songs_root, &key, song_ini.as_bytes())?)
+}
+
+#[tauri::command]
+async fn port_test(
+    app: AppHandle,
+    runs: State<'_, Arc<Runs>>,
+    input: State<'_, Arc<Input>>,
+    test: TestDto,
+    on_event: Channel<RunEvent>,
+) -> CmdResult<u32> {
+    let cache = app.path().app_cache_dir().map_err(|e| CmdError::Io(e.to_string()))?;
+    let runs = runs.inner().clone();
+    let input = input.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        // The pads close before the game starts and reopen when the run's
+        // watcher lets go of this (it exits, or never started).
+        let paused = Paused::new(input);
+        runs.start(&cache, &test, move |ev| {
+            let _held = &paused;
+            on_event.send(ev).is_ok()
+        })
+    })
+    .await
+    .map_err(|e| CmdError::Io(e.to_string()))?
+}
+
+#[tauri::command]
+fn port_stop(runs: State<'_, Arc<Runs>>, id: u32) -> CmdResult<()> {
+    runs.stop(id)
+}
+
+/// Where EZ2PORT keeps keys.ini and settings.ini, in its order (read, never written).
+#[tauri::command]
+fn port_config_files(ez2play: Option<PathBuf>, game_root: Option<PathBuf>) -> Vec<ConfigFile> {
+    ez2bms_launch::config_files(ez2play.as_deref(), game_root.as_deref(), &|k| std::env::var_os(k))
+}
+
+// ---- controllers
+
+#[tauri::command]
+fn input_devices(input: State<'_, Arc<Input>>) -> InputInfo {
+    input.info()
+}
+
+/// Pad events in batches, to the newest page that asked.
+#[tauri::command]
+fn input_stream(input: State<'_, Arc<Input>>, on_event: Channel<Vec<PadEvent>>) {
+    input.stream(Arc::new(move |events| {
+        let _ = on_event.send(events);
+    }));
+}
+
+/// Open (a rescan) or close the pads; returns once done.
+#[tauri::command]
+async fn input_hold(input: State<'_, Arc<Input>>, active: bool) -> CmdResult<()> {
+    let input = input.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || input.want(active))
+        .await
+        .map_err(|e| CmdError::Io(e.to_string()))
+}
+
+/// The plate fonts (fonts/README.md): `EZ2BMS_FONTS`, else the bundle's
+/// `fonts` resource folder, else - running from the source tree - the
+/// repository's `fonts/`.
+fn fonts_dir(app: &AppHandle) -> PathBuf {
+    if let Some(dir) = std::env::var_os("EZ2BMS_FONTS") {
+        return PathBuf::from(dir);
+    }
+    let bundled = app.path().resource_dir().ok().map(|d| d.join("fonts"));
+    match bundled {
+        Some(d) if d.join("Roboto-Bold.ttf").is_file() => d,
+        _ => PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../fonts"),
+    }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let launched = opened::paths_from_args(&std::env::args().collect::<Vec<_>>(), &cwd);
+    let mut builder = tauri::Builder::default();
+    // First, as the plugin asks: a second launch hands its files to this
+    // window and exits. The window comes forward and the editor is told.
+    if opened::single_instance_possible() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            let paths = opened::paths_from_args(&args, std::path::Path::new(&cwd));
+            log::info!("a second launch passed on {} file(s)", paths.len());
+            app.state::<Arc<opened::Opened>>().push(paths);
+            let _ = app.emit("opened://paths", ());
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }));
+    }
+    // The updater only when this build carries its settings (update.rs).
+    let context = tauri::generate_context!();
+    let can_update = update::configured(&context.config().plugins);
+    if can_update {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+    builder
+        .manage(Arc::new(opened::Opened::new(launched)))
+        .manage(update::Configured(can_update))
+        .manage(update::Pending::default())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(
+            // One file a run in the app's log folder, 1 MB each, the last
+            // five kept: enough to see what led up to a crash.
+            tauri_plugin_log::Builder::new()
+                .clear_targets()
+                .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                    file_name: Some(diag::LOG_NAME.into()),
+                }))
+                .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stderr))
+                .level(log::LevelFilter::Info)
+                .max_file_size(1_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(5))
+                .build(),
+        )
+        .setup(|app| {
+            diag::install_panic_hook(app.handle().clone());
+            let log_dir = app.path().app_log_dir()?;
+            let session = diag::Session::begin(&log_dir, env!("CARGO_PKG_VERSION"))?;
+            log::info!(
+                "EZ2BMS {} ({}) on {} {}{}",
+                env!("CARGO_PKG_VERSION"),
+                diag::COMMIT,
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+                if session.previous.is_some() { "; the last run did not close" } else { "" }
+            );
+            app.manage(Arc::new(session));
+            log::info!(
+                "updates: {}",
+                if app.state::<update::Configured>().0 { "on" } else { "off (no update key)" }
+            );
+            if !opened::single_instance_possible() {
+                log::warn!("no session bus: a second launch opens a window of its own");
+            }
+            let audio = Arc::new(Audio::open(app.path().app_cache_dir().ok()));
+            // Pad events are timed on the audio engine's host clock, the one
+            // the editor turns into song time.
+            let clock = audio.clone();
+            app.manage(Arc::new(Input::start(Arc::new(move || clock.engine.now_ns()))));
+            app.manage(audio);
+            app.manage(Arc::new(Runs::default()));
+            app.manage(Arc::new(Media::new(fonts_dir(app.handle()))));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            app_info,
+            fs_read,
+            fs_read_range,
+            media_allow,
+            fs_read_text,
+            fs_write_text,
+            fs_write_bytes,
+            fs_list,
+            project_scan,
+            fs_copy_into,
+            fs_rename,
+            import_run,
+            export_probe,
+            export_game,
+            export_folder,
+            export_backups,
+            export_restore,
+            media_art,
+            media_plate,
+            settings_load,
+            settings_save,
+            audio_info,
+            audio_load,
+            audio_peaks,
+            audio_thumbs,
+            audio_peak_range,
+            audio_analysis,
+            audio_cache_info,
+            audio_cache_set_cap,
+            audio_cache_clear,
+            audio_set_events,
+            audio_preview_overview,
+            audio_preview,
+            audio_clicks,
+            audio_play,
+            audio_seek,
+            audio_stop,
+            audio_trigger,
+            audio_set_master,
+            audio_clock,
+            audio_now,
+            audio_clock_stream,
+            port_probe,
+            port_locate,
+            port_publish,
+            port_inspect,
+            port_retire,
+            port_test,
+            port_stop,
+            port_config_files,
+            input_devices,
+            input_stream,
+            input_hold,
+            diag_log,
+            diag_tail,
+            opened_take,
+            update_unsupported,
+            update_check,
+            update_install,
+            update_restart,
+            update_open_releases,
+            diag_reveal_logs,
+        ])
+        .build(context)
+        .expect("EZ2BMS failed to start")
+        .run(|app, event| {
+            // Closed cleanly: the next start finds no marker.
+            if let tauri::RunEvent::Exit = event {
+                log::info!("EZ2BMS closed");
+                if let Some(s) = app.try_state::<Arc<diag::Session>>() {
+                    s.end();
+                }
+            }
+        });
+}

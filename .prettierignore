@@ -1,0 +1,10 @@
+node_modules
+dist
+target
+pnpm-lock.yaml
+third_party
+src-tauri/gen
+*.bmson
+coverage
+playwright-report
+test-results

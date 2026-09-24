@@ -1,0 +1,105 @@
+// Japanese: see en/edit.ts. Terms follow docs/i18n-glossary.md.
+//
+// A reason is said after the editor's own sentence and a colon (「ここには
+// ノーツを置けません：{reason}」), so each is a whole です・ます clause with no
+// 。. As in the editor's catalog: "key" (Classic) is キー音化, "heal" is
+// つなぐ, Classic's "split" is 切り分け／切れ目, chop is 分割, a cut is カット,
+// and a MIDI file's notes are ノート; undo steps are short nouns.
+
+import type { edit as en } from '../en/edit';
+
+export const edit: Record<keyof typeof en, string> = {
+  'edit.place.before-start': '譜面の開始より前です',
+  'edit.place.taken': 'すでにノーツがあります',
+  'edit.place.in-hold': 'ロングノートの中です',
+  'edit.place.covers': 'ロングノートが別のノーツに重なります',
+  'edit.note-gone': 'そのノーツはもうありません',
+
+  'classic.changes-sound': '{src}の鳴り方が変わってしまいます',
+  'classic.no-lane': 'キー音を置くレーンを選んでください',
+  'classic.lane-taken': 'そこではレーンが埋まっています',
+  'classic.sound-starts': 'そこはサウンドの開始位置です。クラシックモードでは削除しません',
+  'classic.nothing-to-split': 'そこには切り分けるものがありません',
+  'classic.heal-background': 'つなげられるのはBGMの切れ目だけです',
+
+  'slice.nothing-to-cut': 'そこにはカットできる音が鳴っていません',
+  'slice.already-cut': 'そこはすでにカットされています',
+  'slice.not-playing': 'そこでは{src}が鳴っていません',
+  'slice.sound-starts': 'そこはサウンドの開始位置です。動かせるのはカットだけです',
+  'slice.between-cuts': 'カットは両隣のカットの間でしか動かせません',
+  'slice.lane-taken': 'そこではレーンが埋まっています',
+  'slice.midi.no-hit': '{src}がこの譜面で一度も鳴らないため、MIDIの開始位置を決められません',
+  'slice.midi.no-notes': '選んだトラックにノートがありません',
+  'slice.midi.not-playing': 'MIDIのノートがある位置で{src}が鳴っていません',
+
+  'sound.rename.missing': '{file}が楽曲フォルダにありません',
+  'sound.rename.empty': '名前が空です',
+  'sound.rename.windows': '「{name}」はWindowsで使えないファイル名です',
+  'sound.rename.extension': '拡張子{ext}はそのままにしてください（ファイル形式は変わりません）',
+  'sound.rename.same': 'すでにその名前です',
+  'sound.rename.taken': '{file}はすでにフォルダにあります',
+  'sound.rename.same-stem': '拡張子の前が同じ名前の{file}があります',
+
+  'undo.place-note': 'ノーツ配置',
+  'undo.erase-notes': '{n, plural, =1 {ノーツ削除} other {ノーツ{n}個削除}}',
+  'undo.move-notes': 'ノーツ移動',
+  'undo.shift-lanes': 'レーンずらし',
+  'undo.to-background': 'BGMへ移動',
+  'undo.to-lane': 'レーンへ移動',
+  'undo.set-length': '長さ設定',
+  'undo.make-holds': 'ロングノート化',
+  'undo.make-taps': '通常ノーツ化',
+  'undo.hold-kind': 'ロングノートの種類設定',
+  'undo.vel-pan': 'ベロシティ/パン設定',
+  'undo.mirror': 'ミラー',
+  'undo.swap-sides': '1P/2P入れ替え',
+  'undo.bpm.set': 'BPM設定',
+  'undo.bpm.remove': 'BPM変更削除',
+  'undo.stop.set': 'STOP設定',
+  'undo.stop.remove': 'STOP削除',
+  'undo.scroll.set': 'スクロール変速設定',
+  'undo.scroll.remove': 'スクロール変速削除',
+  'undo.add-sound': 'サウンド追加',
+  'undo.add-sounds': 'サウンド{n}個追加',
+  'undo.remove-sound': 'サウンド削除',
+  'undo.rename-sound': 'サウンド名変更',
+  'undo.replace-sound': 'サウンド差し替え',
+  'undo.remove-unused': '未使用サウンド{n}個削除',
+  'undo.change-sound': 'サウンド変更',
+  'undo.paste': '貼り付け',
+  'undo.record-take': 'テイクのレコーディング',
+  'undo.key-sound': 'キー音化',
+  'undo.move-keyed': 'キー音化したノーツの移動',
+  // The English says no count; n stays for the plural.
+  'undo.unkey': '{n, plural, other {キー音化の解除}}',
+  'undo.split-sound': 'サウンド切り分け',
+  'undo.heal-split': '切れ目をつなぐ',
+  'undo.reset-background': 'すべてBGMに戻す',
+  'undo.cut-stem': 'ステムのカット',
+  'undo.move-cut': 'カット移動',
+  'undo.slice-to-background': '{n, plural, other {スライスをBGMへ}}',
+  'undo.key-slice': '{n, plural, other {スライスのキー音化}}',
+  'undo.chop': 'グリッド分割',
+  'undo.midi-tempo': 'MIDIからテンポ取得',
+  'undo.midi-cuts': 'MIDIのノートでステムをカット',
+
+  // Said after the kind's number (「4: 終了後に1回…」).
+  'hold.kind.0': '1/4拍ごと（標準）',
+  'hold.kind.1': '1/2拍ごと',
+  'hold.kind.2': '1/8拍ごと',
+  'hold.kind.3': '1/16拍ごと',
+  'hold.kind.4': '終了後に1回（1/32拍単位で数える：100%にならない）',
+  'hold.kind.5': '終了後に1回（1/4拍単位で数える：100%にならない）',
+  'hold.kind.6': '終端で1回、KOOLを維持していれば',
+  'hold.kind.7': '押している間はなし',
+  'hold.kind.9': 'なし、始点も数えない',
+
+  // "Shipped": what most of the game's own charts run.
+  'edit.judge.shipped': '公式譜面（9/27/53/73）',
+  'edit.judge.missing': 'エンジン既定値（6/24/36/72）',
+  'edit.judge.override': 'よく使う値（6/24/50/70）',
+  'edit.judge.lenient': '甘め（7/30/50/80）',
+  'edit.life.default': '標準',
+  'edit.life.forgiving': '緩め',
+  'edit.life.recovery': '回復速め',
+};

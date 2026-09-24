@@ -1,0 +1,59 @@
+' Synthetic .pvi in the format EZ2PORT's ez2/pvi.c reads.
+' Written by hand for tests - not copied from any game install.
+[General]
+NumberOfTrack = 7
+
+[Track1]
+Enable = 1
+Coord = 40, 0
+Size = 34, 375
+BKAlphaFunc = 5, 6
+BkColor1 = 40, 0, 0, 150
+BkColor2 = 0, 0, 0
+LeftBoader = {
+    LineWidth = 1
+    LineColor = 90, 90, 90, 255
+}
+RightBoader = {
+    LineWidth = 2
+    LineColor = 90, 90, 90
+}
+PressKeyCoord = 40, 330
+PressKeyDownTexture = "Scratch_Down.bmp"
+PressBarTexture = "Bar.bmp"
+PressBarMaxHeight = 200
+PressBarGrowUpSpeed = 20
+PressBarShrinkSpeed = 10
+NoteAniTexture = "note\scratch_;note2\scratch_"   ' two styles
+
+[Track2]
+Enable = 1
+Coord = 74, 0
+Size = 19, 375
+NoteAniTexture = note\white_
+
+[TargetBar]
+Enable = 1
+Coord = 40, 363
+Size = 140, 6
+AniTexture = "target_"
+Coord = 40, 360
+Size = 140, 12
+AniTexture = "target2_"
+
+[MeasureLine]
+Enable = 1
+Size = 140, 1
+AniTexture = "measure_"
+
+[Judgment]
+Enable = 1
+HotSpot = 110, 200
+KoolStr = "kool.str"
+CoolStr = "cool.str"
+GoolStr = "good.str"
+FailStr = "fail.str"
+MissStr = "miss.str"
+
+[AudienceRating]
+Enable = 0

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The editor window: core events and windowing, and native file dialogs. File access, audio and EZ2PORT go through EZ2BMS's own commands.",
+  "windows": ["main"],
+  "permissions": ["core:default", "dialog:default"]
+}

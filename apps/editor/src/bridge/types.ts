@@ -1,0 +1,612 @@
+// The editor's only door to the machine. Everything native - files, audio,
+// EZ2PORT - goes through a Backend: `tauri.ts` in the desktop app, `web.ts`
+// (in-memory files, a silent clock) in a browser and in Playwright. The
+// shapes mirror src-tauri's commands one for one.
+
+import type { ArtJob, EzTables, PlateSpec } from '@ez2bms/chart-core';
+
+export interface Entry {
+  name: string;
+  is_dir: boolean;
+  size: number;
+  modified_ms: number;
+}
+
+export interface ProjectScan {
+  dir: string;
+  charts: Entry[];
+  sidecar: Entry | null;
+  /** Relative to the project, forward slashes. */
+  samples: string[];
+  images: string[];
+  /** Movies (the BGA). */
+  movies: string[];
+}
+
+export interface AppInfo {
+  version: string;
+  /** The build's commit (12 hex digits), or `unknown`. */
+  commit: string;
+  os: string;
+  arch: string;
+  config_dir: string | null;
+  cache_dir: string | null;
+  log_dir: string | null;
+  /** The run before this one, when it ended without closing (src-tauri diag.rs). */
+  previous_session: { started_ms: number; pid: number; version: string } | null;
+}
+
+/** A newer EZ2BMS than this one, from the newest published release. */
+export interface UpdateInfo {
+  version: string;
+  current: string;
+  /** The release's notes, as written. */
+  notes: string | null;
+  /** When it was published (RFC 3339), when the release says. */
+  date: string | null;
+}
+
+/** Updating EZ2BMS (src-tauri update.rs, tauri-plugin-updater). */
+export interface UpdateBackend {
+  /**
+   * Why this build cannot update itself, or null when it can: `no-key` (built
+   * without the update key: a local or pre-update build), `package` (a Linux
+   * package, which the package manager updates).
+   */
+  unsupported(): Promise<'no-key' | 'package' | null>;
+  /** The newest published release, when it is newer than this one. */
+  check(): Promise<UpdateInfo | null>;
+  /** Download and install what `check` found (its signature is checked first). */
+  install(onProgress: (done: number, total: number | null) => void): Promise<void>;
+  /** Start again, on the new version. */
+  restart(): Promise<void>;
+  /** Show the releases page in the browser. */
+  openReleases(): Promise<void>;
+}
+
+/** Files the system hands EZ2BMS (src-tauri opened.rs): double-clicked, or passed on by a second launch. */
+export interface OpenedBackend {
+  /** Everything waiting, oldest first (each file is handed over once). */
+  take(): Promise<string[]>;
+  /** More arrived; returns the unsubscribe. */
+  onOpen(cb: () => void): () => void;
+}
+
+/** The app's own log (src-tauri diag.rs): kept locally, never sent anywhere. */
+export interface DiagBackend {
+  log(level: 'info' | 'warn' | 'error', message: string): void;
+  /** The last `maxBytes` of the log files, newest last. */
+  tail(maxBytes: number): Promise<string>;
+  /** Show the log folder in the file manager. */
+  revealLogs(): Promise<void>;
+  /** The host panicked (a command failed inside); returns the unsubscribe. */
+  onPanic(cb: (message: string) => void): () => void;
+}
+
+export interface AudioInfo {
+  rate: number;
+  backend: 'cpal' | 'null' | 'web';
+  device_error: string | null;
+}
+
+export interface Loaded {
+  path: string;
+  id: number | null;
+  frames: number;
+  channels: number;
+  seconds: number;
+  error: string | null;
+}
+
+/** One compiled chart event for the audio engine (chart-core PlanEvent, reduced). */
+export interface AudioEvent {
+  ms: number;
+  origin_ms: number;
+  until_ms: number | null;
+  sample: number;
+  voice: number;
+  level: number;
+  pan: number;
+}
+
+export interface Trigger {
+  sample: number;
+  voice: number;
+  level?: number;
+  pan?: number;
+  offset_ms?: number;
+  until_ms?: number | null;
+}
+
+export interface ClockSnapshot {
+  frame: number;
+  host_ns: number;
+  latency_frames: number;
+  rate: number;
+  playing: boolean;
+  generation: number;
+  now_ns: number;
+}
+
+/** The song's preview to render (src-tauri audio::PreviewJob). */
+export interface PreviewJob {
+  /** Sample files the events' `sample` indexes (publishing); absent when auditioning (loaded ids). */
+  sources?: string[];
+  events?: AudioEvent[];
+  /** An audio file instead of a mix. */
+  file?: string | null;
+  from_ms: number;
+  length_ms: number;
+  fade_ms: number;
+}
+
+/** A rendered preview, ready to trigger (src-tauri audio::Audition). */
+export interface Audition {
+  sample: number;
+  seconds: number;
+  /** The voice to play it on: a new trigger there cuts the last one, as the wheel restarts it. */
+  voice: number;
+}
+
+/** The metronome's two clicks in the sample bank (src-tauri audio.rs Clicks). */
+export interface Clicks {
+  accent: number;
+  plain: number;
+  voice: number;
+}
+
+export interface AudioBackend {
+  info(): Promise<AudioInfo>;
+  load(paths: string[]): Promise<Loaded[]>;
+  /** [min, max] i16 pairs at the mip level nearest `framesPerPx`. */
+  peaks(id: number, framesPerPx: number): Promise<Int16Array>;
+  /** Thumbnails: `width` [min, max] pairs per id, in order (zeros for an unknown id). */
+  thumbs(ids: number[], width: number): Promise<Int16Array>;
+  /** Part of one level of a sample's waveform mipmap: `count` buckets from `from`. */
+  peakRange(id: number, level: number, from: number, count: number): Promise<PeakRange>;
+  /** A sample's onsets and tempo (computed once; kept on disk for long files). */
+  analysis(id: number): Promise<SoundAnalysis>;
+  setEvents(events: AudioEvent[]): Promise<void>;
+  play(fromMs: number): Promise<void>;
+  seek(ms: number): Promise<void>;
+  stop(): Promise<void>;
+  trigger(t: Trigger): Promise<boolean>;
+  setMaster(gain: number): Promise<void>;
+  clock(): Promise<ClockSnapshot>;
+  /** Host time in ns, for clock-offset pings. */
+  now(): Promise<number>;
+  /** A snapshot every ~8 ms until the returned function is called. */
+  streamClock(on: (c: ClockSnapshot) => void): () => void;
+  /** The song's first `endMs` of loudness: `width` [min, max] pairs (it is rendered: not instant). */
+  previewOverview(events: AudioEvent[], endMs: number, width: number): Promise<Int16Array>;
+  /** Render the preview (events over loaded samples, or a file) for auditioning. */
+  preview(job: PreviewJob): Promise<Audition>;
+  /** The metronome's clicks (generated by the host), as samples to schedule, and their voice. */
+  clicks(): Promise<Clicks>;
+  /** The disk cache that keeps long files (20 s and more) decoded across runs. */
+  cacheInfo(): Promise<AudioCacheInfo>;
+  /** Its limit, MB; 0 turns it off and empties it. */
+  cacheSetCap(mb: number): Promise<void>;
+  cacheClear(): Promise<void>;
+}
+
+/**
+ * Part of a waveform mipmap: level k has buckets of `base << k` frames (at
+ * the device rate), each the [min, max] of the sample over it as i16.
+ */
+export interface PeakRange {
+  base: number;
+  levels: number;
+  frames: number;
+  /** Buckets in the level asked for. */
+  length: number;
+  /** The first bucket in `data`. */
+  from: number;
+  /** [min, max] pairs. */
+  data: Int16Array;
+}
+
+export interface SoundAnalysis {
+  /** [seconds from the file's start, strength 0..1], in time order. */
+  onsets: [number, number][];
+  /** Best first. `first_beat` is seconds from the file's start, under a beat. */
+  tempo: { bpm: number; first_beat: number; confidence: number }[];
+}
+
+export interface AudioCacheInfo {
+  /** Null when there is no disk cache (the browser build). */
+  dir: string | null;
+  entries: number;
+  bytes: number;
+  /** Bytes; 0 = off. */
+  cap: number;
+}
+
+export interface PackageFile {
+  path: string;
+  bytes: Uint8Array;
+}
+
+export interface KeysoundJob {
+  src: string;
+  start_frame: number;
+  end_frame: number | null;
+  file: string;
+}
+
+export interface PackageSpec {
+  key: string;
+  project_dir: string;
+  files: PackageFile[];
+  keysounds: KeysoundJob[];
+  /** preview.ssf, rendered by the host. */
+  preview?: PreviewJob;
+  /** Files the host copies in by path (the BGA movie): `from` relative to the project. */
+  copies?: { from: string; name: string }[];
+}
+
+export interface Published {
+  dir: string;
+  files: number;
+  missing: [string, string][];
+}
+
+export interface Probe {
+  path: string;
+  commit: string | null;
+  options: string[];
+  songs_root: boolean;
+  log_file: boolean;
+  start_at: boolean;
+  skip_ready: boolean;
+  viewer: boolean;
+  result_file: boolean;
+}
+
+export interface Located {
+  game_root: string | null;
+  ez2play: string | null;
+  songs_root: string | null;
+}
+
+export interface TestSpec {
+  package: PackageSpec;
+  chart_file: string;
+  mode: string;
+  ez2play: string;
+  game_root: string;
+  exe?: string | null;
+  auto?: boolean;
+  windowed?: boolean;
+  bga?: boolean | null;
+  speed?: number | null;
+  start_ms?: number | null;
+  skip_ready?: boolean;
+}
+
+export type RunEvent =
+  | { kind: 'line'; stream: 'out' | 'err'; text: string; at_ms: number }
+  | { kind: 'exit'; outcome: string; code: number | null };
+
+/** What is at `<songs root>/<key>` (src-tauri port::InspectionDto). */
+export interface Inspection {
+  /** The folder EZ2PORT resolves the key to (any case). */
+  folder: string | null;
+  song_ini: string | null;
+  files: string[];
+  /** The game ships a song with this key (`<game>/sound/<key>`). */
+  shipped: boolean;
+}
+
+/** What the editor decided after inspecting the target (src-tauri port::PublishOptions). */
+export interface PublishOptions {
+  /** Ranking tables of the package in place to keep. */
+  carry?: string[];
+  /** The target as inspected; the publish is refused if it changed since. */
+  expect?: { song_ini: string | null };
+  /** Keep the replaced package in `.ez2bms-backup/<key>`. */
+  backup?: boolean;
+}
+
+export interface PortBackend {
+  locate(start: string): Promise<Located>;
+  probe(path: string): Promise<Probe>;
+  /** What a publish would replace. `gameRoot` checks the key against the game's own songs. */
+  inspect(songsRoot: string, key: string, gameRoot: string | null): Promise<Inspection>;
+  publish(songsRoot: string, pkg: PackageSpec, options?: PublishOptions): Promise<Published>;
+  /** Move a package (still holding `songIni`) to the backup folder. */
+  retire(songsRoot: string, key: string, songIni: string): Promise<void>;
+  test(spec: TestSpec, on: (e: RunEvent) => void): Promise<number>;
+  stop(id: number): Promise<void>;
+}
+
+/** One file offered for import, and what became of it (src-tauri files::Imported). */
+export interface Imported {
+  from: string;
+  /** Its name in the song folder, relative with forward slashes, when imported. */
+  name: string | null;
+  /** The folder already had it. */
+  reused: boolean;
+  error: string | null;
+}
+
+/** An imported song's folder: its text files, and keysounds to copy in (`pcm`: an .ssf/.ezw's PCM as a .wav). */
+export interface ImportJob {
+  files: { path: string; text: string }[];
+  copies: { from: string; to: string; convert: 'pcm' | 'copy' }[];
+}
+
+export interface ImportReport {
+  dir: string;
+  copied: number;
+  /** [target, why] for each keysound that could not be copied. */
+  failed: [string, string][];
+}
+
+/** A cabinet keysound to look for in the game's folder (src-tauri export.rs ProbeSound). */
+export interface ExportProbe {
+  src: string;
+  start_frame: number;
+  end_frame: number | null;
+  /** Files already there that may hold it. */
+  candidates: string[];
+}
+
+export interface ExportProbeResult {
+  /** How it would be made ('rewrap': its PCM untouched; 'cut': at 44.1 kHz). */
+  how: 'rewrap' | 'copy' | 'cut' | 'decode' | null;
+  /** The candidate that already holds exactly its audio. */
+  equal: number | null;
+  /** That file's FNV-1a (hex). */
+  fnv: string | null;
+  /** Why the source cannot be read. */
+  error: string | null;
+}
+
+/** "any", "absent", or the FNV-1a (hex) of the bytes there now. */
+export type ExportExpect = 'any' | 'absent' | string;
+
+/** An export (src-tauri export.rs ExportJobDto): paths are relative to the game folder or the new one. */
+export interface ExportJob {
+  /** A backup's name (game folder only). */
+  stamp?: string;
+  label?: string;
+  files: { path: string; bytes: Uint8Array; expect?: ExportExpect }[];
+  copies?: { from: string; path: string; expect?: ExportExpect }[];
+  sounds?: {
+    src: string;
+    start_frame: number;
+    end_frame: number | null;
+    path: string;
+    format: 'ssf' | 'wav';
+    expect?: ExportExpect;
+  }[];
+  /** Files relied on as they are. */
+  keep?: { path: string; fnv: string }[];
+}
+
+export interface ExportReport {
+  stamp: string;
+  created: string[];
+  replaced: string[];
+}
+
+export interface ExportBackup {
+  stamp: string;
+  label: string;
+  created_ms: number;
+  state: 'applying' | 'applied' | 'restored' | string;
+  files: number;
+}
+
+export interface RestoreReport {
+  restored: string[];
+  removed: string[];
+  conflicts: string[];
+  skipped: string[];
+}
+
+export interface ExportBackend {
+  probe(sounds: ExportProbe[]): Promise<ExportProbeResult[]>;
+  /** Into a game folder, all or nothing, with a backup (ez2bms-launch gamepatch.rs). */
+  toGame(
+    root: string,
+    job: ExportJob,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<ExportReport>;
+  /** Into a new folder, which must not exist or be empty. */
+  toFolder(
+    dest: string,
+    job: ExportJob,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<{ dir: string; files: number }>;
+  backups(root: string): Promise<ExportBackup[]>;
+  restore(root: string, stamp: string, force?: boolean): Promise<RestoreReport>;
+}
+
+/** An open game controller, named as EZ2PORT names it (crates/ez2bms-input device.rs). */
+export interface PadInfo {
+  /** The device part of a binding: `0810:e501`, or `0810:e501#1` for a second board of that make. */
+  key: string;
+  name: string;
+  vid: number;
+  pid: number;
+  buttons: number;
+  axes: number;
+  hats: number;
+}
+
+/**
+ * What the controller thread sends (ez2bms-input event.rs), timed on the audio
+ * engine's host clock (`hostNs`, the scale of ClockSnapshot.host_ns). A
+ * `devices` event is a rescan: every held control of every pad is released.
+ */
+export type PadEvent =
+  | { kind: 'devices'; devices: PadInfo[] }
+  | { kind: 'button'; device: string; index: number; down: boolean; hostNs: number }
+  /** An SDL_HAT_* mask. */
+  | { kind: 'hat'; device: string; index: number; value: number; hostNs: number }
+  /** -32768..32767. */
+  | { kind: 'axis'; device: string; index: number; value: number; hostNs: number };
+
+export interface InputInfo {
+  devices: PadInfo[];
+  /** Pads are open (the editor holds them, and no EZ2PORT test run is live). */
+  active: boolean;
+  /** Controllers are unavailable, and why: keyboard only. */
+  error: string | null;
+}
+
+/** A place EZ2PORT reads its settings from (ez2bms-launch config.rs), in its order. */
+export interface ConfigFile {
+  kind: 'keys' | 'settings';
+  path: string;
+  exists: boolean;
+  /** EZ2_KEYS, a data folder's `ez2port`, or the per-user folder. */
+  source: 'env' | 'data' | 'user';
+}
+
+export interface InputBackend {
+  info(): Promise<InputInfo>;
+  /** Pad events in batches, until the returned function is called; a new stream replaces the last. */
+  stream(on: (events: PadEvent[]) => void): () => void;
+  /**
+   * Whether the editor wants pads open; resolves once they are. One flag for
+   * the whole page (the input hub counts its own users).
+   */
+  hold(active: boolean): Promise<void>;
+  /** keys.ini and settings.ini candidates, in EZ2PORT's order. */
+  configFiles(ez2play: string | null, gameRoot: string | null): Promise<ConfigFile[]>;
+}
+
+/**
+ * The browser build's stand-in for SDL (`window.__ez2bmsPad`): boards to plug
+ * in and press at exact host times, for tests and for trying the editor
+ * without a controller. Events flow only while the editor holds the pads.
+ */
+export interface DevPad {
+  /** Plug a board in; returns its key as the port would number it now. */
+  plug(info?: Partial<Omit<PadInfo, 'key'>>): string;
+  unplug(key: string): void;
+  button(key: string, index: number, down: boolean, hostNs?: number): void;
+  hat(key: string, index: number, value: number, hostNs?: number): void;
+  axis(key: string, index: number, value: number, hostNs?: number): void;
+  /** The host clock now (ns). */
+  hostNow(): number;
+  /** The host time (ns) at which the song, playing, reaches `ms`. */
+  hostAtSong(ms: number): number;
+  readonly active: boolean;
+}
+
+/** What an import takes; other files offered with it are refused (src-tauri files::ImportKind). */
+export type ImportKind = 'audio' | 'image' | 'movie';
+
+/** Song art cut by the host (src-tauri media_art): RGB, top-down. */
+export interface ArtPixels {
+  w: number;
+  h: number;
+  rgb: Uint8Array;
+}
+
+/** A rendered title plate (src-tauri media_plate). */
+export interface PlatePixels extends ArtPixels {
+  /** Characters the fonts have no glyph for (drawn as boxes). */
+  missing: string[];
+}
+
+export interface MediaBackend {
+  /** The disc or the eyecatch cut from an image, with the port importer's arithmetic. */
+  art(path: string, job: ArtJob): Promise<ArtPixels>;
+  /** The title plate, from the bundled fonts, as EZ2PORT renders one. */
+  plate(spec: PlateSpec): Promise<PlatePixels>;
+}
+
+/** Files dragged over the window (paths only on drop; CSS pixels). */
+export interface FileDrop {
+  kind: 'over' | 'drop' | 'leave';
+  paths: string[];
+  x: number;
+  y: number;
+}
+
+export interface Backend {
+  readonly kind: 'tauri' | 'web';
+  appInfo(): Promise<AppInfo>;
+  readFile(path: string): Promise<Uint8Array>;
+  /** Up to `length` bytes from `offset`, and the file's size (a movie's headers). */
+  readRange(
+    path: string,
+    offset: number,
+    length: number,
+  ): Promise<{ size: number; bytes: Uint8Array }>;
+  /** A URL the webview can play a song-folder file from (the BGA's <video>). */
+  mediaUrl(path: string): Promise<string>;
+  readText(path: string): Promise<string>;
+  writeText(path: string, text: string, backup: boolean): Promise<void>;
+  writeBytes(path: string, bytes: Uint8Array, backup: boolean): Promise<void>;
+  list(dir: string): Promise<Entry[]>;
+  scanProject(dir: string): Promise<ProjectScan>;
+  loadSettings(): Promise<Record<string, unknown>>;
+  saveSettings(v: Record<string, unknown>): Promise<void>;
+  pickFolder(title: string): Promise<string | null>;
+  pickFiles(title: string, extensions: string[]): Promise<string[]>;
+  /** Copy sound files or images (and those in folders) into a song folder, flat, never overwriting. */
+  importFiles(dir: string, paths: string[], kind?: ImportKind): Promise<Imported[]>;
+  /** Rename a file; refuses to replace another one. */
+  renameFile(from: string, to: string): Promise<void>;
+  /**
+   * Write an imported song's folder, all or nothing (src-tauri import_run):
+   * `dest` must not exist or be empty. A keysound that cannot be copied is
+   * reported, not fatal.
+   */
+  importRun(
+    dest: string,
+    job: ImportJob,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<ImportReport>;
+  /** Files dragged onto the window. Returns the unsubscribe. */
+  onFileDrop(cb: (d: FileDrop) => void): () => void;
+  readonly audio: AudioBackend;
+  readonly port: PortBackend;
+  readonly media: MediaBackend;
+  readonly export: ExportBackend;
+  readonly input: InputBackend;
+  readonly diag: DiagBackend;
+  readonly opened: OpenedBackend;
+  readonly updates: UpdateBackend;
+  /** The browser build's stand-in for the system handing over files (tests); never set in the desktop app. */
+  readonly devOpen?: (paths: string[]) => void;
+  /** The browser build's pretend controllers; never set in the desktop app. */
+  readonly devPad?: DevPad;
+  /**
+   * Chart tables for the browser build's made-up game (its made-up executable
+   * cannot carry real ones); never set in the desktop app.
+   */
+  readonly devGameTables?: EzTables;
+}
+
+/** Path helpers that work on both separators. */
+export function joinPath(dir: string, rel: string): string {
+  if (!dir) return rel;
+  const sep = dir.includes('\\') && !dir.includes('/') ? '\\' : '/';
+  return dir.replace(/[\\/]+$/, '') + sep + rel.replace(/^[\\/]+/, '');
+}
+
+/** Whether two paths name one folder or file: either separator, no trailing one; Windows paths in any case. */
+export function samePath(a: string, b: string): boolean {
+  const n = (p: string) => {
+    const q = p.replace(/\\/g, '/').replace(/\/+$/, '');
+    return /^[a-z]:\//i.test(q) ? q.toLowerCase() : q;
+  };
+  return n(a) === n(b);
+}
+
+export function baseName(path: string): string {
+  const parts = path.split(/[\\/]/);
+  return parts[parts.length - 1] ?? path;
+}
+
+export function dirName(path: string): string {
+  const i = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+  return i < 0 ? '' : i === 0 ? path.slice(0, 1) : path.slice(0, i);
+}

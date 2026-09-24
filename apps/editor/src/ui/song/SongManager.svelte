@@ -1,0 +1,207 @@
+<script lang="ts">
+  // The song manager: everything about the song rather than one chart - its
+  // info and category beside every chart in a mode x tier matrix, its title
+  // plate, its disc and eyecatch, its preview, its BGA movie, and all of them
+  // on the song select as the game will show them. It sits over the playfield like the
+  // keysound workbench (one or the other).
+  import { t, tParts } from '../../i18n/i18n.svelte';
+  import { app } from '../../state/app.svelte';
+  import type { Project } from '../../state/project.svelte';
+  import ArtCropper from './ArtCropper.svelte';
+  import BgaPanel from './BgaPanel.svelte';
+  import Matrix from './Matrix.svelte';
+  import MetaForm from './MetaForm.svelte';
+  import PlateDesigner from './PlateDesigner.svelte';
+  import PreviewPicker from './PreviewPicker.svelte';
+  import WheelPreview from './WheelPreview.svelte';
+
+  const TABS = [
+    { id: 'charts', label: 'song.tab.charts' },
+    { id: 'plate', label: 'song.tab.plate' },
+    { id: 'art', label: 'song.tab.art' },
+    { id: 'preview', label: 'song.tab.preview' },
+    { id: 'bga', label: 'song.tab.bga' },
+    { id: 'wheel', label: 'song.tab.wheel' },
+  ] as const;
+
+  let { project }: { project: Project } = $props();
+
+  function onkey(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || app.view.paletteOpen || e.defaultPrevented) return;
+    e.preventDefault();
+    app.view.songManager = false;
+  }
+</script>
+
+<svelte:window onkeydown={onkey} />
+
+<section class="manager" data-testid="song-manager" aria-label={t('song.label')}>
+  <header>
+    <h2>{t('song.heading')}</h2>
+    <span class="folder" title={project.dir}>{project.name}</span>
+    <span class="count">{t('song.chartCount', { n: project.charts.length })}</span>
+    <nav class="tabs" aria-label={t('song.pages')}>
+      {#each TABS as tab (tab.id)}
+        <button
+          class:on={app.view.songTab === tab.id}
+          data-testid="song-tab-{tab.id}"
+          aria-pressed={app.view.songTab === tab.id}
+          onclick={() => (app.view.songTab = tab.id)}>{t(tab.label)}</button
+        >
+      {/each}
+    </nav>
+    <button class="x" title={t('song.close')} onclick={() => (app.view.songManager = false)}
+      >×</button
+    >
+  </header>
+  <div class="body" class:full={app.view.songTab !== 'charts'}>
+    {#if app.view.songTab === 'charts'}<MetaForm {project} />{/if}
+    {#if app.view.songTab === 'plate'}
+      <PlateDesigner {project} />
+    {:else if app.view.songTab === 'preview'}
+      <PreviewPicker {project} />
+    {:else if app.view.songTab === 'bga'}
+      <BgaPanel {project} />
+    {:else if app.view.songTab === 'wheel'}
+      <WheelPreview {project} />
+    {:else if app.view.songTab === 'art'}
+      <div class="art">
+        <ArtCropper {project} kind="disc" />
+        <ArtCropper {project} kind="eyecatch" />
+        <p class="hint">
+          {#each tParts('song.artHint', {}, ['disc', 'eyecatch']) as p, i (i)}{#if 'slot' in p}<code
+                >{p.slot}.abm</code
+              >{:else}{p.text}{/if}{/each}
+        </p>
+      </div>
+    {:else}
+      <div class="charts">
+        <h3>{t('song.charts')}</h3>
+        <Matrix {project} />
+        <p class="hint">
+          {#each tParts('song.chartsHint', {}, ['file']) as p, i (i)}{#if 'slot' in p}<code
+                >&lt;mode&gt;1p-{project.sidecar.key || 'key'}[-hd|-shd|-ex].bmson</code
+              >{:else}{p.text}{/if}{/each}
+        </p>
+      </div>
+    {/if}
+  </div>
+</section>
+
+<style>
+  .manager {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    background: rgba(5, 6, 10, 0.97);
+    animation: rise 180ms var(--ease-out);
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(88, 225, 255, 0.12);
+    min-width: 0;
+  }
+  h2 {
+    margin: 0;
+    font-size: 13px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--neon);
+  }
+  .folder {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 4em;
+  }
+  .count {
+    font-size: 12px;
+    color: var(--ink-dim);
+    white-space: nowrap;
+  }
+  .tabs {
+    display: flex;
+    gap: 2px;
+    margin-left: 12px;
+    align-self: center;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs button {
+    all: unset;
+    cursor: pointer;
+    white-space: nowrap;
+    padding: 4px 10px;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border-bottom: 2px solid transparent;
+  }
+  .tabs button:hover {
+    color: var(--ink-dim);
+  }
+  .tabs button.on {
+    color: var(--ink);
+    border-color: var(--neon);
+  }
+  .body.full {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .art {
+    display: grid;
+    gap: 14px;
+    align-content: start;
+    min-width: 0;
+    max-width: 1100px;
+  }
+  .x {
+    all: unset;
+    cursor: pointer;
+    margin-left: auto;
+    font-size: 20px;
+    line-height: 1;
+    padding: 0 6px;
+    color: var(--ink-dim);
+  }
+  .x:hover {
+    color: var(--ink);
+  }
+  .body {
+    display: grid;
+    grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+    gap: 24px;
+    padding: 16px;
+    overflow: auto;
+    min-height: 0;
+  }
+  h3 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+  .hint {
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+  @media (max-width: 900px) {
+    .body {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

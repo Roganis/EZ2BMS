@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EZ2BMS - renderer perf spike</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #05060a;
+        overflow: hidden;
+      }
+      #stats {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        color: #7df;
+        font: 12px/1.4 monospace;
+        white-space: pre;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stats">starting…</div>
+    <script type="module" src="/src/dev/perf-spike.ts"></script>
+  </body>
+</html>

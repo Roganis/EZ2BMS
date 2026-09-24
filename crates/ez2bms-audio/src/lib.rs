@@ -1,0 +1,49 @@
+//! EZ2BMS audio: everything that touches samples.
+//!
+//! - [`decode`] any keysound (WAV, OGG, FLAC, MP3, `.ssf`/`.ezw`) and
+//!   [`resample`] it; a [`cache::SampleCache`] keeps them decoded, and a
+//!   [`disk::DiskCache`] keeps long ones decoded across runs.
+//! - [`schedule::Schedule`]: the timed sounds of a chart, on voices that follow
+//!   EZ2PORT's rule (a retrigger cuts: one voice per keysound, one per lane).
+//! - [`engine::Engine`] plays a schedule live, from any point, picking up
+//!   sounds already under way mid-sample; its [`clock`] says what is being
+//!   heard. [`offline`] renders through the same mixer.
+//! - [`analysis`] finds a stem's onsets and tempo, suggestions for slicing.
+//! - [`cut`] and [`ssf`] write published keysounds: 16-bit 44.1 kHz stereo,
+//!   sliced sample-exactly.
+//! - [`import`] writes an imported song's folder, the game's `.ssf`
+//!   keysounds becoming `.wav` with their PCM untouched; [`export`] makes a
+//!   cabinet's `.ssf` and a BMS folder's `.wav` - rewrapped the other way
+//!   where it can, cut as a publish cuts where it must.
+//!
+//! Timing and voice assignment come from chart-core (TypeScript), which
+//! compiles the chart exactly as it will be published; this crate only plays
+//! what it is given.
+
+pub mod analysis;
+pub mod backend;
+pub mod cache;
+pub mod click;
+pub mod clock;
+pub mod cut;
+pub mod decode;
+pub mod disk;
+pub mod engine;
+pub mod error;
+pub mod export;
+pub mod import;
+pub mod level;
+pub mod mixer;
+pub mod offline;
+pub mod peaks;
+pub mod preview;
+pub mod resample;
+pub mod sample;
+pub mod schedule;
+pub mod ssf;
+pub mod wav;
+
+pub use engine::{Engine, Renderer};
+pub use error::{AudioError, Result};
+pub use sample::Sample;
+pub use schedule::{Event, EventSpec, Schedule, VoiceKey, VoiceStart};
