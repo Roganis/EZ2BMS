@@ -215,9 +215,9 @@ sprite BGA for the port's writers.
 - [x] M9.4 Messages in ICU MessageFormat, the language switch (Preferences), the pseudo-language
 - [x] M9.5 Every word of the editor in the catalogs; the host's errors by kind
 - [x] M9.6 chart-core's findings, notes and reasons in the catalogs, stored with their key
-- [ ] M9.7 Korean
-- [ ] M9.8 Japanese
-- [ ] M9.9 These docs, timings, a sweep of every screen in each language, 0.2.0
+- [x] M9.7 Korean, every message (an AI draft, for a native speaker's reading)
+- [x] M9.8 Japanese, every message (the same)
+- [x] M9.9 These docs, timings in the [perf log](docs/perf-log.md), a sweep of every screen in each language, 0.2.0 and the [CHANGELOG](CHANGELOG.md)
 
 ## Verification
 

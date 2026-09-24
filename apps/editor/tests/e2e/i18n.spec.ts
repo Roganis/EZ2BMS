@@ -24,7 +24,7 @@ test('Preferences switch the language live, and it stays', async ({ page }) => {
   await expect(prefs).toHaveAttribute('aria-label', '環境設定');
   expect(await lang(page)).toBe('ja');
   // The translation is a draft, and says so.
-  await expect(prefs.getByText(/AI による下訳/)).toBeVisible();
+  await expect(prefs.getByText(/AIによる下訳/)).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(prefs).toHaveCount(0);
 
@@ -32,7 +32,7 @@ test('Preferences switch the language live, and it stays', async ({ page }) => {
   await page.keyboard.press('Control+k');
   await page.keyboard.type('About EZ2BMS');
   const palette = page.getByTestId('palette');
-  await expect(palette.locator('li').first()).toContainText('EZ2BMS について');
+  await expect(palette.locator('li').first()).toContainText('EZ2BMSについて');
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('about')).toBeVisible();
   await page.keyboard.press('Escape');

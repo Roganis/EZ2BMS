@@ -1,6 +1,6 @@
 // The editor in Japanese, one file per area as the English. Typed against
-// the English: a key English does not have is an error; one not translated
-// yet falls back to English. Drafted by an AI, for a native speaker to
+// the English: a key English does not have, or one it has that is not
+// translated, is a type error. Drafted by an AI, for a native speaker to
 // review (AI-DISCLOSURE.md); the words chosen are in docs/i18n-glossary.md.
 
 import type { MessageKey } from '../en';
@@ -14,7 +14,7 @@ import { shell } from './shell';
 import { song } from './song';
 import { transfer } from './transfer';
 
-export const ja: Partial<Record<MessageKey, string>> = {
+export const ja: Record<MessageKey, string> = {
   ...shell,
   ...help,
   ...host,

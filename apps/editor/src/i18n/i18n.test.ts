@@ -94,7 +94,7 @@ describe('the catalogs', () => {
       i18n.apply('ja');
       const about = app.commands.search('About EZ2BMS')[0]!.cmd;
       expect(about.id).toBe('help.about');
-      expect(app.commands.titleOf(about)).toBe('EZ2BMS について');
+      expect(app.commands.titleOf(about)).toBe('EZ2BMSについて');
       expect(app.commands.search('環境設定')[0]!.cmd.id).toBe('app.preferences');
     } finally {
       i18n.apply('en');

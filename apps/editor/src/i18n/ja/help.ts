@@ -4,7 +4,7 @@ import type { help as en } from '../en/help';
 
 export const help: Record<keyof typeof en, string> = {
   // As cmd.help.about, with its space.
-  'about.label': 'EZ2BMS について',
+  'about.label': 'EZ2BMSについて',
   'about.lead': 'EZ2PORTとEZ2AC筐体のための、アーケード準拠の譜面エディタです。',
   'about.version': 'バージョン',
   'about.system': 'システム',
@@ -28,7 +28,7 @@ export const help: Record<keyof typeof en, string> = {
 
   'diag.crashed': '前回、EZ2BMSが予期せず終了しました。原因はログに残っているかもしれません。',
   'diag.details': '詳細',
-  'diag.failed': '問題が発生しました：{message}。詳細はログにあります（EZ2BMS について）。',
+  'diag.failed': '問題が発生しました：{message}。詳細はログにあります（EZ2BMSについて）。',
   'diag.copied': 'レポートをコピーしました。バグ報告やメッセージに貼り付けてください',
 
   'update.label': 'アップデート',
@@ -51,7 +51,7 @@ export const help: Record<keyof typeof en, string> = {
   'update.checkFailed': 'アップデートを確認できません：{error}',
   'update.saveFirstToast': '先に譜面を保存してください。インストールするとEZ2BMSが再起動します',
 
-  'cmd.help.about': 'EZ2BMS について',
+  'cmd.help.about': 'EZ2BMSについて',
   'cmd.help.updates': 'アップデートを確認',
   'cmd.help.report': '問題レポートをコピー（バージョン、エラー、ログの末尾）',
   'cmd.help.logs': 'ログフォルダを開く',
@@ -60,7 +60,7 @@ export const help: Record<keyof typeof en, string> = {
   'prefs.label': '環境設定',
   'prefs.language': '言語',
   'prefs.languageAuto': 'システムに合わせる（{name}）',
-  'prefs.languageHint': '日本語訳は AI による下訳です。誤りがあればお知らせください。',
+  'prefs.languageHint': '日本語訳はAIによる下訳です。誤りがあればお知らせください。',
   'prefs.updates': '起動時に新しいバージョンを確認する（1日1回）',
   'prefs.close': '閉じる',
 };

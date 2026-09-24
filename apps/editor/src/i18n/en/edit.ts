@@ -93,7 +93,7 @@ export const edit = {
   'strip.pinned': '{sound}: a strip beside the lanes',
   // In a strip's title, where its length goes.
   'strip.notLoaded': 'not loaded',
-  'strip.noOnsets': 'No onsets to cut at: lower the sensitivity, or it is cut there already',
+  'strip.noOnsets': 'No onsets to cut at: raise the sensitivity, or it is cut there already',
   'strip.onsetsDone': '{n} cuts at onsets',
 
   'chop.title': 'Chop to the grid',
