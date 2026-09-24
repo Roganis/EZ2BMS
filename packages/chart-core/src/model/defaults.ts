@@ -98,6 +98,7 @@ export function newChart(o: NewChartOptions): ChartData {
     lines: null,
     bpmEvents: [],
     stopEvents: [],
+    scrollEvents: [],
     channels: [],
     notes: [],
     bga: null,

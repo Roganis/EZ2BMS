@@ -95,3 +95,4 @@ export {
   SYNTH_SONGDB_TABLES,
   type SynthGame,
 } from './dev/synthgame';
+export * from './timing/scroll';

@@ -18,6 +18,7 @@ import type {
   Extra,
   NoteRec,
   SoundChannel,
+  ScrollEvent,
   StopEvent,
   Tier,
 } from '../../model/types';
@@ -126,6 +127,7 @@ const ROOT_KEYS = new Set([
   'sound_channels',
   'bga',
 ]);
+const SCROLL_KEYS = new Set(['y', 'rate']);
 const CHANNEL_KEYS = new Set(['name', 'notes', 'x_color']);
 const NOTE_KEYS = new Set(['x', 'y', 'l', 'c', 'up', 'x_stop', 'x_vel', 'x_pan', 'x_kind']);
 const Y_KEYS = new Set(['y']);
@@ -268,6 +270,21 @@ export function parseBmson(input: Uint8Array | string, opts: ParseOptions = {}):
     },
   );
 
+  const rawScroll = Array.isArray(doc.x_scroll_events) ? doc.x_scroll_events : undefined;
+  const scrollEvents = readTimed<ScrollEvent>(
+    r,
+    rawScroll,
+    '$.x_scroll_events',
+    SCROLL_KEYS,
+    (o, x, p) => {
+      if (!isNum(o.rate)) {
+        r.warn(p, 'scroll change without a numeric rate; dropped');
+        return undefined;
+      }
+      return withExtra({ y: o.y as number, rate: o.rate }, x);
+    },
+  ).sort((a, b) => a.y - b.y);
+
   const channels: SoundChannel[] = [];
   const notes: NoteRec[] = [];
   let nextNote = opts.firstNoteId ?? 1;
@@ -365,16 +382,24 @@ export function parseBmson(input: Uint8Array | string, opts: ParseOptions = {}):
   const absent = (['bpm_events', 'stop_events', 'sound_channels'] as const).filter(
     (k) => !(k in doc),
   );
+  const extra = r.rest(doc, ROOT_KEYS) ?? {};
+  // The model holds x_scroll_events once it has something in it; until then
+  // the member stays as the file had it (an empty array, or something that
+  // was not an array), so an unedited save gives the same bytes.
+  if (scrollEvents.length) delete extra.x_scroll_events;
+  else if (doc.x_scroll_events !== undefined && !rawScroll)
+    r.warn('$.x_scroll_events', 'not a list of scroll changes; kept as it is');
   const chart: ChartData = {
     version: doc.version,
     info,
     lines,
     bpmEvents,
     stopEvents,
+    scrollEvents,
     channels,
     notes,
     bga,
-    extra: r.rest(doc, ROOT_KEYS) ?? {},
+    extra,
   };
   if (absent.length) chart.absent = [...absent];
   return { chart, warnings: r.warnings, hadBom, ...(upgradedFrom ? { upgradedFrom } : {}) };

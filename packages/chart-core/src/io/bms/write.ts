@@ -345,6 +345,12 @@ export function writeBms(
       'info',
       `${fractional} STOPs are not a whole number of 1/192 measures: written as decimals (beatoraja reads them; LR2 rounds them down)`,
     );
+  if (chart.scrollEvents.length)
+    say(
+      'bms-scroll',
+      'info',
+      `${chart.scrollEvents.length} scroll change${chart.scrollEvents.length === 1 ? ' is' : 's are'} not written: LR2 has none, and beatoraja's #SCROLL is not what EZ2PORT does (it eases to the new speed)`,
+    );
   if (Array.isArray(chart.extra.x_ez_records) && chart.extra.x_ez_records.length)
     say(
       'bms-kept',

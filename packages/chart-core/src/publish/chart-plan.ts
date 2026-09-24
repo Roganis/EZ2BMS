@@ -38,6 +38,7 @@ import {
 } from '../io/ez/ezff';
 import { cp949Field } from '../io/legacy-text';
 import { EngineTempo } from '../timing/engine-tempo';
+import { EZ_SCROLL_TYPE, scrollPlacement, wordFromF32 } from '../timing/scroll';
 import { TICKS_PER_BEAT, TICKS_PER_MEASURE, TickConverter } from '../timing/ticks';
 import type { Column } from '../modes/registry';
 import { BackingAllocator } from './tracks';
@@ -100,6 +101,8 @@ export interface CabinetPlanStats {
   pinnedCuts: number;
   /** Records written back from `x_ez_records`. */
   kept: number;
+  /** Scroll changes written (type 6, each on its own track with its own second word). */
+  scroll: number;
   /** Tracks added past the game chart's count because every track was busy. */
   grown: number;
   /** Characters of the header names CP949 has no bytes for (written as '?'). */
@@ -392,6 +395,21 @@ function keptRecords(chart: ChartData, clock: ChartClock): { track: number; rec:
   return out;
 }
 
+/**
+ * The chart's scroll changes as type-6 records: the multiplier's f32 in the
+ * first word (what the port reads, reference/play.c), each on the track and
+ * with the second word it was imported with (0 and 0 for a new one).
+ */
+function scrollRecords(chart: ChartData, clock: ChartClock): { track: number; rec: EzffRecord }[] {
+  return chart.scrollEvents.map((e) => {
+    const { track, raw1 } = scrollPlacement(e);
+    return {
+      track,
+      rec: { tick: clock.tick(e.y), type: EZ_SCROLL_TYPE, raw: [wordFromF32(e.rate), raw1] },
+    };
+  });
+}
+
 export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
   const clock = new ChartClock(chart);
   const tc = clock.ticks;
@@ -432,10 +450,10 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
   // ---- the cabinet: what the game's chart keeps
   const cabinet: CabinetPlanStats | undefined =
     o.target === 'cabinet'
-      ? { pinned: 0, repinned: 0, pinnedCuts: 0, kept: 0, grown: 0, nameUnmappable: [] }
+      ? { pinned: 0, repinned: 0, pinnedCuts: 0, kept: 0, scroll: 0, grown: 0, nameUnmappable: [] }
       : undefined;
   const game = cabinet ? gameHeader(chart) : undefined;
-  const kept = cabinet ? keptRecords(chart, clock) : [];
+  const kept = cabinet ? [...keptRecords(chart, clock), ...scrollRecords(chart, clock)] : [];
   const pinOf = new Map<PlannedSound, number>();
   if (cabinet) {
     for (const p of pending) {
@@ -461,7 +479,10 @@ export function compileChart(chart: ChartData, o: CompileOptions): ChartPlan {
   const tracks: EzffRecord[][] = Array.from({ length: Math.max(trackCount, 64) }, () => []);
   tracks[0]!.push(...tempoRecords);
   for (const k of kept) tracks[k.track]!.push(k.rec);
-  if (cabinet) cabinet.kept = kept.length;
+  if (cabinet) {
+    cabinet.scroll = chart.scrollEvents.length;
+    cabinet.kept = kept.length - cabinet.scroll;
+  }
   const events: PlanEvent[] = [];
   let endMs = 0;
   // Lane records first, so backing never takes a tick a lane needs (they are on

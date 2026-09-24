@@ -105,11 +105,10 @@ describe('importing a song', () => {
     ]);
     // A note on a slot the .ezi does not list.
     expect(ch(at(6 * M, 11).ch)).toBe('slot 9.wav');
+    // The scroll change (track 0, second word 0: nothing else to keep).
+    expect(d.scrollEvents).toEqual([{ y: 2 * M, rate: 2 }]);
     // What bmson has no place for.
-    expect(d.extra.x_ez_records).toEqual([
-      { track: 0, y: 2 * M, type: 6, raw: [0x40000000, 0], scroll: 2 },
-      { track: 1, y: 0, type: 2, value: 100 },
-    ]);
+    expect(d.extra.x_ez_records).toEqual([{ track: 1, y: 0, type: 2, value: 100 }]);
     expect(d.extra.x_ez).toMatchObject({
       version: 8,
       name: 'synthetic',

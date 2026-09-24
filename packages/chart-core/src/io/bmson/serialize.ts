@@ -88,6 +88,10 @@ export function chartToJson(chart: ChartData): Obj {
     stop_events: skip('stop_events', chart.stopEvents.length)
       ? undefined
       : chart.stopEvents.map((e) => withExtra({ y: e.y, duration: e.duration }, e.extra)),
+    // EZ2BMS's own member, so only in charts that have scroll changes.
+    x_scroll_events: chart.scrollEvents.length
+      ? chart.scrollEvents.map((e) => withExtra({ y: e.y, rate: e.rate }, e.extra))
+      : undefined,
     sound_channels: skip('sound_channels', chart.channels.length)
       ? undefined
       : chart.channels.map((c) =>

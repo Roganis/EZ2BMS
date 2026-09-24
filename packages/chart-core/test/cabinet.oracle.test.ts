@@ -131,9 +131,10 @@ describe.skipIf(!ORACLE)('cabinet export against EZ2PORT (oracle)', () => {
       }
       // What the StreetMix NM chart carries: three background notes on their
       // own tracks (1, which also has a volume record, 8 and 22), a scroll
-      // record, a background note with a length.
+      // change (now the chart's own, written back as the same record), a
+      // background note with a length.
       const nm = cabinetBytes(imp.charts[0]!.data, '5k', game.gds['5k']).plan;
-      expect(nm.cabinet).toMatchObject({ kept: 2, pinned: 3, pinnedCuts: 0 });
+      expect(nm.cabinet).toMatchObject({ kept: 1, scroll: 1, pinned: 3, pinnedCuts: 0 });
       expect(nm.ezff.tracks.length).toBe(23);
     });
   });

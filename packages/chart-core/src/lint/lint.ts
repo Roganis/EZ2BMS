@@ -12,6 +12,7 @@ import { categoryLabel, unreachableIn, validCategory } from '../song/categories'
 import { portCannotPlay, type MovieInfo } from '../media/movie';
 import { songMeta } from '../song/meta';
 import { modeDef } from '../modes/registry';
+import { EZ_SCROLL_MAX, legacyScrollIndices, scrollEventsOf } from '../timing/scroll';
 import { TickConverter } from '../timing/ticks';
 import {
   bgmCopies,
@@ -176,6 +177,45 @@ export function lintChart(c: LintChart, missing?: ReadonlySet<string>): Finding[
       { at: d.stopEvents[0]!.y },
     );
   }
+
+  // ---- scroll changes (timing/scroll.ts)
+  for (const e of d.scrollEvents)
+    if (!(e.rate > 0 && Number.isFinite(e.rate)))
+      f(
+        'scroll-rate',
+        'error',
+        `A scroll change of ${e.rate}: the field would stand still or run backwards (it must be above 0)`,
+        { at: e.y },
+      );
+  const scrolls = scrollEventsOf(d);
+  const scrollTicks = new Map<number, number>();
+  for (const e of scrolls) {
+    const t = tc.tick(e.y).tick;
+    const prev = scrollTicks.get(t);
+    if (prev !== undefined && prev !== e.rate)
+      f(
+        'scroll-same-tick',
+        'warning',
+        `Two scroll changes (×${prev}, ×${e.rate}) land on the same EZ2 tick: EZ2PORT's sort does not say which one it keeps`,
+        { at: e.y },
+      );
+    scrollTicks.set(t, e.rate);
+  }
+  if (scrolls.length > EZ_SCROLL_MAX)
+    f(
+      'scroll-count',
+      'warning',
+      `${scrolls.length} scroll changes: EZ2PORT keeps the first ${EZ_SCROLL_MAX} (in track order) and drops the rest`,
+      { at: scrolls[EZ_SCROLL_MAX]!.y },
+    );
+  const legacy = legacyScrollIndices(d).length;
+  if (legacy)
+    f(
+      'scroll-legacy',
+      'info',
+      `${legacy} scroll change${legacy === 1 ? '' : 's'} from the game chart, kept from an older import: ${legacy === 1 ? 'it plays and publishes' : 'they play and publish'}, but cannot be edited until turned into the chart's own`,
+      { fix: chartFix('scroll-legacy') },
+    );
 
   // ---- notes
   const lanes = new Set(modeDef(c.mode).columns.map((col) => col.x));

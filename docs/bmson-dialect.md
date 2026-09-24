@@ -50,20 +50,23 @@ convention (`streetmix1p-<key>-hd.bmson`) so the two agree.
 
 ## Additions
 
-| Member             | Where         | Meaning                                                                                                                                                  |
-| ------------------ | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `x_tier`           | `info`        | `NM`, `HD`, `SHD` or `EX`. Explicit, instead of guessed from names                                                                                       |
-| `judgement_deltas` | `info`        | `{KOOL, COOL, GOOD, MISS}` - the chart `.ini`'s `[JudgmentDelta]`, **in ticks of 1/192 beat**, stored raw (the engine adds 3 to each when it loads them) |
-| `life_deltas`      | `info`        | `{COOL, GOOD, MISS, FAIL}` - the chart `.ini`'s `[GaugeUpDownRate]`. There is no KOOL entry: the engine mirrors COOL                                     |
-| `x_vel`            | note          | EZ2 note velocity 0-127 (absent = 127)                                                                                                                   |
-| `x_pan`            | note          | EZ2 note pan 0-127, 64 centre (absent = 64)                                                                                                              |
-| `x_kind`           | note          | EZ2 hold kind byte: a hold's instalment step (absent = 0, a quarter beat)                                                                                |
-| `up`, `x_stop`     | note          | BmsTWO's extensions; kept, but EZ2 has neither (dropped when publishing, with a lint message)                                                            |
-| `x_color`          | sound channel | BmsTWO's channel colour; kept                                                                                                                            |
+| Member             | Where         | Meaning                                                                                                                                                                                     |
+| ------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `x_tier`           | `info`        | `NM`, `HD`, `SHD` or `EX`. Explicit, instead of guessed from names                                                                                                                          |
+| `judgement_deltas` | `info`        | `{KOOL, COOL, GOOD, MISS}` - the chart `.ini`'s `[JudgmentDelta]`, **in ticks of 1/192 beat**, stored raw (the engine adds 3 to each when it loads them)                                    |
+| `life_deltas`      | `info`        | `{COOL, GOOD, MISS, FAIL}` - the chart `.ini`'s `[GaugeUpDownRate]`. There is no KOOL entry: the engine mirrors COOL                                                                        |
+| `x_vel`            | note          | EZ2 note velocity 0-127 (absent = 127)                                                                                                                                                      |
+| `x_pan`            | note          | EZ2 note pan 0-127, 64 centre (absent = 64)                                                                                                                                                 |
+| `x_kind`           | note          | EZ2 hold kind byte: a hold's instalment step (absent = 0, a quarter beat)                                                                                                                   |
+| `up`, `x_stop`     | note          | BmsTWO's extensions; kept, but EZ2 has neither (dropped when publishing, with a lint message)                                                                                               |
+| `x_color`          | sound channel | BmsTWO's channel colour; kept                                                                                                                                                               |
+| `x_scroll_events`  | chart (root)  | `[{y, rate}]`, sorted by `y`: scroll-speed changes (EZFF record type 6). From `y` on, EZ2PORT scrolls at the player's speed × `rate`; timing is untouched. Written only when there are some |
 
 `judgement_deltas` and `life_deltas` come from BmsTWO's `EZ2_TEMPLATE.bmson`;
 `x_vel`, `x_pan` and `x_kind` are the names EZ2PORT's `BMSTWO-EZ2.md` proposes,
-so BmsTWO and the port can adopt them as they are.
+so BmsTWO and the port can adopt them as they are. `x_scroll_events` has no
+proposal to follow (that document's row for type 6 predates the port playing
+them); it is EZ2BMS's, and `rate` is kept as the f32 the record will carry.
 
 The keysound workbench and Classic mode (M2) add nothing to the file.
 Classic mode's splits are ordinary background notes with `c: true`, keyed
@@ -79,12 +82,13 @@ still fit the note, the kept records on their tracks, the header's names
 (CP949), second BPM, track count and length - so an unedited chart returns
 as the game had it:
 
-| Member         | Where        | Meaning                                                                                                                                                                                                                     |
-| -------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `x_track`      | note         | the `.ez` track a background note was on (lane notes' tracks follow from the mode)                                                                                                                                          |
-| `x_len`        | note         | the record's raw length when a publish would write another: a background note's (published as a tap), a lane tap's 1-6                                                                                                      |
-| `x_ez`         | chart (root) | the `.ez` header and `.ini` it came from: `file`, `version`, `name`, `name2`, `bpm`, `bpm2`, `total_ticks`, `last_tick` (its last record's tick), `ticks_per_measure`, `tracks`, `measure_scale`                            |
-| `x_ez_records` | chart (root) | records with no bmson home, `{track, y, type, value?, bpm?, raw?, scroll?}`: volume (2), beats (4), marks (5), scroll speed (6), stops (7), unknown kinds, out-of-range tempi. Not moved by edits; not published to EZ2PORT |
+| Member         | Where               | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `x_track`      | note, scroll change | the `.ez` track a background note or a scroll change was on (lane notes' tracks follow from the mode)                                                                                                                                                                                                                                                                                                                                                                  |
+| `x_raw1`       | scroll change       | the record's second word, when not 0                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `x_len`        | note                | the record's raw length when a publish would write another: a background note's (published as a tap), a lane tap's 1-6                                                                                                                                                                                                                                                                                                                                                 |
+| `x_ez`         | chart (root)        | the `.ez` header and `.ini` it came from: `file`, `version`, `name`, `name2`, `bpm`, `bpm2`, `total_ticks`, `last_tick` (its last record's tick), `ticks_per_measure`, `tracks`, `measure_scale`                                                                                                                                                                                                                                                                       |
+| `x_ez_records` | chart (root)        | records with no bmson home, `{track, y, type, value?, bpm?, raw?, scroll?}`: volume (2), beats (4), marks (5), stops (7), unknown kinds, out-of-range tempi, and scroll speeds (6) whose f32 is not a number. Moved by a change of resolution, not by other edits; not published to EZ2PORT. Charts imported before `x_scroll_events` existed hold their scroll changes here too: they count as the chart's, and an Issues quick fix turns them into `x_scroll_events` |
 
 A chart imported from BMS (M5) keeps the headers EZ2 has no use for in
 `info`: `x_bms_rank`, `x_bms_defexrank`, `x_bms_total`, `x_bms_player`,

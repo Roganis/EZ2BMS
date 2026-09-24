@@ -37,11 +37,13 @@ import { songdbFind, versionCategory, type SongDb } from '../../ez2data/songdb';
 import type { SongTitle } from '../../ez2data/songtext';
 import type { OpenNote, Severity } from '../../lint/lint';
 import { newChart } from '../../model/defaults';
-import type { ChartData, Extra, NoteRec, SoundChannel, Tier } from '../../model/types';
+import type { ChartData, Extra, NoteRec, ScrollEvent, SoundChannel, Tier } from '../../model/types';
 import { chartBaseName, deriveSongKey, parseChartName } from '../../modes/filenames';
 import { modeNames, type ModeId } from '../../modes/ids';
 import { columnsFromGds, modeDef } from '../../modes/registry';
 import { newSongFile, type SongFile } from '../../song/songfile';
+import { f32FromWord, scrollEventFromLegacy } from '../../timing/scroll';
+import { f32Decimal } from '../../util/f32';
 import {
   EZ_BEATS,
   EZ_BPM,
@@ -128,16 +130,7 @@ export class EzImportError extends Error {}
 const TIER_INDEX: Record<Tier, number> = { NM: 0, HD: 1, SHD: 2, EX: 3 };
 const f32 = Math.fround;
 
-/** The shortest decimal that reads back as the same f32 (175.3, not 175.3000030517578). */
-export function f32Decimal(v: number): number {
-  const x = f32(v);
-  if (!Number.isFinite(x) || x === 0) return x;
-  for (let p = 1; p <= 9; p++) {
-    const d = Number(x.toPrecision(p));
-    if (f32(d) === x) return d;
-  }
-  return x;
-}
+export { f32Decimal };
 
 const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
 
@@ -363,6 +356,7 @@ function importChart(
   const missing = new Set<string>();
   const unlisted = new Set<number>();
   const kept: Extra[] = [];
+  const scrolls: ScrollEvent[] = [];
   const counts = new Map<number, number>();
   let nextNote = 1;
   let bgHolds = 0;
@@ -410,6 +404,17 @@ function importChart(
         }
         if (Object.keys(extra).length) n.extra = extra;
         data.notes.push(n);
+      } else if (r.type === EZ_SCROLL && scrollRate(r) !== undefined) {
+        // A scroll change the model can hold, with its track and second
+        // word, so the cabinet gets the same record back (chart-plan.ts).
+        scrolls.push(
+          scrollEventFromLegacy({
+            y: yOf(r.tick),
+            rate: scrollRate(r)!,
+            track: ti,
+            raw1: r.raw![1],
+          }),
+        );
       } else if (!(r.type === EZ_BPM && tempo.used.has(r))) {
         kept.push(keptRecord(ti, r, yOf));
         counts.set(r.type, (counts.get(r.type) ?? 0) + 1);
@@ -419,12 +424,18 @@ function importChart(
   data.channels = [...channels.values()];
 
   // Said once each.
-  const scroll = counts.get(EZ_SCROLL) ?? 0;
-  if (scroll)
+  if (scrolls.length)
     say(
       'import-scroll',
-      'warning',
-      `${scroll} scroll-speed change${scroll === 1 ? '' : 's'}: EZ2PORT scrolls faster or slower there; kept in the chart, but EZ2BMS neither shows nor publishes them yet`,
+      'info',
+      `${scrolls.length} scroll-speed change${scrolls.length === 1 ? '' : 's'}: EZ2PORT scrolls faster or slower from there; kept as the chart's scroll changes`,
+    );
+  const oddScroll = counts.get(EZ_SCROLL) ?? 0;
+  if (oddScroll)
+    say(
+      'import-kept',
+      'info',
+      `${oddScroll} scroll record${oddScroll === 1 ? '' : 's'} whose multiplier is not a number: kept for a cabinet export, not played or published`,
     );
   const other: [number, string][] = [
     [EZ_VOLUME, 'track volume'],
@@ -491,6 +502,7 @@ function importChart(
     measure_scale: f32Decimal(ini.measureScale),
   };
   if (kept.length) data.extra.x_ez_records = kept;
+  data.scrollEvents = scrolls;
   return { file: `${chartBaseName(mode, key, tier)}.bmson`, data, mode, tier, from: c.file, notes };
 }
 
@@ -529,6 +541,13 @@ function importTempo(
       `${doubled} tick${doubled === 1 ? ' has' : 's have'} two tempo records: the one EZ2PORT plays (the last) is kept`,
     );
   return { init: f32Decimal(init), events, used };
+}
+
+/** A type-6 record's multiplier when the model can hold it: a finite f32 that is not -0 (JSON has no -0). */
+function scrollRate(r: EzffRecord): number | undefined {
+  if (!r.raw) return undefined;
+  const v = f32FromWord(r.raw[0]);
+  return Number.isFinite(v) && !Object.is(v, -0) ? v : undefined;
 }
 
 function keptRecord(track: number, r: EzffRecord, yOf: (tick: number) => number): Extra {

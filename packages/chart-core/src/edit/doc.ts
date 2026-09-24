@@ -23,6 +23,7 @@ import type {
   NoteId,
   NoteRec,
   SoundChannel,
+  ScrollEvent,
   StopEvent,
 } from '../model/types';
 import { NoteIndex } from './note-index';
@@ -43,6 +44,9 @@ export type Op =
   | { t: 'ch~'; id: ChannelId; before: ChannelPatch; after: ChannelPatch }
   | { t: 'bpm'; before: BpmEvent[]; after: BpmEvent[] }
   | { t: 'stop'; before: StopEvent[]; after: StopEvent[] }
+  | { t: 'scroll'; before: ScrollEvent[]; after: ScrollEvent[] }
+  /** One unknown root member (`chart.extra[key]`); undefined = absent. */
+  | { t: 'extra'; key: string; before: unknown; after: unknown }
   | { t: 'lines'; before: BarLine[] | null; after: BarLine[] | null }
   | { t: 'info'; before: InfoPatch; after: InfoPatch }
   | { t: 'bga'; before: BgaData | null; after: BgaData | null };
@@ -63,6 +67,8 @@ export function invert(op: Op): Op {
       return { t: 'ch~', id: op.id, before: op.after, after: op.before };
     case 'bpm':
     case 'stop':
+    case 'scroll':
+    case 'extra':
     case 'lines':
     case 'info':
     case 'bga':
@@ -81,6 +87,10 @@ export interface ChangeSet {
   /** The channel list itself changed (added/removed/reordered). */
   channelList: boolean;
   timing: boolean;
+  /** Scroll changes: where things are drawn in Play, never when they sound. */
+  scroll: boolean;
+  /** Unknown root members (the kept `x_ez_records`...). */
+  extra: boolean;
   info: boolean;
   bga: boolean;
   lines: boolean;
@@ -95,6 +105,8 @@ export function emptyChangeSet(): ChangeSet {
     y1: -Infinity,
     channelList: false,
     timing: false,
+    scroll: false,
+    extra: false,
     info: false,
     bga: false,
     lines: false,
@@ -545,6 +557,15 @@ export class ChartDoc {
         d.stopEvents = op.after.map((e) => ({ ...e }));
         cs.timing = true;
         break;
+      case 'scroll':
+        d.scrollEvents = op.after.map((e) => ({ ...e }));
+        cs.scroll = true;
+        break;
+      case 'extra':
+        if (op.after === undefined) delete d.extra[op.key];
+        else d.extra[op.key] = structuredClone(op.after);
+        cs.extra = true;
+        break;
       case 'lines':
         d.lines = op.after && op.after.map((e) => ({ ...e }));
         cs.lines = true;
@@ -666,6 +687,27 @@ export class Tx {
   setStopEvents(events: StopEvent[]): void {
     const sorted = [...events].sort((a, b) => a.y - b.y);
     this.run({ t: 'stop', before: this.doc.data.stopEvents.map((e) => ({ ...e })), after: sorted });
+  }
+
+  setScrollEvents(events: ScrollEvent[]): void {
+    const sorted = [...events].sort((a, b) => a.y - b.y);
+    this.run({
+      t: 'scroll',
+      before: this.doc.data.scrollEvents.map((e) => ({ ...e })),
+      after: sorted,
+    });
+  }
+
+  /** Set (or, with undefined, remove) one unknown root member. */
+  setRootExtra(key: string, value: unknown): void {
+    const was = this.doc.data.extra[key];
+    if (JSON.stringify(was) === JSON.stringify(value)) return;
+    this.run({
+      t: 'extra',
+      key,
+      before: was === undefined ? undefined : structuredClone(was),
+      after: value === undefined ? undefined : structuredClone(value),
+    });
   }
 
   setLines(lines: BarLine[] | null): void {

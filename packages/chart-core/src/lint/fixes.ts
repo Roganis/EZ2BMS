@@ -11,6 +11,7 @@ import type { ChartData, NoteRec } from '../model/types';
 import type { ModeId } from '../modes/ids';
 import { deriveSongKey } from '../modes/filenames';
 import { modeDef } from '../modes/registry';
+import { legacyScroll, legacyScrollIndices, scrollEventFromLegacy } from '../timing/scroll';
 import { TickConverter } from '../timing/ticks';
 
 export type ChartFixId =
@@ -24,7 +25,8 @@ export type ChartFixId =
   | 'off-mode-to-bgm'
   | 'clear-up'
   | 'remove-unused-sounds'
-  | 'lines-4-4';
+  | 'lines-4-4'
+  | 'scroll-legacy';
 
 export type SongFixId = 'derive-key' | 'category-custom';
 
@@ -143,6 +145,7 @@ const LABEL: Record<ChartFixId, string> = {
   'clear-up': 'Make them ordinary notes',
   'remove-unused-sounds': 'Remove the unused sounds',
   'lines-4-4': "Use EZ2's 4/4 bar lines",
+  'scroll-legacy': "Make them the chart's scroll changes",
 };
 
 export function chartFix(id: ChartFixId): Fix {
@@ -248,6 +251,20 @@ export function fixChart(doc: ChartDoc, mode: ModeId, id: ChartFixId): boolean {
     case 'lines-4-4':
       if (oddLines(d)) run((tx) => tx.setLines(null));
       break;
+    case 'scroll-legacy': {
+      // The kept type-6 records become scroll events with their track and
+      // second word, so the cabinet still gets the same records back.
+      const idx = new Set(legacyScrollIndices(d));
+      if (!idx.size) break;
+      const kept = d.extra.x_ez_records as unknown[];
+      const moved = [...idx].map((i) => scrollEventFromLegacy(legacyScroll(kept[i])!));
+      const rest = kept.filter((_, i) => !idx.has(i));
+      run((tx) => {
+        tx.setScrollEvents([...d.scrollEvents, ...moved]);
+        tx.setRootExtra('x_ez_records', rest.length ? rest : undefined);
+      });
+      break;
+    }
   }
   return changed;
 }

@@ -8,7 +8,8 @@
 // (x 0) is unlimited. A command that would break a rule changes nothing and
 // returns false/undefined, so a drag simply stops at the obstacle.
 
-import type { ChannelId, NoteId, NoteRec, SoundChannel } from '../model/types';
+import type { ChannelId, NoteId, NoteRec, ScrollEvent, SoundChannel } from '../model/types';
+import { f32Decimal } from '../util/f32';
 import { HOLD_KIND_INFO } from '../engine/holdpreview';
 import { columnOf, type ModeDef } from '../modes/registry';
 import type { ChartDoc, NotePatch } from './doc';
@@ -315,6 +316,26 @@ export function setStopAt(doc: ChartDoc, y: number, duration: number | null): vo
   doc.transact(duration === null ? 'Remove STOP' : 'Set STOP', (tx) => {
     const rest = doc.data.stopEvents.filter((e) => e.y !== y);
     tx.setStopEvents(duration === null || duration <= 0 ? rest : [...rest, { y, duration }]);
+  });
+}
+
+/**
+ * Set (or with `null` remove) the scroll change at y: from there EZ2PORT
+ * scrolls at the player's speed times `rate` (timing/scroll.ts). Changing
+ * one keeps what an imported one carries (its track and second word). The
+ * rate is kept as the f32 it will be published as.
+ */
+export function setScrollAt(doc: ChartDoc, y: number, rate: number | null): void {
+  if (rate !== null && !(rate > 0 && Number.isFinite(rate)))
+    throw new Error('A scroll rate must be positive');
+  const at = Math.max(0, y);
+  doc.transact(rate === null ? 'Remove scroll change' : 'Set scroll change', (tx) => {
+    const was = doc.data.scrollEvents.find((e) => e.y === at);
+    const rest = doc.data.scrollEvents.filter((e) => e.y !== at);
+    if (rate === null) return tx.setScrollEvents(rest);
+    const e: ScrollEvent = { y: at, rate: f32Decimal(rate) };
+    if (was?.extra) e.extra = { ...was.extra };
+    tx.setScrollEvents([...rest, e]);
   });
 }
 

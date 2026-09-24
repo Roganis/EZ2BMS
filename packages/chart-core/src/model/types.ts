@@ -59,6 +59,20 @@ export interface StopEvent {
   extra?: Extra;
 }
 
+/**
+ * A scroll-speed change (EZFF type 6; bmson has none, so EZ2BMS writes
+ * `x_scroll_events`). From its pulse on, EZ2PORT scrolls at the player's
+ * speed times `rate`, chasing the new speed a tenth of the way each frame
+ * (ez2/scroll.c); timing is untouched. An imported one keeps the track it
+ * was on (`extra.x_track`) and the record's second word (`extra.x_raw1`), so
+ * the cabinet gets it back as it was.
+ */
+export interface ScrollEvent {
+  y: number;
+  rate: number;
+  extra?: Extra;
+}
+
 export interface BarLine {
   y: number;
   extra?: Extra;
@@ -140,6 +154,8 @@ export interface ChartData {
   lines: BarLine[] | null;
   bpmEvents: BpmEvent[];
   stopEvents: StopEvent[];
+  /** Sorted by y. `x_scroll_events`, written only when there are some. */
+  scrollEvents: ScrollEvent[];
   /** In file order. Channel ids are unique within a chart. */
   channels: SoundChannel[];
   /** Every note of every channel. Order is not significant. */
