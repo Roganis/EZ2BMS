@@ -17,6 +17,7 @@
   import PublishDialog from './PublishDialog.svelte';
   import StartScreen from './StartScreen.svelte';
   import Toasts from './Toasts.svelte';
+  import UpdateDialog from './UpdateDialog.svelte';
 
   registerBuiltins(app);
   registerNoteCommands(app);
@@ -35,7 +36,8 @@
         app.importer.open ||
         app.exporter.open ||
         app.controls.open ||
-        app.diag.aboutOpen
+        app.diag.aboutOpen ||
+        app.updates.dialogOpen
       )
         return;
       app.commands.handleKey(e, app.view.covered);
@@ -74,6 +76,9 @@
 {/if}
 {#if app.diag.aboutOpen}
   <AboutDialog />
+{/if}
+{#if app.updates.dialogOpen}
+  <UpdateDialog />
 {/if}
 <CommandPalette />
 <Toasts />

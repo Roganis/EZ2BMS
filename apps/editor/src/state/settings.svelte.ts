@@ -31,7 +31,20 @@ export interface SettingsData {
   controls: Controls;
   /** Record mode (play/recorder.svelte.ts). */
   record: RecordOptions;
+  /** Updates (state/updates.svelte.ts). */
+  updates: UpdateOptions;
 }
+
+export interface UpdateOptions {
+  /** Look for a new version at start (at most once a day). */
+  check: boolean;
+  /** When it last looked, ms since the epoch. */
+  lastCheckMs: number;
+  /** A version you said to skip: not offered again at start. */
+  skip: string | null;
+}
+
+export const DEFAULT_UPDATES: UpdateOptions = { check: true, lastCheckMs: 0, skip: null };
 
 export interface RecordOptions {
   /** Beats of count-in before the cursor. */
@@ -82,6 +95,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   strips: {},
   controls: { ini: null, debounceMs: null },
   record: DEFAULT_RECORD,
+  updates: DEFAULT_UPDATES,
 };
 
 export class Settings {
@@ -92,7 +106,12 @@ export class Settings {
 
   async load(): Promise<void> {
     const raw = await this.backend.loadSettings().catch(() => ({}));
-    this.data = { ...DEFAULT_SETTINGS, ...(raw as Partial<SettingsData>) };
+    const r = raw as Partial<SettingsData>;
+    this.data = {
+      ...DEFAULT_SETTINGS,
+      ...r,
+      updates: { ...DEFAULT_UPDATES, ...(r.updates ?? {}) },
+    };
   }
 
   /** Change and schedule a save. */

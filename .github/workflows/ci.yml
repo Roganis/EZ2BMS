@@ -38,6 +38,7 @@ jobs:
       - run: pnpm test
         env:
           EZ2PORT_ORACLE: ${{ github.workspace }}/target/release/ez2port-oracle
+      - run: node --test scripts/release-config.test.mjs
       - run: pnpm --filter @ez2bms/editor exec playwright install --with-deps chromium
       - run: pnpm e2e
       - uses: actions/upload-artifact@v4
@@ -85,6 +86,18 @@ jobs:
           librsvg2-dev libayatana-appindicator3-dev libasound2-dev libudev-dev
       - run: cargo clippy -p ez2bms --all-targets -- -D warnings
       - run: cargo test -p ez2bms
+      # A release build's settings (scripts/release-config.mjs) merged in as
+      # tauri build --config does: the host still builds and its tests pass
+      # with the updater on. The public key is a throwaway one; its private
+      # half was deleted when it was made.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/release-config.mjs "$RUNNER_TEMP/release-config.json"
+        env:
+          TAURI_UPDATER_PUBKEY: dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE1M0Q4ODZDODZDNjY2MDIKUldRQ1pzYUdiSWc5cFlSOHJYdngzVW1WQUVRQVlyM0RPQWRKS1hrZnNNNUlVMXpNa0NUeVpPdzYK
+          TAURI_SIGNING_PRIVATE_KEY: throwaway
+      - run: TAURI_CONFIG="$(cat "$RUNNER_TEMP/release-config.json")" cargo test -p ez2bms
 
   # What runs on the owner's Windows machines: audio (WASAPI through cpal),
   # the ez2play launcher (CREATE_NO_WINDOW), controllers (SDL built with MSVC)

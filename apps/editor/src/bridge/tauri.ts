@@ -6,6 +6,7 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
 import type {
   AppInfo,
+  UpdateInfo,
   AudioCacheInfo,
   Audition,
   AudioEvent,
@@ -64,6 +65,47 @@ export function tauriBackend(): Backend {
   return {
     kind: 'tauri',
     appInfo: () => invoke<AppInfo>('app_info'),
+    updates: {
+      unsupported: () => invoke<'no-key' | 'package' | null>('update_unsupported'),
+      check: async (): Promise<UpdateInfo | null> => {
+        const d = await invoke<{
+          version: string;
+          current: string;
+          notes: string | null;
+          date_ms: number | null;
+        } | null>('update_check');
+        return d
+          ? {
+              version: d.version,
+              current: d.current,
+              notes: d.notes,
+              date: d.date_ms ? new Date(d.date_ms).toISOString() : null,
+            }
+          : null;
+      },
+      install: (onProgress) => {
+        const ch = new Channel<{ done: number; total: number | null }>();
+        ch.onmessage = (p) => onProgress(p.done, p.total);
+        return invoke('update_install', { progress: ch });
+      },
+      restart: () => invoke('update_restart'),
+      openReleases: () => invoke('update_open_releases'),
+    },
+    opened: {
+      take: () => invoke<string[]>('opened_take'),
+      onOpen: (cb) => {
+        let stop: (() => void) | undefined;
+        let gone = false;
+        void listen('opened://paths', () => cb()).then((u) => {
+          if (gone) u();
+          else stop = u;
+        });
+        return () => {
+          gone = true;
+          stop?.();
+        };
+      },
+    },
     diag: {
       log: (level, message) => void invoke('diag_log', { level, message }).catch(() => {}),
       tail: (maxBytes) => invoke<string>('diag_tail', { maxBytes }),

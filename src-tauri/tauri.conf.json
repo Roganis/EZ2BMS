@@ -44,6 +44,30 @@
     ],
     "resources": {
       "../fonts/": "fonts/"
+    },
+    "fileAssociations": [
+      {
+        "ext": ["bmson"],
+        "name": "bmson chart",
+        "description": "bmson chart",
+        "mimeType": "application/x-bmson",
+        "role": "Editor"
+      },
+      {
+        "ext": ["bms", "bme", "bml", "pms"],
+        "name": "BMS chart",
+        "description": "BMS chart",
+        "mimeType": "text/x-bms",
+        "role": "Editor"
+      }
+    ],
+    "linux": {
+      "deb": {
+        "desktopTemplate": "linux/ez2bms.desktop",
+        "files": {
+          "/usr/share/mime/packages/ez2bms.xml": "linux/ez2bms-mime.xml"
+        }
+      }
     }
   }
 }

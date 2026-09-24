@@ -36,6 +36,42 @@ export interface AppInfo {
   previous_session: { started_ms: number; pid: number; version: string } | null;
 }
 
+/** A newer EZ2BMS than this one, from the newest published release. */
+export interface UpdateInfo {
+  version: string;
+  current: string;
+  /** The release's notes, as written. */
+  notes: string | null;
+  /** When it was published (RFC 3339), when the release says. */
+  date: string | null;
+}
+
+/** Updating EZ2BMS (src-tauri update.rs, tauri-plugin-updater). */
+export interface UpdateBackend {
+  /**
+   * Why this build cannot update itself, or null when it can: `no-key` (built
+   * without the update key: a local or pre-update build), `package` (a Linux
+   * package, which the package manager updates).
+   */
+  unsupported(): Promise<'no-key' | 'package' | null>;
+  /** The newest published release, when it is newer than this one. */
+  check(): Promise<UpdateInfo | null>;
+  /** Download and install what `check` found (its signature is checked first). */
+  install(onProgress: (done: number, total: number | null) => void): Promise<void>;
+  /** Start again, on the new version. */
+  restart(): Promise<void>;
+  /** Show the releases page in the browser. */
+  openReleases(): Promise<void>;
+}
+
+/** Files the system hands EZ2BMS (src-tauri opened.rs): double-clicked, or passed on by a second launch. */
+export interface OpenedBackend {
+  /** Everything waiting, oldest first (each file is handed over once). */
+  take(): Promise<string[]>;
+  /** More arrived; returns the unsubscribe. */
+  onOpen(cb: () => void): () => void;
+}
+
 /** The app's own log (src-tauri diag.rs): kept locally, never sent anywhere. */
 export interface DiagBackend {
   log(level: 'info' | 'warn' | 'error', message: string): void;
@@ -536,6 +572,10 @@ export interface Backend {
   readonly export: ExportBackend;
   readonly input: InputBackend;
   readonly diag: DiagBackend;
+  readonly opened: OpenedBackend;
+  readonly updates: UpdateBackend;
+  /** The browser build's stand-in for the system handing over files (tests); never set in the desktop app. */
+  readonly devOpen?: (paths: string[]) => void;
   /** The browser build's pretend controllers; never set in the desktop app. */
   readonly devPad?: DevPad;
   /**
@@ -550,6 +590,15 @@ export function joinPath(dir: string, rel: string): string {
   if (!dir) return rel;
   const sep = dir.includes('\\') && !dir.includes('/') ? '\\' : '/';
   return dir.replace(/[\\/]+$/, '') + sep + rel.replace(/^[\\/]+/, '');
+}
+
+/** Whether two paths name one folder or file: either separator, no trailing one; Windows paths in any case. */
+export function samePath(a: string, b: string): boolean {
+  const n = (p: string) => {
+    const q = p.replace(/\\/g, '/').replace(/\/+$/, '');
+    return /^[a-z]:\//i.test(q) ? q.toLowerCase() : q;
+  };
+  return n(a) === n(b);
 }
 
 export function baseName(path: string): string {

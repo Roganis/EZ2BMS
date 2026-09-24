@@ -2,7 +2,15 @@ name: Release
 
 # A tag like v0.1.0 builds the desktop app for Windows (NSIS installer) and
 # Linux (AppImage and .deb) and attaches them to a DRAFT release, to be
-# checked and published by hand. Nothing is signed yet (Milestone 9).
+# checked and published by hand (docs/releasing.md). Published as a normal
+# release, it is what installed copies update to.
+#
+# What the repository's secrets and variables turn on
+# (scripts/release-config.mjs):
+# - TAURI_SIGNING_PRIVATE_KEY (+ _PASSWORD) and the variable
+#   TAURI_UPDATER_PUBKEY: signed update bundles and latest.json;
+# - WINDOWS_CERTIFICATE (+ _PASSWORD, a base64 .pfx): Authenticode.
+# Without them the build is unsigned and cannot update itself.
 
 on:
   push:
@@ -23,6 +31,11 @@ jobs:
           - os: ubuntu-22.04
             bundles: appimage,deb
     runs-on: ${{ matrix.os }}
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+      HAS_WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -42,17 +55,36 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # The CJK plate font ships in the bundle (fonts/README.md).
       - run: node scripts/fetch-fonts.mjs
+      # Authenticode: the certificate into the user's store, its thumbprint
+      # for the build (bundle.windows.certificateThumbprint).
+      - if: runner.os == 'Windows' && env.HAS_WINDOWS_CERTIFICATE == 'true'
+        shell: pwsh
+        env:
+          CERT: ${{ secrets.WINDOWS_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'cert.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CERT))
+          $pw = ConvertTo-SecureString -String $env:CERT_PASSWORD -Force -AsPlainText
+          $c = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $pw
+          Remove-Item $pfx
+          "WINDOWS_CERT_THUMBPRINT=$($c.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Release settings (update key, certificate)
+        shell: bash
+        run: node scripts/release-config.mjs "$RUNNER_TEMP/release-config.json"
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: .
           tauriScript: pnpm tauri
-          args: --bundles ${{ matrix.bundles }}
+          args: --bundles ${{ matrix.bundles }} --config ${{ runner.temp }}/release-config.json
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: EZ2BMS ${{ github.ref_name }}
           releaseBody: |
             A build of EZ2BMS for testing. See README.md for what works and what is
             still to be checked on real machines (AI-DISCLOSURE.md, verification table).
           releaseDraft: true
-          prerelease: true
+          # Not a pre-release: once published by hand, installed copies update to it.
+          prerelease: false
+          includeUpdaterJson: true

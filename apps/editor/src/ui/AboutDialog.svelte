@@ -55,6 +55,27 @@
     </p>
   {/if}
 
+  <div class="updates" data-testid="about-updates">
+    {#if app.updates.unsupported === 'no-key'}
+      <p class="hint">This build cannot update itself (it was built without the update key).</p>
+    {:else}
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={app.settings.data.updates.check}
+          onchange={(e) => app.updates.setAutoCheck(e.currentTarget.checked)}
+        />
+        Look for a new version at start (once a day)
+      </label>
+      <button
+        class="ez-btn"
+        disabled={app.updates.stage === 'checking'}
+        onclick={() => void app.updates.check(true)}
+        data-testid="about-check">Check now</button
+      >
+    {/if}
+  </div>
+
   <p class="hint">
     The log stays on this computer. To report a problem, copy a report (the version, this run's
     errors and the end of the log) and paste it into your message.
@@ -141,5 +162,17 @@
   }
   .grow {
     flex: 1;
+  }
+  .updates {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    justify-content: space-between;
+    font-size: 13px;
+  }
+  .check {
+    display: flex;
+    gap: 6px;
+    align-items: center;
   }
 </style>

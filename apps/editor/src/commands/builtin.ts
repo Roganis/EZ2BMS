@@ -3,6 +3,7 @@
 import { SNAP_GRIDS, eraseNotes, measureStart } from '@ez2bms/chart-core';
 import type { App } from '../state/app.svelte';
 import { toast } from '../state/toasts.svelte';
+import { baseName } from '../bridge';
 
 const SPEED_MIN = 50;
 const SPEED_MAX = 999;
@@ -28,7 +29,7 @@ export function registerBuiltins(app: App): void {
       global: true,
       run: async () => {
         const dir = await app.backend.pickFolder('Open a song folder');
-        if (dir) await app.openProject(dir);
+        if (dir) app.leaveProject(baseName(dir), () => app.openProject(dir));
       },
     },
     {
@@ -321,6 +322,14 @@ export function registerBuiltins(app: App): void {
       group: 'Help',
       global: true,
       run: () => (app.diag.aboutOpen = true),
+    },
+    {
+      id: 'help.updates',
+      title: 'Check for updates',
+      group: 'Help',
+      global: true,
+      enabled: () => app.updates.unsupported !== 'no-key',
+      run: () => app.updates.check(true),
     },
     {
       id: 'help.report',

@@ -10,7 +10,9 @@ mod export;
 mod files;
 mod input;
 mod media;
+mod opened;
 mod port;
+mod update;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -19,7 +21,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::ipc::{Channel, Response};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::audio::{
     Audio, AudioInfo, Audition, Clicks, ClockDto, EventDto, Loaded, PreviewJob, TriggerDto,
@@ -64,6 +66,70 @@ fn app_info(app: AppHandle, session: State<'_, Arc<diag::Session>>) -> AppInfo {
         log_dir: app.path().app_log_dir().ok(),
         previous_session: session.previous.clone(),
     }
+}
+
+// ---- files handed over by the system (opened.rs)
+
+/// The files the system gave EZ2BMS that the editor has not opened yet.
+#[tauri::command]
+fn opened_take(opened: State<'_, Arc<opened::Opened>>) -> Vec<PathBuf> {
+    opened.take()
+}
+
+// ---- updates (update.rs)
+
+#[tauri::command]
+fn update_unsupported(configured: State<'_, update::Configured>) -> Option<&'static str> {
+    update::unsupported(configured.0, std::env::var_os("APPIMAGE").is_some())
+}
+
+/// The newest published release, when it is newer than this build.
+#[tauri::command]
+async fn update_check(
+    app: AppHandle,
+    pending: State<'_, update::Pending>,
+) -> CmdResult<Option<update::UpdateDto>> {
+    use tauri_plugin_updater::UpdaterExt;
+    let err = |e: tauri_plugin_updater::Error| CmdError::Invalid(e.to_string());
+    let found = app.updater().map_err(err)?.check().await.map_err(err)?;
+    let dto = found.as_ref().map(update::UpdateDto::from);
+    *pending.0.lock().unwrap() = found;
+    Ok(dto)
+}
+
+/// Download what `update_check` found, check its signature, and install it.
+#[tauri::command]
+async fn update_install(
+    pending: State<'_, update::Pending>,
+    progress: Channel<update::ProgressDto>,
+) -> CmdResult<()> {
+    let u = pending.0.lock().unwrap().take();
+    let u =
+        u.ok_or_else(|| CmdError::Invalid("no update to install: look for one first".into()))?;
+    log::info!("installing {} over {}", u.version, u.current_version);
+    let mut done = 0u64;
+    u.download_and_install(
+        |chunk, total| {
+            done += chunk as u64;
+            let _ = progress.send(update::ProgressDto { done, total });
+        },
+        || log::info!("update downloaded"),
+    )
+    .await
+    .map_err(|e| CmdError::Invalid(e.to_string()))
+}
+
+#[tauri::command]
+fn update_restart(app: AppHandle) {
+    app.restart()
+}
+
+#[tauri::command]
+fn update_open_releases(app: AppHandle) -> CmdResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(update::RELEASES_PAGE, None::<&str>)
+        .map_err(|e| CmdError::Invalid(e.to_string()))
 }
 
 // ---- the log (diag.rs)
@@ -574,7 +640,33 @@ fn fonts_dir(app: &AppHandle) -> PathBuf {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let launched = opened::paths_from_args(&std::env::args().collect::<Vec<_>>(), &cwd);
+    let mut builder = tauri::Builder::default();
+    // First, as the plugin asks: a second launch hands its files to this
+    // window and exits. The window comes forward and the editor is told.
+    if opened::single_instance_possible() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            let paths = opened::paths_from_args(&args, std::path::Path::new(&cwd));
+            log::info!("a second launch passed on {} file(s)", paths.len());
+            app.state::<Arc<opened::Opened>>().push(paths);
+            let _ = app.emit("opened://paths", ());
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }));
+    }
+    // The updater only when this build carries its settings (update.rs).
+    let context = tauri::generate_context!();
+    let can_update = update::configured(&context.config().plugins);
+    if can_update {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+    builder
+        .manage(Arc::new(opened::Opened::new(launched)))
+        .manage(update::Configured(can_update))
+        .manage(update::Pending::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(
@@ -604,6 +696,13 @@ pub fn run() {
                 if session.previous.is_some() { "; the last run did not close" } else { "" }
             );
             app.manage(Arc::new(session));
+            log::info!(
+                "updates: {}",
+                if app.state::<update::Configured>().0 { "on" } else { "off (no update key)" }
+            );
+            if !opened::single_instance_possible() {
+                log::warn!("no session bus: a second launch opens a window of its own");
+            }
             let audio = Arc::new(Audio::open(app.path().app_cache_dir().ok()));
             // Pad events are timed on the audio engine's host clock, the one
             // the editor turns into song time.
@@ -670,9 +769,15 @@ pub fn run() {
             input_hold,
             diag_log,
             diag_tail,
+            opened_take,
+            update_unsupported,
+            update_check,
+            update_install,
+            update_restart,
+            update_open_releases,
             diag_reveal_logs,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("EZ2BMS failed to start")
         .run(|app, event| {
             // Closed cleanly: the next start finds no marker.

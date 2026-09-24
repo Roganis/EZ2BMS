@@ -141,5 +141,6 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 | Command                                                     | Keys | Palette |
 | ----------------------------------------------------------- | ---- | ------- |
 | About EZ2BMS                                                |      |         |
+| Check for updates                                           |      |         |
 | Copy a problem report (version, errors, the end of the log) |      |         |
 | Open the log folder                                         |      |         |

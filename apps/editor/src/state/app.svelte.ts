@@ -1,9 +1,16 @@
 // The editor's one root object: the backend, settings, the open project, how
 // it is viewed, and every command. Components import `app` and read from it.
 
-import { setBpmAt, type ChartDoc, type Clip } from '@ez2bms/chart-core';
+import { BMS_FILE, setBpmAt, type ChartDoc, type Clip } from '@ez2bms/chart-core';
 import { AudioClient } from '../audio/client.svelte';
-import { createBackend, type AudioInfo, type Backend } from '../bridge';
+import {
+  baseName,
+  createBackend,
+  dirName,
+  samePath,
+  type AudioInfo,
+  type Backend,
+} from '../bridge';
 import { InputHub } from '../input/hub.svelte';
 import { PlayController } from '../play/controller.svelte';
 import { Recorder } from '../play/recorder.svelte';
@@ -15,6 +22,7 @@ import { Settings } from './settings.svelte';
 import { SkinState } from './skin.svelte';
 import { Calibrator } from './calibrator.svelte';
 import { describeError, Diagnostics } from './diag.svelte';
+import { Updates } from './updates.svelte';
 import { ClassicState } from './classic.svelte';
 import { ControlsState } from './controls.svelte';
 import { SoundsState } from './sounds.svelte';
@@ -53,6 +61,7 @@ export class App {
   readonly controls: ControlsState;
   readonly calibrator: Calibrator;
   readonly diag: Diagnostics;
+  readonly updates: Updates;
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
@@ -81,6 +90,7 @@ export class App {
     this.controls = new ControlsState(this);
     this.calibrator = new Calibrator(this);
     this.diag = new Diagnostics(this);
+    this.updates = new Updates(this);
     this.commands.onError = (e, c) => {
       const message = e instanceof Error ? e.message : String(e);
       this.backend.diag.log('warn', `${c.id}: ${describeError(e).detail}`);
@@ -101,6 +111,59 @@ export class App {
     if (this.audioInfo?.device_error)
       toast(`No audio device - playing silently (${this.audioInfo.device_error})`, 'warn');
     this.ready = true;
+    void this.updates.start();
+    // Files the system handed over: at launch, and from later launches.
+    this.backend.opened.onOpen(() => void this.takeOpened());
+    await this.takeOpened();
+  }
+
+  private async takeOpened(): Promise<void> {
+    const paths = await this.backend.opened.take().catch(() => []);
+    if (paths.length) await this.openPaths(paths);
+  }
+
+  /**
+   * Files the system handed EZ2BMS (double-clicked, or passed on by a
+   * second launch): a bmson opens its song folder at that chart, a BMS file
+   * the import wizard on its folder. The first one it can open wins.
+   */
+  async openPaths(paths: string[]): Promise<void> {
+    this.backend.diag.log('info', `handed over by the system: ${paths.join(', ')}`);
+    const bmson = paths.find((p) => /\.bmson$/i.test(p));
+    const bms = paths.find((p) => BMS_FILE.test(p));
+    if (!bmson && !bms) {
+      if (paths.length) toast(`EZ2BMS does not open ${baseName(paths[0]!)}`, 'warn');
+      return;
+    }
+    if (!bmson) {
+      this.importer.show('bms');
+      await this.importer.loadBms(dirName(bms!));
+      return;
+    }
+    const dir = dirName(bmson);
+    const file = baseName(bmson).toLowerCase();
+    const pick = () => {
+      const i = this.project?.charts.findIndex((c) => c.file.toLowerCase() === file) ?? -1;
+      if (i >= 0) this.selectChart(i);
+      else toast(`Opened the song, but ${baseName(bmson)} is not one of its charts`, 'warn');
+    };
+    if (this.project && samePath(this.project.dir, dir)) return pick();
+    this.leaveProject(baseName(bmson), async () => {
+      if (await this.openProject(dir)) pick();
+    });
+  }
+
+  /**
+   * Leave the open song for something else: at once when nothing is unsaved,
+   * else only when asked (the autosave keeps the changes either way).
+   */
+  leaveProject(what: string, go: () => unknown): void {
+    const p = this.project;
+    if (!p?.dirty) return void go();
+    ask(`${baseName(p.dir)} has unsaved changes. Open ${what} anyway? The autosave keeps them.`, {
+      label: 'Open',
+      run: () => void go(),
+    });
   }
 
   get slot(): ChartSlot | undefined {

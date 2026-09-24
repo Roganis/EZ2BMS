@@ -206,12 +206,15 @@ export function canvasPlate(spec: PlateSpec): PlatePixels {
 export function webBackend(
   seed: Map<string, Uint8Array> = demoFiles(),
   defaults: Record<string, unknown> = {},
-  opts: { gameTables?: EzTables; crashed?: boolean } = {},
+  opts: { gameTables?: EzTables; crashed?: boolean; open?: string[]; update?: string } = {},
 ): Backend {
   const files = new Map(seed);
   const mtimes = new Map<string, number>();
   /** The browser build's log: what the desktop app writes to its log file. */
   const webLog: string[] = [];
+  /** Files "handed over by the system" (?open=, or __ez2bmsOpen in tests). */
+  const openQueue: string[] = [...(opts.open ?? [])];
+  const openListeners = new Set<() => void>();
   const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '');
   const missing = (p: string) => new Error(`${p}: no such file`);
   let staged = 0;
@@ -315,6 +318,42 @@ export function webBackend(
         ? { started_ms: Date.now() - 3_600_000, pid: 1, version: '0.1.0' }
         : null,
     }),
+    // ?update=VERSION: a newer release is out (and installs, pretending).
+    updates: {
+      unsupported: async () => null,
+      check: async () =>
+        opts.update
+          ? {
+              version: opts.update,
+              current: '0.1.0',
+              notes: `What is new in ${opts.update}:\n- Something better.\n- Something fixed.`,
+              date: '2026-09-24T00:00:00Z',
+            }
+          : null,
+      install: async (onProgress) => {
+        const total = 3_000_000;
+        for (let done = 0; done <= total; done += 1_000_000) {
+          onProgress(done, total);
+          await new Promise((r) => setTimeout(r, 30));
+        }
+        webLog.push(`installed ${opts.update}`);
+      },
+      restart: async () => {
+        webLog.push('restart');
+      },
+      openReleases: async () => {},
+    },
+    opened: {
+      take: async () => openQueue.splice(0),
+      onOpen: (cb) => {
+        openListeners.add(cb);
+        return () => openListeners.delete(cb);
+      },
+    },
+    devOpen: (paths) => {
+      openQueue.push(...paths);
+      for (const f of openListeners) f();
+    },
     diag: {
       log: (level, message) => {
         webLog.push(`${new Date().toISOString()} [${level.toUpperCase()}] ${message}`);
