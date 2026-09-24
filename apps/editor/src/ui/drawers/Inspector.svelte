@@ -7,6 +7,7 @@
     dsLevel,
     dsPan,
     formatPosition,
+    holdPreview,
     MIX_UNITY,
     PAN_CENTRE,
     positionOf,
@@ -36,6 +37,21 @@
   const vel = $derived(common((n) => n.vel ?? 127));
   const pan = $derived(common((n) => n.pan ?? 64));
   const holds = $derived(notes.filter((n) => n.l > 0));
+  /** What the selected holds are paid and counted for (engine/holdpreview.ts), summed. */
+  const holdSums = $derived.by(() => {
+    void slot.rev;
+    let judged = 0;
+    let counts = 0;
+    let short = false;
+    for (const n of holds) {
+      const p = holdPreview(d.data, n);
+      if (!p) continue;
+      judged += 1 + p.pays;
+      counts += p.counts;
+      short ||= !p.balanced;
+    }
+    return holds.length ? { judged, counts, short } : null;
+  });
   const beats = $derived(
     holds.length && common((n) => n.l) !== undefined ? holds[0]!.l / d.resolution : undefined,
   );
@@ -108,10 +124,18 @@
           onchange={(e) => setHoldKind(d, ids, Number(e.currentTarget.value))}
         >
           {#if kind === undefined}<option value="" disabled>(several)</option>{/if}
-          {#each HOLD_KINDS as k (k.kind)}<option value={k.kind}>{k.label}</option>{/each}
+          {#if kind !== undefined && kind > 12}<option value={kind}>{kind} (as 0)</option>{/if}
+          {#each HOLD_KINDS as k (k.kind)}<option value={k.kind}>{k.kind}: {k.label}</option>{/each}
         </select>
       </div>
     </div>
+    {#if holdSums}
+      <p class="hint" data-testid="hold-counts" class:warn={holdSums.short}>
+        Judged {holdSums.judged}× (heads and instalments), counted as {holdSums.counts}{holdSums.short
+          ? '. A perfect play cannot score exactly 100%.'
+          : '.'}
+      </p>
+    {/if}
     <div class="row">
       <label for="ins-vel"
         >Velocity <span class="num">{vel ?? '—'}{vel !== undefined ? ` · ${db(vel)} dB` : ''}</span
@@ -154,6 +178,9 @@
 <style>
   .sum {
     color: var(--ink);
+  }
+  .hint.warn {
+    color: var(--warn);
   }
   code,
   .num {

@@ -7,6 +7,8 @@
 import {
   buildGroups,
   groupKeyOf,
+  holdPreview,
+  type HoldPreview,
   laneInfo,
   sliceAt,
   type ChannelId,
@@ -96,12 +98,13 @@ const TAKE_COLOR = { ok: 0x7dffb2, clash: 0xff5c7a, silent: 0x8a8fa8 } as const;
 const SLICE_TINTS = [0x58e1ff, 0x9d7bff];
 const ONSET = 0xffd166;
 
+/** A hold kind in a few characters (HOLD_KINDS says it in words). */
 const HOLD_LABEL: Record<number, string> = {
   1: '½',
   2: '⅛',
   3: '1/16',
-  4: '×1',
-  5: '×1',
+  4: 'end',
+  5: 'end',
   6: '6',
   7: '—',
   9: '9',
@@ -851,7 +854,7 @@ export class PlayfieldRenderer {
           tail.alpha = alpha;
           tail.tint = 0xffffff;
           if (n.kind !== undefined && n.kind !== 0 && y - ye > 28) {
-            const t = this.chipText.next(HOLD_LABEL[n.kind] ?? String(n.kind));
+            const t = this.chipText.next(this.holdLabel(s, n));
             t.tint = KIND_COLOR[lane.kind];
             t.alpha = 0.9 * alpha;
             t.position.set(lane.left + (lane.width - t.width) / 2, (y + ye) / 2 - t.height / 2);
@@ -938,7 +941,7 @@ export class PlayfieldRenderer {
         foot.width = w;
         foot.height = half;
         if (n.kind !== undefined && n.kind !== 0 && y - yt > 28 && this.extras > 0.02) {
-          const label = this.chipText.next(HOLD_LABEL[n.kind] ?? String(n.kind));
+          const label = this.chipText.next(this.holdLabel(s, n));
           label.tint = KIND_COLOR[lane.kind];
           label.alpha = 0.9 * this.extras;
           label.position.set(
@@ -1302,6 +1305,7 @@ export class PlayfieldRenderer {
       }
     }
     this.ghostText.end();
+    if (this.extras > 0.02) this.drawHoldTicks(g, s, l, vp);
     if (s.take) this.drawTake(g, s.take, l, vp, noteH);
     if (s.marquee) {
       const m = s.marquee;
@@ -1310,6 +1314,68 @@ export class PlayfieldRenderer {
       g.rect(x, y, Math.abs(m.x1 - m.x0), Math.abs(m.y1 - m.y0))
         .fill({ color: NEON, alpha: 0.07 })
         .stroke({ width: 1, color: NEON, alpha: 0.8 });
+    }
+  }
+
+  /**
+   * A hold's preview, kept until the chart changes: the label and the ticks
+   * ask for every visible hold on every frame.
+   */
+  private preview(s: FieldState, n: NoteRec): HoldPreview | undefined {
+    const c = this.previews;
+    if (c.doc !== s.doc || c.version !== s.doc.version) {
+      c.doc = s.doc;
+      c.version = s.doc.version;
+      c.map.clear();
+    }
+    if (!c.map.has(n.id)) c.map.set(n.id, holdPreview(s.doc.data, n));
+    return c.map.get(n.id);
+  }
+  private readonly previews = {
+    doc: undefined as ChartDoc | undefined,
+    version: -1,
+    map: new Map<number, HoldPreview | undefined>(),
+  };
+
+  /** A hold's kind and what a clean play is paid for it: `½ ×7`. */
+  private holdLabel(s: FieldState, n: NoteRec): string {
+    const k = HOLD_LABEL[n.kind ?? 0] ?? String(n.kind);
+    const p = this.preview(s, n);
+    return p?.pays ? `${k} ×${p.pays}` : k;
+  }
+
+  /**
+   * Where each hold pays an instalment while held (engine/holdpreview.ts):
+   * a short bar across the body, in Edit. Left out where they would crowd
+   * closer than 5 px - the label still says how many.
+   */
+  private drawHoldTicks(g: Graphics, s: FieldState, l: Layout, vp: Viewport): void {
+    const [p0, p1] = vp.visible(l.height);
+    const res = s.doc.resolution;
+    for (const lane of l.lanes) {
+      if (lane.width < 6) continue;
+      const w = Math.max(4, lane.width * 0.5);
+      // A beat of margin: kinds 4 and 5 pay 6 ticks past the tail.
+      for (const n of s.doc.index.inRange(lane.x, p0 - res, p1)) {
+        if (n.l <= 0) continue;
+        const p = this.preview(s, n);
+        if (!p?.at.length) continue;
+        const gap = p.at.length > 1 ? Math.abs(vp.yOf(p.at[1]!) - vp.yOf(p.at[0]!)) : 99;
+        if (gap < 5) continue;
+        // Leave the kind label (drawn mid-body on holds over 28 px) readable.
+        const ya = vp.yOf(n.y);
+        const yb = vp.yOf(n.y + n.l);
+        const mid = (n.kind ?? 0) !== 0 && ya - yb > 28 ? (ya + yb) / 2 : -1e9;
+        for (const at of p.at) {
+          if (at < p0 || at > p1) continue;
+          const y = vp.yOf(at);
+          if (Math.abs(y - mid) < 8) continue;
+          g.rect(lane.left + (lane.width - w) / 2, y - 1, w, 2).fill({
+            color: 0xffffff,
+            alpha: 0.6 * this.extras,
+          });
+        }
+      }
     }
   }
 

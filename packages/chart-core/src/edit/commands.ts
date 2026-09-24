@@ -9,6 +9,7 @@
 // returns false/undefined, so a drag simply stops at the obstacle.
 
 import type { ChannelId, NoteId, NoteRec, SoundChannel } from '../model/types';
+import { HOLD_KIND_INFO } from '../engine/holdpreview';
 import { columnOf, type ModeDef } from '../modes/registry';
 import type { ChartDoc, NotePatch } from './doc';
 
@@ -206,17 +207,11 @@ export function toggleHold(doc: ChartDoc, ids: Iterable<NoteId>, len: number): b
 }
 
 /**
- * EZ2 hold kinds and what they pay while held (EZ2PORT ez2/score.h): the
- * instalment step, or none. 0 is what every shipped chart uses.
+ * EZ2 hold kinds and what they pay while held (EZ2PORT ez2/score.h): all of
+ * 0-12, from engine/holdpreview.ts. K cycles through the common ones.
  */
-export const HOLD_KINDS: readonly { kind: number; label: string }[] = [
-  { kind: 0, label: '1/4 beat (default)' },
-  { kind: 1, label: '1/2 beat' },
-  { kind: 2, label: '1/8 beat' },
-  { kind: 3, label: '1/16 beat' },
-  { kind: 4, label: 'once' },
-  { kind: 7, label: 'no instalments' },
-];
+export const HOLD_KINDS: readonly { kind: number; label: string; common: boolean }[] =
+  HOLD_KIND_INFO;
 
 export function setHoldKind(doc: ChartDoc, ids: Iterable<NoteId>, kind: number | undefined): void {
   const list = [...ids].filter((id) => doc.index.has(id));
@@ -228,8 +223,10 @@ export function setHoldKind(doc: ChartDoc, ids: Iterable<NoteId>, kind: number |
 export function cycleHoldKind(doc: ChartDoc, ids: Iterable<NoteId>): void {
   const list = [...ids].map((id) => doc.index.get(id)).filter((n): n is NoteRec => !!n);
   if (!list.length) return;
-  const cur = HOLD_KINDS.findIndex((k) => k.kind === (list[0]!.kind ?? 0));
-  const next = HOLD_KINDS[(cur + 1) % HOLD_KINDS.length]!.kind;
+  // A kind outside the common ones steps to the next common one after it.
+  const common = HOLD_KINDS.filter((k) => k.common).map((k) => k.kind);
+  const now = list[0]!.kind ?? 0;
+  const next = common.find((k) => k > now) ?? common[0]!;
   setHoldKind(
     doc,
     list.map((n) => n.id),

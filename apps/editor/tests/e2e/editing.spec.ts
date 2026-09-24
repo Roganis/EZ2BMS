@@ -167,3 +167,28 @@ test('Shift-drag selects with a rubber band, even starting on a hold', async ({ 
   expect(sel).toBe(2);
   expect(await notesAt(page, 12, y)).toEqual([{ x: 12, y, l: 480 }]);
 });
+
+test('the Inspector says what a hold is judged and counted as; K cycles its kind', async ({
+  page,
+}) => {
+  await open(page);
+  const p = await probe(page);
+  const y = M30;
+  await page.mouse.click(p.lane(13), p.y(y));
+  // A one-beat hold: 48 ticks, 54 raw. Kind 0 pays every 12 ticks, 3 times
+  // after the head, and the engine counts it as 4 (engine/holdpreview.ts).
+  await page.keyboard.press('l');
+  await page.evaluate(() => {
+    const a = (window as unknown as { __ez2bms: { view: { right: string | null } } }).__ez2bms;
+    a.view.right = 'inspector';
+  });
+  const counts = page.getByTestId('hold-counts');
+  await expect(counts).toHaveText('Judged 4× (heads and instalments), counted as 4.');
+  await expect(counts).not.toHaveClass(/warn/);
+  // K walks the common kinds: 1, 2, 3, then 4, which the counter counts in
+  // 1/32s while paying once, so 100% is out of reach.
+  for (let i = 0; i < 4; i++) await page.keyboard.press('k');
+  await expect(page.locator('#ins-kind')).toHaveValue('4');
+  await expect(counts).toHaveClass(/warn/);
+  await expect(counts).toContainText('cannot score exactly 100%');
+});
