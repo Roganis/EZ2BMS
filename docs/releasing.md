@@ -51,8 +51,9 @@ release of this repository (not drafts, not pre-releases).
 ## Each release
 
 1. Put the version in `src-tauri/tauri.conf.json`, the workspace
-   `Cargo.toml` and both `package.json` files, and add its section to
-   `CHANGELOG.md`.
+   `Cargo.toml` (then `cargo update --workspace`) and both `package.json`
+   files, and chart-core's two copies (`CHART_CORE_VERSION`, `CONVERTER`: a
+   test fails until they follow); add its section to `CHANGELOG.md`.
 2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
 3. When the workflow is done, open the draft release, check the installers
    (install on Windows; run the AppImage), and write what changed.

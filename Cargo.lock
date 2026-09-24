@@ -1149,7 +1149,7 @@ checksum = "af9673d8203fcb076b19dfd17e38b3d4ae9f44959416ea532ce72415a6020365"
 
 [[package]]
 name = "ez2bms"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ez2bms-audio",
  "ez2bms-input",
@@ -1170,7 +1170,7 @@ dependencies = [
 
 [[package]]
 name = "ez2bms-audio"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "arc-swap",
  "cpal",
@@ -1185,7 +1185,7 @@ dependencies = [
 
 [[package]]
 name = "ez2bms-input"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "sdl3-sys",
  "serde",
@@ -1194,7 +1194,7 @@ dependencies = [
 
 [[package]]
 name = "ez2bms-launch"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1203,7 +1203,7 @@ dependencies = [
 
 [[package]]
 name = "ez2bms-media"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cc",
  "image",
@@ -1214,7 +1214,7 @@ dependencies = [
 
 [[package]]
 name = "ez2port-oracle"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cc",
  "ez2bms-audio",

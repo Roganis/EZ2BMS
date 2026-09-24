@@ -6,11 +6,9 @@ judgement of the game, not a spreadsheet of channels - hit Tab to play what you
 just wrote the way the engine will play it, and publish a song package the
 engine loads as-is.
 
-> Work in progress. Milestones 1 ("chart & play core") and 2 ("keysound
-> workbench + Classic-mode charting") are written; the
-> checklist below is the source of truth for what exists, and
-> [AI-DISCLOSURE.md](AI-DISCLOSURE.md) says what has and has not been checked
-> on real machines.
+> Milestones 1 to 9 are written; the checklist below is the source of truth
+> for what exists, and [AI-DISCLOSURE.md](AI-DISCLOSURE.md) says what has and
+> has not been checked on real machines.
 
 ## What it is for
 
@@ -26,6 +24,14 @@ engine loads as-is.
 - **Going back out** - a song sent into the original game in place of one it
   has (encrypted v8 charts, keysounds, its `song.bin` levels), with a backup
   and Restore; or a BMS/BME folder for LR2 and beatoraja.
+- **English, 한국어, 日本語** - the whole app, following the system's language
+  or chosen in Preferences (Ctrl+,). The Korean and Japanese are first drafts
+  by an AI, awaiting a native speaker's reading
+  ([glossary](docs/i18n-glossary.md)); corrections are welcome.
+- **An app to hand on** - `.bmson` and BMS files open in it from the file
+  manager; it tells you about a new release and installs it when you say so
+  ([releasing](docs/releasing.md)); a log stays on your machine, and About
+  copies a report for a bug.
 
 ## Nothing from the game ships
 
@@ -42,6 +48,8 @@ still works, with a procedural skin and plaintext packages.
 | `apps/editor`           | Svelte 5 + PixiJS front end                                                                |
 | `crates/ez2bms-audio`   | Rust: decode, resample, mixer with EZ2 voice rules, offline render, cutting                |
 | `crates/ez2bms-launch`  | Rust: find and launch `ez2play`; write into a game folder with a backup                    |
+| `crates/ez2bms-media`   | Rust: images, title plates (the port's text renderer)                                      |
+| `crates/ez2bms-input`   | Rust: game controllers through SDL 3, as EZ2PORT reads them                                |
 | `crates/ez2port-oracle` | Rust + C, **tests only**: EZ2PORT's own core, used to prove parity                         |
 | `src-tauri`             | the desktop host                                                                           |
 | `docs/`                 | architecture, the bmson dialect, the EZ2PORT contract and requests, performance log        |
@@ -199,9 +207,17 @@ deferred.
 Test from the cursor waits for the port (build 1582 has no `--start`), and
 sprite BGA for the port's writers.
 
-### Later
+### M9 - Polish and distribution
 
-- M9 Polish and distribution
+- [x] M9.1 A log on your machine, the offer after a run that did not close, About with a copyable report
+- [x] M9.2 `.bmson` and BMS files open in EZ2BMS; a second launch hands its file to the open window
+- [x] M9.3 Updates from this repository's releases, signed with the project's key; the release workflow; a check of the history before going public
+- [x] M9.4 Messages in ICU MessageFormat, the language switch (Preferences), the pseudo-language
+- [x] M9.5 Every word of the editor in the catalogs; the host's errors by kind
+- [x] M9.6 chart-core's findings, notes and reasons in the catalogs, stored with their key
+- [ ] M9.7 Korean
+- [ ] M9.8 Japanese
+- [ ] M9.9 These docs, timings, a sweep of every screen in each language, 0.2.0
 
 ## Verification
 

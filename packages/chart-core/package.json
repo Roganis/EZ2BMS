@@ -1,6 +1,6 @@
 {
   "name": "@ez2bms/chart-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Chart model, timing, EZ2 formats, editing, engine emulation and publishing - pure TypeScript, no DOM",
   "license": "GPL-3.0-only",

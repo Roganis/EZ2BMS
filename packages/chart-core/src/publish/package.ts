@@ -23,7 +23,7 @@ import { compileChart, type ChartPlan, type SampleLookup } from './chart-plan';
 import { KeysoundRegistry, type KeysoundDef } from './keysounds';
 import { chartIniText, eziText, songIniText, type Eol } from './text';
 
-export const CONVERTER = 'EZ2BMS 0.1.0';
+export const CONVERTER = 'EZ2BMS 0.2.0';
 
 export interface SongChart {
   data: ChartData;
