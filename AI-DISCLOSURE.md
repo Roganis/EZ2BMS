@@ -568,6 +568,25 @@ To confirm on the owner's machines and with native speakers:
   AppImage), after the repository is public and the key is set;
 - the log after a real crash.
 
+### The user manual (docs/manual), 2026-09-24
+
+The owner asked for a user manual and chose: Markdown chapters in
+`docs/manual/` for new charters, in English, with screenshots generated
+from the browser build, the older how-to pages (importing, exporting,
+recording, slicing) folded in and left as pointers, and the unverified
+areas gathered in one "Known limits" section.
+
+**The chapters were written by three assistant helpers** from the code and
+the English catalogs, not from using the app on a real machine. What was
+checked: every bold label was matched against the English catalogs (the
+ones not matched are emphasis, not labels), every shortcut against the
+generated `docs/keybindings.md`, and every link and anchor resolves. What
+was not: the behaviour described has not been tried by hand in the desktop
+app, on Windows, with a game folder or a controller; the example settings
+and log paths are Tauri's usual folders, not seen on a machine. The
+screenshots are the browser preview with the demo song
+(`pnpm manual:shots`, `tests/e2e/manual-screenshots.spec.ts`).
+
 ---
 
 ## Verification status

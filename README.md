@@ -52,7 +52,7 @@ still works, with a procedural skin and plaintext packages.
 | `crates/ez2bms-input`   | Rust: game controllers through SDL 3, as EZ2PORT reads them                                |
 | `crates/ez2port-oracle` | Rust + C, **tests only**: EZ2PORT's own core, used to prove parity                         |
 | `src-tauri`             | the desktop host                                                                           |
-| `docs/`                 | architecture, the bmson dialect, the EZ2PORT contract and requests, performance log        |
+| `docs/`                 | the user manual; architecture, the bmson dialect, the EZ2PORT contract, performance log    |
 
 ## Trying it
 
@@ -71,6 +71,9 @@ a note, drag up for a hold, **Space** to hear it, **Tab** for the Play view,
 EZ2PORT (set your game folder in the EZ2PORT tab first), **Ctrl+Shift+P** to
 publish. **Ctrl+K** finds everything else; all keys are in
 [docs/keybindings.md](docs/keybindings.md).
+
+The [user manual](docs/manual/README.md) walks through all of it, from a first
+chart to publishing and exporting.
 
 ## Building
 

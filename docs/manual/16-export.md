@@ -145,25 +145,25 @@ Under the destination, the dialog sums up the export:
 
 Errors block **Export**; the button then says why, for example "2 errors to fix first".
 
-| What the check says                                                                                                                   | Level           |
-| ------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
-| A chart file is over 131068 bytes: the original game decrypts into a buffer that size and can't load it                              | error           |
-| More than 2047 keysounds, every slice counted                                                                                        | error           |
-| The mode's table doesn't list the song, or two charts are for one tier                                                              | error           |
-| A level outside 1-20                                                                                                                 | error           |
-| A keysound file can't be read                                                                                                        | error           |
+| What the check says                                                                                                                                     | Level           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| A chart file is over 131068 bytes: the original game decrypts into a buffer that size and can't load it                                                 | error           |
+| More than 2047 keysounds, every slice counted                                                                                                           | error           |
+| The mode's table doesn't list the song, or two charts are for one tier                                                                                  | error           |
+| A level outside 1-20                                                                                                                                    | error           |
+| A keysound file can't be read                                                                                                                           | error           |
 | A background sound is cut short by the next sound on its track (the original plays one sound per track). A note where the game's own chart has that cut | warning or note |
-| A keyed sound is cut by the lane's next note, in autoplay too                                                                        | note            |
-| Keysounds with no file                                                                                                               | warning         |
-| A mode would stop listing the song (its NM has no level)                                                                             | warning         |
-| The game's two-player file for the tier stays as it is                                                                              | warning         |
-| The game has no lane layout file for the mode: EZ2BMS's own lane table is used                                                      | warning         |
-| Kept records fall between EZ2 ticks (was the resolution changed by hand?)                                                            | warning         |
-| A tier the song didn't have, and the level it will show                                                                             | note            |
-| Background notes moved off a track that is a lane in this mode, or tracks added                                                     | note            |
-| Records written back                                                                                                                 | note            |
-| Characters in the chart's header name that Korean Windows (CP949) can't write                                                       | note            |
-| Keysounds converted rather than sent as they are                                                                                    | note            |
+| A keyed sound is cut by the lane's next note, in autoplay too                                                                                           | note            |
+| Keysounds with no file                                                                                                                                  | warning         |
+| A mode would stop listing the song (its NM has no level)                                                                                                | warning         |
+| The game's two-player file for the tier stays as it is                                                                                                  | warning         |
+| The game has no lane layout file for the mode: EZ2BMS's own lane table is used                                                                          | warning         |
+| Kept records fall between EZ2 ticks (was the resolution changed by hand? Changing it in EZ2BMS moves them)                                              | warning         |
+| A tier the song didn't have, and the level it will show                                                                                                 | note            |
+| Background notes moved off a track that is a lane in this mode, or tracks added                                                                         | note            |
+| Records written back                                                                                                                                    | note            |
+| Characters in the chart's header name that Korean Windows (CP949) can't write                                                                           | note            |
+| Keysounds converted rather than sent as they are                                                                                                        | note            |
 
 Click **Export** to write it.
 
@@ -223,18 +223,18 @@ click **Export**. The dialog then says "Wrote 214 files into ...".
 
 ### What the BMS files contain
 
-| In the song                    | In the BMS                                                                                                                                                  |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| lanes                          | **EZ2 BME** (keys 11-15, turntable 16, pedal 17, effectors 18/19; 2P 21-29) or **Keys in order** (each side's keys onto 1-5, 6, 7), as on import           |
-| measures                       | EZ2's 4/4 (no `#xxx02`). Each line has as few slots as place its notes exactly; a chart past 999 measures is refused                                        |
-| the start tempo, tempo changes | `#BPM`; whole tempos 1-255 on channel 03, the rest on 08 (`#BPMxx`)                                                                                         |
-| stops                          | channel 09, `#STOPxx` in 1/192 of a measure; a stop that isn't a whole number of those is written as the decimal it is (beatoraja reads it), and said       |
-| holds                          | `#LNTYPE 1` pairs on 5x/6x. Two holds that meet on a lane can't both end there, so the first ends a pulse sooner, and said                                  |
-| the background                 | channel 01, a line per layer                                                                                                                                |
-| sounds                         | `#WAVxx`, base 36; `#BASE 62` past 1295 sounds; more than 3843 is refused                                                                                   |
-| tier, level                    | `#DIFFICULTY` (NM 2, HD 3, SHD 4, EX 5), `#PLAYLEVEL`                                                                                                       |
-| eyecatch, preview, movie       | `#STAGEFILE`, `#PREVIEW`, `#BMP01` shown from its start time                                                                                                |
-| what an imported BMS said      | `#RANK`, `#DEFEXRANK`, `#TOTAL`, `#LNMODE` as the file had them                                                                                             |
+| In the song                    | In the BMS                                                                                                                                            |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| lanes                          | **EZ2 BME** (keys 11-15, turntable 16, pedal 17, effectors 18/19; 2P 21-29) or **Keys in order** (each side's keys onto 1-5, 6, 7), as on import      |
+| measures                       | EZ2's 4/4 (no `#xxx02`). Each line has as few slots as place its notes exactly; a chart past 999 measures is refused                                  |
+| the start tempo, tempo changes | `#BPM`; whole tempos 1-255 on channel 03, the rest on 08 (`#BPMxx`)                                                                                   |
+| stops                          | channel 09, `#STOPxx` in 1/192 of a measure; a stop that isn't a whole number of those is written as the decimal it is (beatoraja reads it), and said |
+| holds                          | `#LNTYPE 1` pairs on 5x/6x. Two holds that meet on a lane can't both end there, so the first ends a pulse sooner, and said                            |
+| the background                 | channel 01, a line per layer                                                                                                                          |
+| sounds                         | `#WAVxx`, base 36; `#BASE 62` past 1295 sounds; more than 3843 is refused                                                                             |
+| tier, level                    | `#DIFFICULTY` (NM 2, HD 3, SHD 4, EX 5), `#PLAYLEVEL`                                                                                                 |
+| eyecatch, preview, movie       | `#STAGEFILE`, `#PREVIEW`, `#BMP01` shown from its start time                                                                                          |
+| what an imported BMS said      | `#RANK`, `#DEFEXRANK`, `#TOTAL`, `#LNMODE` as the file had them                                                                                       |
 
 A chart that uses channels 17-19 or 27-29 (EZ2's pedals and effectors, which a BMS player reads as
 the 6th and 7th keys) is written as `.bme`; others as `.bms`.
@@ -276,8 +276,8 @@ These are lost, and the export says so:
 - **Where the target comes from.** The last export's song is kept in the song file as `cabinet`,
   and the song an import came from as `source.key`. See [song-file.md](../song-file.md).
 - **File names.** The game's chart files are `<mode>1p-<key>[-tier].ez`, with the keysound list in
-  a `.ezi` and settings in a `.ini` (written compact, `Key=value`, with CRLF line ends, as the
-  game's). The song tables are `system/<mode>/song.bin`. A tier the song lacked takes its siblings'
+  a `.ezi` (with CRLF line ends, as the game's) and settings in a `.ini` (written compact,
+  `Key=value`, with CRLF line ends). The song tables are `system/<mode>/song.bin`. A tier the song lacked takes its siblings'
   `a` value in `song.bin`.
 - **The review's rule names**, in the order of the table above: `cabinet-size`, `cabinet-slots`,
   `cabinet-table`, `cabinet-level`, `cabinet-sound-unreadable`, `cabinet-voice-backing`,
