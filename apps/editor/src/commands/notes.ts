@@ -9,6 +9,7 @@ import {
   moveNotes,
   pasteNotes,
   setBpmAt,
+  setScrollAt,
   setStopAt,
   shiftColumns,
   swapSides,
@@ -232,6 +233,28 @@ export function registerNoteCommands(app: App): void {
         const n = Number(arg ?? 0);
         if (!Number.isFinite(n) || n < 0) throw new Error('a STOP lasts a number of pulses');
         setStopAt(app.doc!, y, n > 0 ? Math.round(n) : null);
+      },
+    },
+    {
+      id: 'timing.scroll',
+      title: 'Set scroll speed at the cursor…',
+      group: 'Timing',
+      verb: 'scroll',
+      argHint: '1.5',
+      enabled: () => !!app.doc,
+      run: (arg) => {
+        // A multiplier on the player's speed from here on, as EZ2PORT plays
+        // type-6 records: 1.5, ×1.5 or 150%. `-` removes it.
+        const y = cursorSnapped();
+        const t = (arg ?? '').trim().replace(/^[x×*]/i, '');
+        if (t === '' || t === '-') {
+          setScrollAt(app.doc!, y, null);
+          return;
+        }
+        const rate = t.endsWith('%') ? Number(t.slice(0, -1)) / 100 : Number(t);
+        if (!(rate > 0 && rate <= 100))
+          throw new Error('a scroll speed is a multiplier above 0, like 1.5');
+        setScrollAt(app.doc!, y, rate);
       },
     },
     {

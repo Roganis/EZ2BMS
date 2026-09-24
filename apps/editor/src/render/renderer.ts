@@ -8,6 +8,12 @@ import {
   buildGroups,
   groupKeyOf,
   holdPreview,
+  multiplierAt,
+  scrollEventsOf,
+  scrollPoints,
+  TickConverter,
+  type ScrollChange,
+  type ScrollPoint,
   type HoldPreview,
   laneInfo,
   sliceAt,
@@ -97,6 +103,11 @@ const TAKE_COLOR = { ok: 0x7dffb2, clash: 0xff5c7a, silent: 0x8a8fa8 } as const;
 /** Background slices alternate between two tints so neighbours read apart. */
 const SLICE_TINTS = [0x58e1ff, 0x9d7bff];
 const ONSET = 0xffd166;
+
+/** Scroll changes' flags: cyan, apart from BPM's yellow and STOP's pink. */
+const SCROLL_COLOR = 0x5ef2c8;
+/** `×1.5`, `×0.75`, `×1.333`: a multiplier in at most three decimals. */
+const fmtScroll = (r: number) => `×${Number(r.toFixed(3))}`;
 
 /** A hold kind in a few characters (HOLD_KINDS says it in words). */
 const HOLD_LABEL: Record<number, string> = {
@@ -481,9 +492,20 @@ export class PlayfieldRenderer {
       skin: game?.geom,
     });
     this.layout = l;
-    const wantPx = s.pxPerBeat * l.scale;
+    // In Play the field scrolls at the player's speed times the chart's own
+    // multiplier at the cursor (its scroll changes). While the chart plays,
+    // the spacing chases that the way EZ2PORT's live rate does - a tenth of
+    // the gap per 60 Hz frame (ez2_scroll_tick), here per elapsed 1/60 s so
+    // a 144 Hz display eases as fast - and the whole field rescales at once.
+    // Otherwise (zoom, speed, Edit <-> Play) it eases a quarter per frame.
+    const mult = s.mode === 'play' ? this.multiplierAt(s) : 1;
+    const wantPx = s.pxPerBeat * mult * l.scale;
+    const frameAt = performance.now();
+    const dt = this.lastFrameAt ? Math.min(250, frameAt - this.lastFrameAt) : 1000 / 60;
+    this.lastFrameAt = frameAt;
+    const k = s.live && s.mode === 'play' ? 1 - Math.pow(1 - 0.1, dt / (1000 / 60)) : 0.25;
     if (!this.shownPx) this.shownPx = wantPx;
-    this.shownPx += (wantPx - this.shownPx) * 0.25;
+    this.shownPx += (wantPx - this.shownPx) * k;
     if (Math.abs(wantPx - this.shownPx) < 0.05) this.shownPx = wantPx;
     else animating = true;
     const vp = new Viewport(res, s.cursor, this.shownPx, l.judgeY);
@@ -784,23 +806,31 @@ export class PlayfieldRenderer {
     g.clear();
     this.markText.begin();
     const d = s.doc.data;
-    const flag = (p: number, label: string, color: number) => {
+    // A flag sits on its line; `below` hangs it under the line instead, so a
+    // scroll change and a BPM change at one spot both read.
+    const flag = (p: number, label: string, color: number, below = false, alpha = 0.9) => {
       const y = vp.yOf(p);
       const t = this.markText.next(label);
       t.scale.set(Math.min(1.3, l.scale * 0.75));
       const w = t.width + 8;
       const x = l.gutter.right - w - 14 * l.scale;
-      g.roundRect(x, y - t.height - 3, w, t.height + 4, 3).fill({ color, alpha: 0.9 });
+      const top = below ? y + 1 : y - t.height - 3;
+      g.roundRect(x, top, w, t.height + 4, 3).fill({ color, alpha });
       g.moveTo(x + w, y + 0.5)
         .lineTo(l.field.right + 4, y + 0.5)
-        .stroke({ width: 1, color, alpha: 0.45 });
+        .stroke({ width: 1, color, alpha: alpha / 2 });
       t.tint = 0x05060a;
-      t.position.set(x + 4, y - t.height - 1);
+      t.position.set(x + 4, top + 2);
     };
     const bpms = [{ y: 0, bpm: d.info.initBpm ?? 120 }, ...d.bpmEvents.filter((e) => e.y > 0)];
     for (const e of bpms) if (e.y >= p0 && e.y <= p1) flag(e.y, fmtBpm(e.bpm), 0xffd11f);
     for (const e of d.stopEvents)
       if (e.y >= p0 && e.y <= p1) flag(e.y, `STOP ${e.duration}`, 0xff4fd8);
+    // Scroll changes; those an older import kept (not yet the chart's own:
+    // Issues turns them into its own) are dimmer.
+    for (const e of this.scrollOf(s.doc).events)
+      if (e.y >= p0 && e.y <= p1)
+        flag(e.y, fmtScroll(e.rate), SCROLL_COLOR, true, e.from.kind === 'event' ? 0.9 : 0.5);
     this.markText.end();
   }
 
@@ -1315,6 +1345,44 @@ export class PlayfieldRenderer {
         .fill({ color: NEON, alpha: 0.07 })
         .stroke({ width: 1, color: NEON, alpha: 0.8 });
     }
+  }
+
+  /** The chart's scroll changes, as flags and on the tick axis, kept until it changes. */
+  private scrollOf(doc: ChartDoc): {
+    tc: TickConverter;
+    points: ScrollPoint[];
+    events: ScrollChange[];
+  } {
+    const c = this.scrollCache;
+    if (c.doc !== doc || c.version !== doc.version || !c.tc) {
+      const tc = new TickConverter(doc.resolution, doc.data.stopEvents);
+      c.doc = doc;
+      c.version = doc.version;
+      c.tc = tc;
+      c.points = scrollPoints(doc.data, (y) => tc.tick(y).tick);
+      c.events = scrollEventsOf(doc.data);
+    }
+    return { tc: c.tc, points: c.points, events: c.events };
+  }
+  private readonly scrollCache = {
+    doc: undefined as ChartDoc | undefined,
+    version: -1,
+    tc: undefined as TickConverter | undefined,
+    points: [] as ScrollPoint[],
+    events: [] as ScrollChange[],
+  };
+
+  /** The chart's multiplier at the cursor's (fractional) EZ tick, as EZ2PORT walks it. */
+  private multiplierAt(s: FieldState): number {
+    const { tc, points } = this.scrollOf(s.doc);
+    if (!points.length) return 1;
+    return multiplierAt(points, (tc.shift(Math.max(0, s.cursor)) * 48) / s.doc.resolution);
+  }
+  private lastFrameAt = 0;
+
+  /** The Play field's scroll rate as drawn: 1 is 76.8 design px a beat (EZ2PORT's 100 %). */
+  get liveRate(): number {
+    return this.layout ? this.shownPx / this.layout.scale / 76.8 : 0;
   }
 
   /**

@@ -64,12 +64,13 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 
 ## Timing
 
-| Command                 | Keys | Palette       |
-| ----------------------- | ---- | ------------- |
-| BPM change here…        | `B`  |               |
-| Set BPM at the cursor…  |      | `bpm 174`     |
-| Set STOP at the cursor… |      | `stop pulses` |
-| STOP here…              | `S`  |               |
+| Command                         | Keys | Palette       |
+| ------------------------------- | ---- | ------------- |
+| BPM change here…                | `B`  |               |
+| Set BPM at the cursor…          |      | `bpm 174`     |
+| Set scroll speed at the cursor… |      | `scroll 1.5`  |
+| Set STOP at the cursor…         |      | `stop pulses` |
+| STOP here…                      | `S`  |               |
 
 ## View
 

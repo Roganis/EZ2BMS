@@ -35,7 +35,7 @@ export function registerPortCommands(app: App): void {
     port.log = [];
     port.logOpen = true;
     port.say(
-      `Testing ${slot.label} in EZ2PORT${auto ? ' (autoplay)' : ''}` +
+      `Testing ${slot.label} in EZ2PORT${auto ? ' (autoplay)' : ''} at ${app.view.speed}%` +
         (fromCursor
           ? ' from the cursor'
           : app.view.cursor > 0
@@ -54,6 +54,10 @@ export function registerPortCommands(app: App): void {
         windowed: true,
         // The song's movie, whatever the operator ini says (it is what is being tested).
         bga: spec.copies?.length ? true : null,
+        // At the Play view's speed, so a chart's scroll changes look as they
+        // do here (ez2play's --speed takes a percent; a build without it
+        // leaves the port's own).
+        speed: app.view.speed,
         start_ms: fromCursor ? app.audio.msAt(slot, app.view.cursor) : null,
         skip_ready: !!port.probe?.skip_ready,
       },

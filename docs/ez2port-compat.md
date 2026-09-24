@@ -438,6 +438,11 @@ so these follow its code:
 - **Where they go:** a package puts every one on track 0 with a second word
   of 0 (the port reads only the first). A cabinet export puts each on the
   track, and with the second word, it was imported with.
+- **The editor's Play view** scrolls at the speed times the multiplier at
+  the cursor, and while the chart plays it closes a tenth of the gap per
+  1/60 s elapsed rather than per frame, so it eases as fast at 144 Hz as
+  the port does at 60. F5 passes the Play view's speed (`--speed`), so a
+  test in EZ2PORT scrolls as the editor shows it.
 - **The port's bmson importer does not read `x_scroll_events`**: a raw bmson
   dropped in the songs folder plays without them. EZ2BMS writes packages,
   so its own charts are not affected (a request in `ez2port-requests.md`).

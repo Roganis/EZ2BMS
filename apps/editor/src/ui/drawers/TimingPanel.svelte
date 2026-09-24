@@ -1,6 +1,14 @@
 <script lang="ts">
-  // Tempo changes and STOPs, in chart order; click a position to go there.
-  import { formatPosition, positionOf, setBpmAt, setStopAt } from '@ez2bms/chart-core';
+  // Tempo changes, STOPs and scroll changes, in chart order; click a
+  // position to go there.
+  import {
+    formatPosition,
+    legacyScrollIndices,
+    positionOf,
+    setBpmAt,
+    setScrollAt,
+    setStopAt,
+  } from '@ez2bms/chart-core';
   import { app } from '../../state/app.svelte';
   import type { ChartSlot } from '../../state/project.svelte';
 
@@ -13,6 +21,8 @@
       init: x.info.initBpm ?? 120,
       bpms: [...x.bpmEvents].filter((e) => e.y > 0).sort((a, b) => a.y - b.y),
       stops: [...x.stopEvents].sort((a, b) => a.y - b.y),
+      scrolls: x.scrollEvents,
+      legacy: legacyScrollIndices(x).length,
     };
   });
   const pos = (y: number) => formatPosition(positionOf(y, d.resolution));
@@ -81,6 +91,45 @@
       EZ2 has no STOP: EZ2PORT gets a gap in time instead, so the scroll does not freeze.
     </p>
   {/if}
+
+  <h3>Scroll speed</h3>
+  {#each data.scrolls as e (e.y)}
+    <div class="ev" data-testid="scroll-event">
+      <button class="at" onclick={() => (app.view.cursor = e.y)}>{pos(e.y)}</button>
+      <input
+        type="number"
+        min="0.01"
+        step="0.05"
+        value={e.rate}
+        aria-label="Scroll multiplier"
+        onchange={(ev) => {
+          const r = Number(ev.currentTarget.value);
+          if (r > 0) setScrollAt(d, e.y, r);
+          else ev.currentTarget.value = String(e.rate);
+        }}
+      />
+      <button class="ez-btn danger" onclick={() => setScrollAt(d, e.y, null)} aria-label="Remove"
+        >×</button
+      >
+    </div>
+  {:else}
+    <p class="hint">
+      None. <kbd>Ctrl K</kbd> <code>scroll 1.5</code> makes the field scroll 1.5 times as fast from the
+      cursor on.
+    </p>
+  {/each}
+  {#if data.legacy}
+    <p class="hint">
+      {data.legacy} more from the game chart, kept by an older import: they play and publish; Issues turns
+      them into changes you can edit here.
+    </p>
+  {/if}
+  {#if data.scrolls.length}
+    <p class="hint">
+      A multiplier on the player's speed: EZ2PORT eases to it over a few frames, and every note on
+      the field moves with it. Timing does not change.
+    </p>
+  {/if}
 </div>
 
 <style>
@@ -101,6 +150,10 @@
     font-family: var(--font-num);
     color: var(--neon);
     font-size: 12px;
+  }
+  code {
+    font-family: var(--font-num);
+    color: var(--neon);
   }
   .at:hover {
     text-decoration: underline;
