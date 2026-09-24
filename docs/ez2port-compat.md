@@ -374,6 +374,14 @@ oracle cannot run it. `input/mapper.ts` transcribes it, and
   any movement and holding them 90 ms, a reversal dropping the other; a
   velocity axis integrated once per 1/60 s.
 
+ScratchMix's fret-and-strum is the port's play loop (`reference/play.c`
+2426-2501, also unbuilt) in `engine/strum.ts`, tested rule by rule in
+`strum.test.ts`: a key alone is silent and unjudged, the turntable plays and
+judges the keys held on its side (not the pedal), and a key pressed within
+six frames after a strum still counts. The port measures that latch on its
+frame clock; EZ2BMS on the events' own times, which is what they are judged
+at.
+
 Where EZ2BMS departs, deliberately:
 
 - times are float ms on the audio engine's host clock, where the port uses

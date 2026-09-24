@@ -11,6 +11,8 @@
 // - A note left unpressed past its window is a MISS, and sounds nothing.
 // - Holds pay instalments through the score's hold machine, advanced once per
 //   frame with the song position in whole chart ticks.
+// - ScratchMix (`strum`) is fret-and-strum (engine/strum.ts): a key alone is
+//   silent, the turntable plays and judges the keys held.
 // Velocity and pan use the original's DirectSound arithmetic.
 
 import type { Column } from '../modes/registry';
@@ -18,6 +20,7 @@ import type { ChartPlan, PlanEvent } from '../publish/chart-plan';
 import { dsLevel, dsPan, MIX_UNITY, PAN_CENTRE } from '../ez2data/mixparam';
 import { J, noteCounted, Score, tickMs } from './score';
 import type { SongIni } from './songini';
+import { StrumLatch } from './strum';
 
 export interface SoundCmd {
   /** When the sound starts, song ms. */
@@ -60,6 +63,8 @@ export interface SessionOptions {
    * from the cursor needs.
    */
   startMs?: number;
+  /** ScratchMix: keys are frets, played by strum() (engine/strum.ts). */
+  strum?: boolean;
 }
 
 export class PlaySession {
@@ -70,6 +75,10 @@ export class PlaySession {
   private readonly backing: PlanEvent[];
   private nextBacking = 0;
   private readonly down: boolean[];
+  /** Each column's player (0 or 1) and whether it is a pedal - what a strum sweeps. */
+  private readonly sideOf: (0 | 1)[];
+  private readonly pedal: boolean[];
+  private readonly latch = new StrumLatch();
   private fx: JudgeFx[] = [];
   private sounds: SoundCmd[] = [];
   private nowMs = 0;
@@ -82,6 +91,8 @@ export class PlaySession {
   ) {
     const laneOf = new Map(columns.map((c) => [c.x, c.index]));
     this.down = columns.map(() => false);
+    this.sideOf = columns.map((c) => (c.side === 2 ? 1 : 0));
+    this.pedal = columns.map((c) => c.kind === 'pedal');
     this.byLane = columns.map(() => []);
     const notes: LaneNote[] = [];
     let total = 0;
@@ -137,6 +148,28 @@ export class PlaySession {
   /** A key went down on a lane (column index) at `pressMs` (<= the current clock). */
   press(lane: number, pressMs: number): { sounds: SoundCmd[]; fx: JudgeFx[] } {
     this.down[lane] = true;
+    // A fret counts only inside a strum's latch; alone it is silent.
+    if (this.opts.strum && (this.pedal[lane] || !this.latch.fires(this.sideOf[lane]!, pressMs)))
+      return this.drain();
+    this.fire(lane, pressMs);
+    return this.drain();
+  }
+
+  /**
+   * A strum (ScratchMix's turntable going down) on a side at `pressMs`: every
+   * fret held on that side plays and is judged, and the latch is armed.
+   */
+  strum(side: 0 | 1, pressMs: number): { sounds: SoundCmd[]; fx: JudgeFx[] } {
+    if (!this.opts.strum) return this.drain();
+    this.latch.strum(side, pressMs);
+    this.down.forEach((d, lane) => {
+      if (d && !this.pedal[lane] && this.sideOf[lane] === side) this.fire(lane, pressMs);
+    });
+    return this.drain();
+  }
+
+  /** Sound a lane and judge its nearest note: what a press does once it counts. */
+  private fire(lane: number, pressMs: number): void {
     const list = this.byLane[lane] ?? [];
     // The keysound: nearest lane note to the clock, by the midpoint rule.
     let before = -1;
@@ -178,7 +211,6 @@ export class PlaySession {
         this.head(best, j, pressMs, pressMs < best.ev.ms);
       }
     }
-    return this.drain();
   }
 
   release(lane: number): void {
