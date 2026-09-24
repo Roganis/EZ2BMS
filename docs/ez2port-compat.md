@@ -359,6 +359,31 @@ at its exact beat, with its length and sound, and at its time to the
 microsecond (`bms-write.test.ts`). What BMS cannot hold (velocity, pan, an
 EZ2 chart's kept records) is said in the dialog.
 
+## Controllers (the port's input layer, not in the oracle)
+
+EZ2PORT's input layer is platform code on SDL (`platform/common/ezinput.c`,
+`ezpad.c`, vendored unbuilt in `third_party/ez2port-core/reference`), so the
+oracle cannot run it. `input/mapper.ts` transcribes it, and
+`input-mapper.test.ts` holds the port's own cases for it
+(`tests/test_inputchannel.c`) plus the turntable's rules:
+
+- a channel is the OR of its bindings; a key repeat is not a press;
+- an 8 ms debounce per channel, the level read again at the next event;
+- hat directions exact (a diagonal is its own direction);
+- an axis turntable in 256 units a swing, raising the scratch channels on
+  any movement and holding them 90 ms, a reversal dropping the other; a
+  velocity axis integrated once per 1/60 s.
+
+Where EZ2BMS departs, deliberately:
+
+- times are float ms on the audio engine's host clock, where the port uses
+  SDL's integer ms;
+- a turntable hold ends exactly at its deadline, not at the next frame;
+- an edge timed before a channel's last is not chatter (the port's unsigned
+  subtraction takes it as such);
+- the seat (2P playing on 1P's side) and the mouse and virtual turntables'
+  positions are left out: nothing in the editor reads them.
+
 ## Port behaviour worth knowing
 
 - **A package is listed in one bank.** `ez2_usersongs_merge` adds it to

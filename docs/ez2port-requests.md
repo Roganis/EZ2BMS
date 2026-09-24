@@ -209,6 +209,24 @@ letterbox keeping the movie's shape inside 640x480 on black.
 **Detection:** a `Fit` key in the build's `usersongs.c`; EZ2BMS would offer
 the choice on its BGA page.
 
+## 11. Two input details (`ez2/keyconf.c`, `platform/common/ezinput.c`)
+
+Found while EZ2BMS transcribed the input layer (M7); both are small.
+
+- **`:rev,vel` in `[Analog]` loses `vel`.** `keyconf.h` documents
+  `Turntable = 0810:e501/a0:rev,vel`, but the value is split at commas
+  before the binding is read, so the turntable gets `0810:e501/a0:rev`. It
+  works only quoted (`"0810:e501/a0:rev,vel"`). Either split `[Analog]`
+  values on nothing, or write the example quoted.
+- **A debounced change waits for the next event.** `resolve()` drops a
+  second edge within the window and its comment says "the level is re-read
+  every frame", but nothing calls `resolve_all` except a key or device
+  event. A change swallowed by the debounce with nothing after it - a
+  release under 8 ms after its press, say - leaves the channel stuck until
+  something else is pressed. Re-reading once the window ends (not every
+  frame, which would turn a release bounce into a press) would fix it.
+  EZ2BMS keeps the port's behaviour for now, so the two agree.
+
 ## For information: scores that can't reach 100%
 
 This is not a bug in the port: it reproduces the original. EZ2BMS's lint warns

@@ -428,3 +428,8 @@ export function keyNameForCode(code: string): string | undefined {
   const sc = CODE_SCANCODE[code];
   return sc === undefined ? undefined : scancodeName(sc) || undefined;
 }
+
+/** The scancode (USB usage) of a KeyboardEvent.code, or 0. */
+export function scancodeForCode(code: string): number {
+  return CODE_SCANCODE[code] ?? 0;
+}
