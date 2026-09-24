@@ -135,3 +135,11 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 | Stop the EZ2PORT test       |                |         |
 | Test in EZ2PORT             | `F5`           |         |
 | Watch in EZ2PORT (autoplay) | `Shift+F5`     |         |
+
+## Help
+
+| Command                                                     | Keys | Palette |
+| ----------------------------------------------------------- | ---- | ------- |
+| About EZ2BMS                                                |      |         |
+| Copy a problem report (version, errors, the end of the log) |      |         |
+| Open the log folder                                         |      |         |

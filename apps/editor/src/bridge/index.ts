@@ -18,7 +18,9 @@ export function createBackend(): Backend {
   if ('__TAURI_INTERNALS__' in window) return tauriBackend();
   const q = new URLSearchParams(location.search);
   const files = demoFiles(q.has('modes'), q.has('bench'));
-  if (!q.has('skin') && !q.has('game')) return exposePad(webBackend(files));
+  // ?crashed: the start after a run that died without closing.
+  const crashed = q.has('crashed');
+  if (!q.has('skin') && !q.has('game')) return exposePad(webBackend(files, {}, { crashed }));
   const defaults: Record<string, unknown> = { gameRoot: DEMO_GAME };
   // ?skin: a made-up game folder, so the game-skin path runs without a game.
   if (q.has('skin')) for (const [k, b] of demoSkinFiles()) files.set(k, b);
@@ -30,7 +32,7 @@ export function createBackend(): Backend {
     for (const [k, b] of g.files) files.set(`${DEMO_GAME}/${k}`, b);
     files.set(`${DEMO_GAME}/ez2ac_unpacked.exe`, g.exe);
     defaults.exe = `${DEMO_GAME}/ez2ac_unpacked.exe`;
-    return exposePad(webBackend(files, defaults, { gameTables: SYNTH_EZ_TABLES }));
+    return exposePad(webBackend(files, defaults, { gameTables: SYNTH_EZ_TABLES, crashed }));
   }
-  return exposePad(webBackend(files, defaults));
+  return exposePad(webBackend(files, defaults, { crashed }));
 }

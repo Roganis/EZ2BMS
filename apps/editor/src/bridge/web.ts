@@ -206,10 +206,12 @@ export function canvasPlate(spec: PlateSpec): PlatePixels {
 export function webBackend(
   seed: Map<string, Uint8Array> = demoFiles(),
   defaults: Record<string, unknown> = {},
-  opts: { gameTables?: EzTables } = {},
+  opts: { gameTables?: EzTables; crashed?: boolean } = {},
 ): Backend {
   const files = new Map(seed);
   const mtimes = new Map<string, number>();
+  /** The browser build's log: what the desktop app writes to its log file. */
+  const webLog: string[] = [];
   const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '');
   const missing = (p: string) => new Error(`${p}: no such file`);
   let staged = 0;
@@ -300,7 +302,28 @@ export function webBackend(
 
   const backend: Backend = {
     kind: 'web',
-    appInfo: async () => ({ version: '0.1.0', os: 'web', config_dir: null, cache_dir: null }),
+    appInfo: async () => ({
+      version: '0.1.0',
+      commit: 'web',
+      os: 'web',
+      arch: 'web',
+      config_dir: null,
+      cache_dir: null,
+      log_dir: '/logs',
+      // ?crashed: as if the last run had died without closing.
+      previous_session: opts.crashed
+        ? { started_ms: Date.now() - 3_600_000, pid: 1, version: '0.1.0' }
+        : null,
+    }),
+    diag: {
+      log: (level, message) => {
+        webLog.push(`${new Date().toISOString()} [${level.toUpperCase()}] ${message}`);
+        if (webLog.length > 2000) webLog.shift();
+      },
+      tail: async (maxBytes) => webLog.join('\n').slice(-maxBytes),
+      revealLogs: async () => {},
+      onPanic: () => () => {},
+    },
     readFile: async (path) => {
       const b = files.get(norm(path));
       if (!b) throw missing(path);

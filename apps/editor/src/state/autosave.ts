@@ -12,6 +12,11 @@ export function formatWhen(ms: number): string {
   return new Date(ms).toLocaleString();
 }
 
+/** A time in ISO 8601 (UTC), for logs and reports. */
+export function isoTime(ms: number = Date.now()): string {
+  return new Date(ms).toISOString();
+}
+
 export class Autosave {
   private dir: string | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;

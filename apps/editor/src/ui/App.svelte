@@ -7,6 +7,7 @@
   import { registerClassicCommands } from '../commands/classic';
   import { registerSliceCommands } from '../commands/slice';
   import { app } from '../state/app.svelte';
+  import AboutDialog from './AboutDialog.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import ControlsDialog from './ControlsDialog.svelte';
   import Editor from './Editor.svelte';
@@ -29,7 +30,14 @@
     const onKey = (e: KeyboardEvent) => {
       if (app.view.paletteOpen && e.key !== 'Escape') return;
       // The Publish, Import, Export and Controls dialogs take their own keys.
-      if (app.publish.open || app.importer.open || app.exporter.open || app.controls.open) return;
+      if (
+        app.publish.open ||
+        app.importer.open ||
+        app.exporter.open ||
+        app.controls.open ||
+        app.diag.aboutOpen
+      )
+        return;
       app.commands.handleKey(e, app.view.covered);
     };
     const onUnload = (e: BeforeUnloadEvent) => {
@@ -63,6 +71,9 @@
 {/if}
 {#if app.controls.open}
   <ControlsDialog />
+{/if}
+{#if app.diag.aboutOpen}
+  <AboutDialog />
 {/if}
 <CommandPalette />
 <Toasts />

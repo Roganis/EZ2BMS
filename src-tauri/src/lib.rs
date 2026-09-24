@@ -4,6 +4,7 @@
 //! Every command is mirrored by the web mock in `apps/editor/src/bridge/`.
 
 mod audio;
+mod diag;
 mod error;
 mod export;
 mod files;
@@ -41,19 +42,58 @@ static CLOCK_STREAM: AtomicU64 = AtomicU64::new(0);
 #[derive(Serialize)]
 struct AppInfo {
     version: &'static str,
+    commit: &'static str,
     os: &'static str,
+    arch: &'static str,
     config_dir: Option<PathBuf>,
     cache_dir: Option<PathBuf>,
+    log_dir: Option<PathBuf>,
+    /// The run before this one, when it ended without closing (diag.rs).
+    previous_session: Option<diag::PreviousSession>,
 }
 
 #[tauri::command]
-fn app_info(app: AppHandle) -> AppInfo {
+fn app_info(app: AppHandle, session: State<'_, Arc<diag::Session>>) -> AppInfo {
     AppInfo {
         version: env!("CARGO_PKG_VERSION"),
+        commit: diag::COMMIT,
         os: std::env::consts::OS,
+        arch: std::env::consts::ARCH,
         config_dir: app.path().app_config_dir().ok(),
         cache_dir: app.path().app_cache_dir().ok(),
+        log_dir: app.path().app_log_dir().ok(),
+        previous_session: session.previous.clone(),
     }
+}
+
+// ---- the log (diag.rs)
+
+/// A line from the editor into the log: script errors, and what it wants kept.
+#[tauri::command]
+fn diag_log(level: String, message: String) {
+    match level.as_str() {
+        "error" => log::error!(target: "editor", "{message}"),
+        "warn" => log::warn!(target: "editor", "{message}"),
+        _ => log::info!(target: "editor", "{message}"),
+    }
+}
+
+/// The last `max_bytes` of the log files, for a report.
+#[tauri::command]
+fn diag_tail(app: AppHandle, max_bytes: usize) -> CmdResult<String> {
+    let dir = app.path().app_log_dir().map_err(|e| CmdError::Invalid(e.to_string()))?;
+    Ok(diag::tail(&dir, max_bytes.min(4 << 20)))
+}
+
+/// Show the log folder in the file manager.
+#[tauri::command]
+fn diag_reveal_logs(app: AppHandle) -> CmdResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = app.path().app_log_dir().map_err(|e| CmdError::Invalid(e.to_string()))?;
+    std::fs::create_dir_all(&dir).map_err(|e| CmdError::io(&dir, e))?;
+    app.opener()
+        .open_path(dir.to_string_lossy(), None::<&str>)
+        .map_err(|e| CmdError::Invalid(e.to_string()))
 }
 
 // ---- files
@@ -536,7 +576,34 @@ fn fonts_dir(app: &AppHandle) -> PathBuf {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(
+            // One file a run in the app's log folder, 1 MB each, the last
+            // five kept: enough to see what led up to a crash.
+            tauri_plugin_log::Builder::new()
+                .clear_targets()
+                .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                    file_name: Some(diag::LOG_NAME.into()),
+                }))
+                .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stderr))
+                .level(log::LevelFilter::Info)
+                .max_file_size(1_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(5))
+                .build(),
+        )
         .setup(|app| {
+            diag::install_panic_hook(app.handle().clone());
+            let log_dir = app.path().app_log_dir()?;
+            let session = diag::Session::begin(&log_dir, env!("CARGO_PKG_VERSION"))?;
+            log::info!(
+                "EZ2BMS {} ({}) on {} {}{}",
+                env!("CARGO_PKG_VERSION"),
+                diag::COMMIT,
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+                if session.previous.is_some() { "; the last run did not close" } else { "" }
+            );
+            app.manage(Arc::new(session));
             let audio = Arc::new(Audio::open(app.path().app_cache_dir().ok()));
             // Pad events are timed on the audio engine's host clock, the one
             // the editor turns into song time.
@@ -601,7 +668,19 @@ pub fn run() {
             input_devices,
             input_stream,
             input_hold,
+            diag_log,
+            diag_tail,
+            diag_reveal_logs,
         ])
-        .run(tauri::generate_context!())
-        .expect("EZ2BMS failed to start");
+        .build(tauri::generate_context!())
+        .expect("EZ2BMS failed to start")
+        .run(|app, event| {
+            // Closed cleanly: the next start finds no marker.
+            if let tauri::RunEvent::Exit = event {
+                log::info!("EZ2BMS closed");
+                if let Some(s) = app.try_state::<Arc<diag::Session>>() {
+                    s.end();
+                }
+            }
+        });
 }

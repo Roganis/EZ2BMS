@@ -4,7 +4,7 @@
 // disagree about what a thing does.
 
 export type CommandGroup =
-  'File' | 'Edit' | 'View' | 'Play' | 'Notes' | 'Timing' | 'Chart' | 'EZ2PORT';
+  'File' | 'Edit' | 'View' | 'Play' | 'Notes' | 'Timing' | 'Chart' | 'EZ2PORT' | 'Help';
 
 export interface Command {
   id: string;

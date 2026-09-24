@@ -316,6 +316,27 @@ export function registerBuiltins(app: App): void {
       run: () => app.sounds.removeUnused(),
     },
     {
+      id: 'help.about',
+      title: 'About EZ2BMS',
+      group: 'Help',
+      global: true,
+      run: () => (app.diag.aboutOpen = true),
+    },
+    {
+      id: 'help.report',
+      title: 'Copy a problem report (version, errors, the end of the log)',
+      group: 'Help',
+      global: true,
+      run: () => app.diag.copyReport(),
+    },
+    {
+      id: 'help.logs',
+      title: 'Open the log folder',
+      group: 'Help',
+      global: true,
+      run: () => app.backend.diag.revealLogs(),
+    },
+    {
       id: 'view.inspector',
       title: 'Inspector',
       group: 'View',

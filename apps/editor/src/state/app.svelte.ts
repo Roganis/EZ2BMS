@@ -14,6 +14,7 @@ import { Project, type ChartSlot } from './project.svelte';
 import { Settings } from './settings.svelte';
 import { SkinState } from './skin.svelte';
 import { Calibrator } from './calibrator.svelte';
+import { describeError, Diagnostics } from './diag.svelte';
 import { ClassicState } from './classic.svelte';
 import { ControlsState } from './controls.svelte';
 import { SoundsState } from './sounds.svelte';
@@ -51,6 +52,7 @@ export class App {
   readonly exporter: Exporter;
   readonly controls: ControlsState;
   readonly calibrator: Calibrator;
+  readonly diag: Diagnostics;
   project = $state<Project | null>(null);
   audioInfo = $state<AudioInfo | null>(null);
   ready = $state(false);
@@ -78,11 +80,16 @@ export class App {
     this.exporter = new Exporter(this);
     this.controls = new ControlsState(this);
     this.calibrator = new Calibrator(this);
-    this.commands.onError = (e, c) =>
-      toast(`${c.title}: ${e instanceof Error ? e.message : String(e)}`, 'error');
+    this.diag = new Diagnostics(this);
+    this.commands.onError = (e, c) => {
+      const message = e instanceof Error ? e.message : String(e);
+      this.backend.diag.log('warn', `${c.id}: ${describeError(e).detail}`);
+      toast(`${c.title}: ${message}`, 'error');
+    };
   }
 
   async init(): Promise<void> {
+    void this.diag.start();
     await this.settings.load();
     this.view.side = this.settings.data.side;
     this.view.speed = this.settings.data.speed;

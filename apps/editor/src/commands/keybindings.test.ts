@@ -23,6 +23,7 @@ const GROUPS: CommandGroup[] = [
   'Play',
   'Chart',
   'EZ2PORT',
+  'Help',
 ];
 const pretty = (k: string) =>
   k

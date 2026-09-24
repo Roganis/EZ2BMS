@@ -25,9 +25,26 @@ export interface ProjectScan {
 
 export interface AppInfo {
   version: string;
+  /** The build's commit (12 hex digits), or `unknown`. */
+  commit: string;
   os: string;
+  arch: string;
   config_dir: string | null;
   cache_dir: string | null;
+  log_dir: string | null;
+  /** The run before this one, when it ended without closing (src-tauri diag.rs). */
+  previous_session: { started_ms: number; pid: number; version: string } | null;
+}
+
+/** The app's own log (src-tauri diag.rs): kept locally, never sent anywhere. */
+export interface DiagBackend {
+  log(level: 'info' | 'warn' | 'error', message: string): void;
+  /** The last `maxBytes` of the log files, newest last. */
+  tail(maxBytes: number): Promise<string>;
+  /** Show the log folder in the file manager. */
+  revealLogs(): Promise<void>;
+  /** The host panicked (a command failed inside); returns the unsubscribe. */
+  onPanic(cb: (message: string) => void): () => void;
 }
 
 export interface AudioInfo {
@@ -518,6 +535,7 @@ export interface Backend {
   readonly media: MediaBackend;
   readonly export: ExportBackend;
   readonly input: InputBackend;
+  readonly diag: DiagBackend;
   /** The browser build's pretend controllers; never set in the desktop app. */
   readonly devPad?: DevPad;
   /**

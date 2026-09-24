@@ -1,6 +1,7 @@
 // The desktop Backend: Tauri commands (src-tauri/src/lib.rs).
 
 import { Channel, convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
 import type {
@@ -63,6 +64,23 @@ export function tauriBackend(): Backend {
   return {
     kind: 'tauri',
     appInfo: () => invoke<AppInfo>('app_info'),
+    diag: {
+      log: (level, message) => void invoke('diag_log', { level, message }).catch(() => {}),
+      tail: (maxBytes) => invoke<string>('diag_tail', { maxBytes }),
+      revealLogs: () => invoke('diag_reveal_logs'),
+      onPanic: (cb) => {
+        let stop: (() => void) | undefined;
+        let gone = false;
+        void listen<string>('diag://panic', (e) => cb(e.payload)).then((u) => {
+          if (gone) u();
+          else stop = u;
+        });
+        return () => {
+          gone = true;
+          stop?.();
+        };
+      },
+    },
     readFile: async (path) => bytesOf(await invoke('fs_read', { path })),
     readRange: async (path, offset, length) => {
       const b = bytesOf(await invoke('fs_read_range', { path, offset, length }));
