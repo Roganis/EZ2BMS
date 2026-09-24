@@ -7,6 +7,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { coreEn } from '../../../../packages/chart-core/src/i18n/en';
+import { coreJa } from '../../../../packages/chart-core/src/i18n/ja';
+import { coreKo } from '../../../../packages/chart-core/src/i18n/ko';
+import { en } from '../../src/i18n/en';
+import { ja } from '../../src/i18n/ja';
+import { ko } from '../../src/i18n/ko';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the ?e2e hook is the live App */
 type W = Window & { __ez2bms: any };
@@ -196,7 +202,26 @@ async function leftovers(page: Page, data: string[]): Promise<string[]> {
 const run = (page: Page, id: string) =>
   page.evaluate((id) => (window as unknown as W).__ez2bms.commands.run(id), id);
 
-test('every screen says what it says through the catalogs', async ({ page }) => {
+/** How many messages a language's catalogs (the editor's and chart-core's) have not translated. */
+function untranslated(lang: 'ko' | 'ja'): number {
+  const missing = (en: object, other: object) =>
+    Object.keys(en).filter((k) => !(k in other)).length;
+  return lang === 'ko'
+    ? missing(en, ko) + missing(coreEn, coreKo)
+    : missing(en, ja) + missing(coreEn, coreJa);
+}
+
+// The pseudo-language finds words written into code; Korean and Japanese
+// find messages not translated (they would come out in English). A
+// language still being translated is skipped until its catalogs are whole.
+for (const lang of ['pseudo', 'ko', 'ja'] as const)
+  test(`every screen says what it says through the catalogs: ${lang}`, async ({ page }) => {
+    const left = lang === 'pseudo' ? 0 : untranslated(lang);
+    test.skip(left > 0, `${left} messages not translated yet`);
+    await sweepAll(page, lang);
+  });
+
+async function sweepAll(page: Page, lang: 'pseudo' | 'ko' | 'ja') {
   test.setTimeout(120_000);
   const found: string[] = [];
   const sweep = async (screen: string) => {
@@ -219,7 +244,11 @@ test('every screen says what it says through the catalogs', async ({ page }) => 
   ];
   let data: string[] = fixed;
 
-  await page.goto('/?e2e&pseudo');
+  if (lang === 'pseudo') await page.goto('/?e2e&pseudo');
+  else {
+    await page.goto('/?e2e');
+    await page.evaluate((l) => (window as unknown as W).__ez2bms.setLanguage(l), lang);
+  }
   await expect(page.getByTestId('open-folder')).toBeVisible();
   await sweep('start');
 
@@ -289,4 +318,4 @@ test('every screen says what it says through the catalogs', async ({ page }) => 
   await page.keyboard.press('Escape');
 
   expect(found).toEqual([]);
-});
+}

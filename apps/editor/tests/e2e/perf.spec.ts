@@ -307,3 +307,31 @@ test('the Play field draws with 4096 scroll changes at a small cost', async ({ p
   console.log('play with scroll changes, draw ms', stats);
   expect(stats.scrollMedian).toBeLessThan(16);
 });
+
+// A language switch with the 50k-note chart open and the Issues drawer
+// showing: every screen re-renders its words and the findings are said
+// again, without linting again. Timed to the second frame after.
+test('switching language re-renders the editor quickly', async ({ page }, info) => {
+  test.setTimeout(90_000);
+  await openBench(page);
+  const times = await page.evaluate(async () => {
+    const a = (window as unknown as { __ez2bms: any }).__ez2bms; // eslint-disable-line @typescript-eslint/no-explicit-any
+    a.commands.run('view.issues');
+    await new Promise((r) => setTimeout(r, 300));
+    const frame = () => new Promise((r) => requestAnimationFrame(() => r(null)));
+    const out: number[] = [];
+    for (const l of ['ja', 'ko', 'en', 'ja', 'ko', 'en']) {
+      const t0 = performance.now();
+      a.setLanguage(l);
+      await frame();
+      await frame();
+      out.push(performance.now() - t0);
+    }
+    return out;
+  });
+  const sorted = [...times].sort((x, y) => x - y);
+  const stats = { median: sorted[Math.floor(sorted.length / 2)]!, max: sorted.at(-1)! };
+  info.annotations.push({ type: 'perf', description: JSON.stringify(stats) });
+  console.log('language switch to the second frame, ms', stats);
+  expect(stats.median).toBeLessThan(1000);
+});

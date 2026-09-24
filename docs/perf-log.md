@@ -272,12 +272,13 @@ Reading:
 chart-core `test/bench.test.ts` ("says every message …"). This container
 (Node 22, one core); three runs each.
 
-| Date       | What                                                                               | Time               |
-| ---------- | ---------------------------------------------------------------------------------- | ------------------ |
-| 2026-09-24 | Every chart-core message (367) formatted in English, first time (each parsed once) | 21-32 ms           |
-| 2026-09-24 | … again (parsed messages kept)                                                     | 14-28 ms           |
-| 2026-09-24 | Lint of the 50k-note chart: the code before M9.6 / with message keys, same chart   | 90-149 / 68-113 ms |
-| 2026-09-24 | Its findings said again in another language (a switch)                             | 0.4-0.6 ms         |
+| Date       | What                                                                                     | Time               |
+| ---------- | ---------------------------------------------------------------------------------------- | ------------------ |
+| 2026-09-24 | Every chart-core message (367) formatted in English, first time (each parsed once)       | 21-32 ms           |
+| 2026-09-24 | … again (parsed messages kept)                                                           | 14-28 ms           |
+| 2026-09-24 | Lint of the 50k-note chart: the code before M9.6 / with message keys, same chart         | 90-149 / 68-113 ms |
+| 2026-09-24 | Its findings said again in another language (a switch)                                   | 0.4-0.6 ms         |
+| 2026-09-24 | A language switch, 50k-note chart open with Issues showing, to the second frame (median) | 80-130 ms          |
 
 Reading:
 
@@ -287,6 +288,11 @@ Reading:
   formatting; the rest is Svelte redrawing what changed.
 - Findings keep their key and values, so a switch re-says them without
   linting again.
+- The switch figure is `apps/editor/tests/e2e/perf.spec.ts` in headless
+  Chromium, where every frame costs about 50 ms of wall time outside our
+  code (the software compositor, see M1.18): two frames of it are most of
+  the 80-130 ms. A switch is a click in Preferences, not something done
+  while playing.
 - Keeping a key beside each finding costs lint nothing measurable (the
   runs overlap). Lint is slower than M1's 31 ms because of the rules added
   since (holds covering notes, lane duplicates, scroll changes …), not M9.
