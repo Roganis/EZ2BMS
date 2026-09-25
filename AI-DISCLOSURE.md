@@ -586,7 +586,10 @@ nothing saw it. The renderer now imports `pixi.js/unsafe-eval` (Pixi's
 versions without generated code), and `vite preview` serves the e2e suite
 under the policy read from `tauri.conf.json`: with the import removed, the
 suite's playfield tests fail. One test helper that built a function from
-text was rewritten to pass data.
+text was rewritten to pass data. Both were also seen in the real Linux
+webview: the desktop app built with its web files embedded (as a release
+build is), run under Xvfb on a test song, showed only the WebGL error
+without the import and drew the chart with it.
 
 Also from looking at the app at a tablet's and a phone's size:
 
@@ -601,8 +604,7 @@ without it.
 
 To confirm on the owner's machines:
 
-- the playfield draws in an installed build on Windows (WebView2) and
-  Linux (WebKitGTK);
+- the playfield draws in an installed build on Windows (WebView2);
 - the preview page opens and runs in the owner's browser (it was checked
   here in Chromium under a policy like the host's, not on the host itself);
 - two-finger scrolling on a real touchscreen.
@@ -706,5 +708,6 @@ To confirm on the owner's machines:
 | The English is what it was before the catalogs                                      | the suites' text; old vs new lint on random songs        | Yes, in the container |
 | The Korean and Japanese read naturally                                              | not read by a native speaker                             | **No** - owner        |
 | The playfield starts under the desktop app's content policy                         | Playwright, Chromium, the policy from `tauri.conf.json`  | Yes, in the container |
-| The playfield draws in an installed build (WebView2, WebKitGTK)                     | not run                                                  | **No** - owner        |
+| The playfield draws in a build with its files embedded (WebKitGTK)                  | built here, run under Xvfb, before and after the fix     | Yes, in the container |
+| The playfield draws in an installed build on Windows (WebView2)                     | not run                                                  | **No** - owner        |
 | The browser preview runs on its host                                                | Chromium under a policy like the host's                  | **No** - owner        |
