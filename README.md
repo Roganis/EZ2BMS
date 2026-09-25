@@ -84,6 +84,7 @@ pnpm test               # chart-core + editor unit tests
 cargo test              # audio, launcher and oracle crates (no system audio needed)
 pnpm e2e                # Playwright against the browser build
 pnpm dev                # the editor in a browser, with the mock back end
+pnpm --filter @ez2bms/editor build:hosted   # the browser preview as one page (docs/hosted-preview.md)
 pnpm tauri dev          # the desktop app
 ```
 

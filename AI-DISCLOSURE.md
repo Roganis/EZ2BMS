@@ -568,6 +568,45 @@ To confirm on the owner's machines and with native speakers:
   AppImage), after the repository is public and the key is set;
 - the log after a real crash.
 
+### A browser preview, and what building it found, 2026-09-25
+
+The owner has no machine to run the app on for now and asked for the
+browser build as a private web page. New area of work: **the hosted
+preview** (`docs/hosted-preview.md`): a build of the browser version as one
+page for claude.ai's Artifact host, with an opening card that says what
+works there and what needs the desktop app, and lets the visitor add the
+browser build's made-up game install (the host passes no query string).
+
+Building it found a bug in the desktop app. **The installed app's content
+security policy (`default-src 'self'`, no `'unsafe-eval'`) forbids the
+functions PixiJS builds from text, and Pixi then refuses to start: the
+playfield showed a WebGL error instead of the chart.** Development runs
+(`pnpm tauri dev`) and every browser test ran without that policy, so
+nothing saw it. The renderer now imports `pixi.js/unsafe-eval` (Pixi's
+versions without generated code), and `vite preview` serves the e2e suite
+under the policy read from `tauri.conf.json`: with the import removed, the
+suite's playfield tests fail. One test helper that built a function from
+text was rewritten to pass data.
+
+Also from looking at the app at a tablet's and a phone's size:
+
+- the top bar overflowed below about 1100 px (the desktop allows 960): the
+  chart pills shrank to nothing and the Edit/Play switch was cut off. The
+  name, the time, the zoom, then snap and undo/redo now give way in turn;
+- the open chart's pill is scrolled into view in the pill row;
+- two fingers scroll the chart and pinch its zoom on a touchscreen.
+
+Each has an end-to-end test (`tests/e2e/layout.spec.ts`) that fails
+without it.
+
+To confirm on the owner's machines:
+
+- the playfield draws in an installed build on Windows (WebView2) and
+  Linux (WebKitGTK);
+- the preview page opens and runs in the owner's browser (it was checked
+  here in Chromium under a policy like the host's, not on the host itself);
+- two-finger scrolling on a real touchscreen.
+
 ---
 
 ## Verification status
@@ -666,3 +705,6 @@ To confirm on the owner's machines and with native speakers:
 | No screen shows English outside the catalogs, in any language                       | Playwright sweep of every screen (pseudo, ko, ja)        | Yes, in the container |
 | The English is what it was before the catalogs                                      | the suites' text; old vs new lint on random songs        | Yes, in the container |
 | The Korean and Japanese read naturally                                              | not read by a native speaker                             | **No** - owner        |
+| The playfield starts under the desktop app's content policy                         | Playwright, Chromium, the policy from `tauri.conf.json`  | Yes, in the container |
+| The playfield draws in an installed build (WebView2, WebKitGTK)                     | not run                                                  | **No** - owner        |
+| The browser preview runs on its host                                                | Chromium under a policy like the host's                  | **No** - owner        |

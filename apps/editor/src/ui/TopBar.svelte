@@ -25,6 +25,25 @@
   const time = $derived(timing ? formatSeconds(timing.secondsAt(v.cursor)) : '-:--.---');
   const canUndo = $derived(slot ? (void slot.rev, slot.doc.canUndo) : false);
   const canRedo = $derived(slot ? (void slot.rev, slot.doc.canRedo) : false);
+
+  /**
+   * Scrolls the pill row to show the open chart's pill: with many charts the
+   * row is narrower than its pills, and a chart opened some other way (the
+   * palette, the song manager, Ctrl+1-9) stayed out of sight. Only the row
+   * scrolls - scrollIntoView would move the page too.
+   */
+  function shownWhen(node: HTMLElement, on: boolean) {
+    const show = (on: boolean) => {
+      const row = node.parentElement;
+      if (!on || !row) return;
+      const n = node.getBoundingClientRect();
+      const r = row.getBoundingClientRect();
+      if (n.left < r.left) row.scrollLeft -= r.left - n.left;
+      else if (n.right > r.right) row.scrollLeft += n.right - r.right;
+    };
+    show(on);
+    return { update: show };
+  }
 </script>
 
 <header class="bar">
@@ -42,6 +61,7 @@
       <button
         class="chart tier-{c.tier}"
         class:on={i === project.activeIndex}
+        use:shownWhen={i === project.activeIndex}
         onclick={() => app.selectChart(i)}
         title={c.file}
       >
@@ -62,9 +82,9 @@
       <span>{t('top.bpm')}</span><b data-testid="ro-bpm">{bpm.toFixed(bpm % 1 ? 2 : 0)}</b>
     </div>
     <div class="ro wide"><span>{t('top.pos')}</span><b data-testid="ro-pos">{pos}</b></div>
-    <div class="ro wide"><span>{t('top.time')}</span><b>{time}</b></div>
-    <div class="ro"><span>{t('top.snap')}</span><b data-testid="ro-snap">1/{v.snap}</b></div>
-    <div class="ro">
+    <div class="ro wide time"><span>{t('top.time')}</span><b>{time}</b></div>
+    <div class="ro snap"><span>{t('top.snap')}</span><b data-testid="ro-snap">1/{v.snap}</b></div>
+    <div class="ro zoom">
       {#if v.mode === 'play'}<span>{t('top.speed')}</span><b>{v.speed}%</b>{:else}<span
           >{t('top.zoom')}</span
         ><b>{Math.round((v.zoom / 76.8) * 100)}%</b>{/if}
@@ -80,13 +100,13 @@
       data-testid="classic-toggle">{t('top.classic')}</button
     >
     <button
-      class="icon"
+      class="icon history"
       disabled={!canUndo}
       onclick={() => app.commands.run('edit.undo')}
       title={t('top.undo')}>↶</button
     >
     <button
-      class="icon"
+      class="icon history"
       disabled={!canRedo}
       onclick={() => app.commands.run('edit.redo')}
       title={t('top.redo')}>↷</button
@@ -306,5 +326,28 @@
     background: var(--neon);
     color: #031018;
     box-shadow: 0 0 14px rgba(88, 225, 255, 0.6);
+  }
+  /* Narrower windows (the desktop allows 960 px; the browser preview goes
+     down to a phone held sideways): the bar is about 1100 px of fixed parts,
+     and past that the chart pills shrank to nothing and the Edit/Play switch
+     was cut off. The parts that repeat elsewhere give way first - the name,
+     the time (the Timing drawer), zoom (Ctrl+wheel), then snap ([ ]) and
+     undo/redo (Ctrl+Z). */
+  @media (max-width: 1180px) {
+    .brand,
+    .ro.time {
+      display: none;
+    }
+  }
+  @media (max-width: 1040px) {
+    .ro.zoom {
+      display: none;
+    }
+  }
+  @media (max-width: 900px) {
+    .ro.snap,
+    .icon.history {
+      display: none;
+    }
   }
 </style>

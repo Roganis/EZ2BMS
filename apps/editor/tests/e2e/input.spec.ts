@@ -61,35 +61,41 @@ async function kools(page: Page): Promise<number> {
   return Number(await row.textContent());
 }
 
+/** A button edge on the plugged board, `at` ms after the note. */
+interface Press {
+  button: number;
+  down: boolean;
+  at: number;
+}
+
 /**
  * During test play: wait until the song is just past the first note on lane
- * `x` from `fromY`, then run `presses` with that note's song time (the
- * presses are stamped in the past - a press is judged when it happened).
+ * `x` from `fromY`, then press on the board at the note's song time plus each
+ * press's `at` (the presses are stamped in the past - a press is judged when
+ * it happened). Presses are data, not a function: the page runs under the
+ * desktop app's content policy, which forbids building code from text.
  */
-async function atNote(
-  page: Page,
-  x: number,
-  fromY: number,
-  presses: (pad: PadApi, key: string, noteMs: number) => void,
-): Promise<number> {
+async function atNote(page: Page, x: number, fromY: number, presses: Press[]): Promise<number> {
   return page.evaluate(
     async ({ x, fromY, presses }) => {
       const w = window as unknown as W;
       const app = w.__ez2bms;
+      const pad = w.__ez2bmsPad;
       const note = app.slot.doc.data.notes
         .filter((n) => n.x === x && n.y >= fromY)
         .sort((a, b) => a.y - b.y)[0]!;
       const noteMs = app.audio.msAt(app.slot, note.y);
-      const song = () => app.audio.songMsAtHost(w.__ez2bmsPad.hostNow() / 1e6) ?? -Infinity;
+      const song = () => app.audio.songMsAtHost(pad.hostNow() / 1e6) ?? -Infinity;
       // Close in by timers, then spin the last stretch: a press older than
       // 200 ms is taken as now (the age rule), and a busy test machine can
       // be late to a timer by that much.
       while (song() < noteMs - 300) await new Promise((r) => setTimeout(r, 5));
       while (song() < noteMs + 5);
-      new Function('pad', 'key', 'noteMs', presses)(w.__ez2bmsPad, '0810:e501', noteMs);
+      for (const p of presses)
+        pad.button('0810:e501', p.button, p.down, pad.hostAtSong(noteMs + p.at));
       return note.id;
     },
-    { x, fromY, presses: `(${presses.toString()})(pad, key, noteMs)` },
+    { x, fromY, presses },
   );
 }
 
@@ -103,10 +109,10 @@ test('a controller button pressed at an exact time is judged at that time', asyn
   await expect
     .poll(() => page.evaluate(() => (window as unknown as W).__ez2bmsPad.active))
     .toBe(true);
-  await atNote(page, 11, 1920, (pad, key, noteMs) => {
-    pad.button(key, 0, true, pad.hostAtSong(noteMs));
-    pad.button(key, 0, false, pad.hostAtSong(noteMs + 10));
-  });
+  await atNote(page, 11, 1920, [
+    { button: 0, down: true, at: 0 },
+    { button: 0, down: false, at: 10 },
+  ]);
   await expect.poll(() => koolsNow(page)).toBeGreaterThanOrEqual(1);
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('result')).toBeVisible();
@@ -138,16 +144,16 @@ test('ScratchMix: a fret alone is silent, a strum plays the held fret', async ({
     .poll(() => page.evaluate(() => (window as unknown as W).__ez2bmsPad.active))
     .toBe(true);
   // The lane tour's holds from beat 4. Key2's: fretted right on it, no strum.
-  const alone = await atNote(page, 12, 960, (pad, key, noteMs) => {
-    pad.button(key, 1, true, pad.hostAtSong(noteMs));
-    pad.button(key, 1, false, pad.hostAtSong(noteMs + 5));
-  });
+  const alone = await atNote(page, 12, 960, [
+    { button: 1, down: true, at: 0 },
+    { button: 1, down: false, at: 5 },
+  ]);
   // Key5's, 600 ms later: fretted early, strummed on the note.
-  const strummed = await atNote(page, 15, 960, (pad, key, noteMs) => {
-    pad.button(key, 4, true, pad.hostAtSong(noteMs - 60));
-    pad.button(key, 21, true, pad.hostAtSong(noteMs));
-    pad.button(key, 21, false, pad.hostAtSong(noteMs + 5));
-  });
+  const strummed = await atNote(page, 15, 960, [
+    { button: 4, down: true, at: -60 },
+    { button: 21, down: true, at: 0 },
+    { button: 21, down: false, at: 5 },
+  ]);
   const hit = (id: number) =>
     page.evaluate((id) => (window as unknown as W).__ez2bms.play.hidden.has(id), id);
   await expect.poll(() => hit(strummed)).toBe(true);
@@ -210,10 +216,10 @@ test('Controls: a button bound by pressing it plays the lane in test play', asyn
   await expect
     .poll(() => page.evaluate(() => (window as unknown as W).__ez2bmsPad.active))
     .toBe(true);
-  await atNote(page, 11, 1920, (pad, key, noteMs) => {
-    pad.button(key, 4, true, pad.hostAtSong(noteMs));
-    pad.button(key, 4, false, pad.hostAtSong(noteMs + 10));
-  });
+  await atNote(page, 11, 1920, [
+    { button: 4, down: true, at: 0 },
+    { button: 4, down: false, at: 10 },
+  ]);
   await expect.poll(() => koolsNow(page)).toBeGreaterThanOrEqual(1);
 });
 

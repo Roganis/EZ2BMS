@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:hosted": "vite build --config vite.hosted.config.ts",
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",

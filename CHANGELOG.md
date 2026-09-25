@@ -51,3 +51,16 @@ English, Korean and Japanese.
   AppImage; the `.deb` points to the release page).
 - A log on your machine: after a run that did not close, the next start
   offers it; About shows the version and copies a report for a bug.
+
+### Fixed before release
+
+- The playfield draws in the installed app. The app's security policy
+  forbids code built from text, which the drawing library used, so the
+  chart area stayed empty with a WebGL message; it now uses the library's
+  version without it. The browser tests now run under the same policy.
+- Narrow windows: the top bar keeps the chart buttons and the Edit/Play
+  switch in view down to the smallest window (960 px), hiding the name,
+  time and zoom first; the open chart's button is scrolled into view.
+- Touchscreens: two fingers scroll the chart and pinch its zoom.
+- A browser preview of the editor, to share as a web page
+  ([docs/hosted-preview.md](docs/hosted-preview.md)).

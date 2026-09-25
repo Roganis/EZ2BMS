@@ -126,7 +126,60 @@
     return { src, box: { left, top: b.header + 4 } };
   });
 
+  // Touch: one finger is the tool, as the mouse; two scroll the chart and
+  // pinch its zoom (the speed dial in Play), since a touchscreen has no
+  // wheel. A second finger landing cancels whatever the first one began, and
+  // nothing is drawn again until every finger is lifted.
+  // Not state: nothing on screen reads the fingers.
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  const touches = new Map<number, { x: number; y: number }>();
+  let gesture: { y: number; dist: number } | null = null;
+
+  function twoFingers(): { y: number; dist: number } {
+    const [a, b] = [...touches.values()] as [{ x: number; y: number }, { x: number; y: number }];
+    return { y: (a.y + b.y) / 2, dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)) };
+  }
+
+  /** True when the event belongs to a two-finger gesture (and is handled). */
+  function touchDown(e: PointerEvent): boolean {
+    if (e.pointerType !== 'touch') return false;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touches.size === 2) {
+      const h = host_();
+      if (h && tool.busy) tool.cancel(h);
+      ghost = null;
+      marquee = null;
+      gesture = twoFingers();
+    }
+    return gesture !== null;
+  }
+
+  function touchMove(e: PointerEvent): boolean {
+    if (e.pointerType !== 'touch' || !touches.has(e.pointerId)) return false;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!gesture) return false;
+    if (touches.size === 2 && renderer) {
+      const g = twoFingers();
+      // Fingers moving down pull the chart down: later measures come into view.
+      v.cursor = Math.max(0, v.cursor + (g.y - gesture.y) / renderer.pxPerPulse);
+      const f = g.dist / gesture.dist;
+      if (v.mode === 'play') v.speed = Math.max(50, Math.min(999, Math.round(v.speed * f)));
+      else v.zoom = Math.max(12, Math.min(1200, v.zoom * f));
+      gesture = g;
+    }
+    return true;
+  }
+
+  function touchUp(e: PointerEvent): boolean {
+    if (e.pointerType !== 'touch') return false;
+    touches.delete(e.pointerId);
+    if (!gesture) return false;
+    if (touches.size === 0) gesture = null;
+    return true;
+  }
+
   function onDown(e: PointerEvent) {
+    if (touchDown(e)) return;
     const h = host_();
     if (!h) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -134,6 +187,7 @@
   }
 
   function onUp(e: PointerEvent) {
+    if (touchUp(e)) return;
     const h = host_();
     if (h) tool.up(e, h);
   }
@@ -344,6 +398,7 @@
   }
 
   function onMove(e: PointerEvent) {
+    if (touchMove(e)) return;
     v.hoverLane = renderer?.laneAt(e.offsetX)?.x ?? null;
     const kept = v.mode === 'edit' ? renderer?.keptAt(e.offsetX, e.offsetY) : undefined;
     keptTip = kept
@@ -374,7 +429,8 @@
     onpointerdown={onDown}
     onpointermove={onMove}
     onpointerup={onUp}
-    onpointercancel={() => {
+    onpointercancel={(e) => {
+      if (touchUp(e)) return;
       const h = host_();
       if (h) tool.cancel(h);
     }}

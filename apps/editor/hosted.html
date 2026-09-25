@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EZ2BMS Editor</title>
+    <!--
+      The hosted preview (docs/hosted-preview.md): the browser build behind a
+      card that says what works here and what needs the desktop app. The card
+      shows before the app's own styles load, so it carries its colours
+      (theme/tokens.css's values) and paints the page itself: the host's
+      skeleton would otherwise show an off-white page.
+    -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #05060a;
+        color: #e8eeff;
+        color-scheme: dark;
+      }
+      .welcome {
+        --ink: #e8eeff;
+        --ink-dim: #8a93b2;
+        --ink-faint: #4b5372;
+        --neon: #58e1ff;
+        --lane-white: #f2f2ff;
+        --lane-blue: #4d9eff;
+        --lane-red: #ed2e2e;
+        --lane-gold: #ffd11f;
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        overflow-y: auto;
+        padding: max(24px, env(safe-area-inset-top, 0px)) 16px
+          max(24px, env(safe-area-inset-bottom, 0px));
+        background:
+          radial-gradient(ellipse at 50% 30%, rgba(40, 60, 140, 0.35), transparent 60%), #05060a;
+        font:
+          15px/1.5 'Inter',
+          'Segoe UI',
+          system-ui,
+          sans-serif;
+        color: var(--ink);
+        box-sizing: border-box;
+      }
+      .welcome *,
+      .welcome *::before {
+        box-sizing: border-box;
+      }
+      .card {
+        max-width: 760px;
+        margin: 0 auto;
+        display: grid;
+        gap: 22px;
+      }
+      .mark {
+        margin: 0;
+        font-size: clamp(40px, 9vw, 64px);
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        line-height: 1;
+        text-shadow: 0 0 18px rgba(88, 225, 255, 0.45);
+      }
+      .mark span {
+        color: var(--neon);
+      }
+      .sub {
+        margin: 8px 0 0;
+        font:
+          12px 'JetBrains Mono',
+          'Cascadia Mono',
+          ui-monospace,
+          monospace;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ink-dim);
+      }
+      .lead {
+        margin: 0;
+        max-width: 62ch;
+        color: var(--ink);
+      }
+      .cols {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 16px;
+      }
+      .col {
+        padding: 16px 18px;
+        border-radius: 10px;
+        background: rgba(14, 18, 32, 0.92);
+        border: 1px solid rgba(120, 190, 255, 0.2);
+      }
+      .col h2 {
+        margin: 0 0 10px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ink-dim);
+      }
+      .col ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 8px;
+      }
+      /* Each item is marked with a note in a lane's colour, as the field draws them. */
+      .col li {
+        position: relative;
+        padding-left: 26px;
+        color: var(--ink);
+      }
+      .col li::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0.62em;
+        width: 16px;
+        height: 6px;
+        border-radius: 2px;
+        background: var(--note, var(--lane-white));
+        box-shadow: 0 0 8px var(--note, var(--lane-white));
+      }
+      .col li:nth-child(4n + 2) {
+        --note: var(--lane-blue);
+      }
+      .col li:nth-child(4n + 4) {
+        --note: var(--lane-gold);
+      }
+      .col.desk li {
+        --note: var(--lane-red);
+        color: var(--ink-dim);
+      }
+      kbd {
+        font:
+          11px 'JetBrains Mono',
+          'Cascadia Mono',
+          ui-monospace,
+          monospace;
+        padding: 1px 5px;
+        border-radius: 4px;
+        border: 1px solid var(--ink-faint);
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .opts {
+        margin: 0;
+        padding: 0;
+        border: 0;
+        display: grid;
+        gap: 10px;
+      }
+      .opts legend {
+        padding: 0;
+        margin-bottom: 10px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ink-dim);
+      }
+      .opt {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 2px 10px;
+        align-items: start;
+        cursor: pointer;
+      }
+      .opt input {
+        margin: 4px 0 0;
+        width: 16px;
+        height: 16px;
+        accent-color: var(--neon);
+        grid-row: span 2;
+      }
+      .opt small {
+        color: var(--ink-dim);
+        font-size: 13px;
+      }
+      .go {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px 18px;
+      }
+      .open {
+        font: inherit;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        padding: 12px 22px;
+        border-radius: 999px;
+        border: 1px solid var(--neon);
+        background: rgba(88, 225, 255, 0.14);
+        color: var(--ink);
+        box-shadow: 0 0 16px rgba(88, 225, 255, 0.35);
+        cursor: pointer;
+      }
+      .open:hover:not(:disabled) {
+        background: rgba(88, 225, 255, 0.26);
+      }
+      .open:focus-visible,
+      .opt input:focus-visible {
+        outline: 2px solid var(--neon);
+        outline-offset: 3px;
+      }
+      .open:disabled {
+        cursor: progress;
+        opacity: 0.7;
+      }
+      .keys {
+        margin: 0;
+        color: var(--ink-dim);
+        font-size: 13px;
+        line-height: 2;
+      }
+      .fail {
+        margin: 0;
+        color: #ff5470;
+      }
+      .sideways {
+        display: none;
+        margin: 0;
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 194, 71, 0.5);
+        color: #ffc247;
+      }
+      @media (max-width: 700px) and (orientation: portrait) {
+        .sideways {
+          display: block;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div class="welcome" id="welcome">
+      <main class="card">
+        <header>
+          <h1 class="mark"><span>EZ2</span>BMS</h1>
+          <p class="sub">
+            Chart editor for EZ2PORT · browser preview · <span id="welcome-version"></span>
+          </p>
+        </header>
+        <p class="lead">
+          This is the desktop editor running in your browser, on a demo song. What you change stays
+          in this tab and is gone when the page reloads.
+        </p>
+        <p class="sideways">
+          The editor needs a wide screen: turn your phone sideways. A tablet or a computer works
+          best.
+        </p>
+        <div class="cols">
+          <section class="col">
+            <h2>Try it here</h2>
+            <ul>
+              <li>Chart in every mode: draw, move, holds, undo, the command palette</li>
+              <li>The Play view with autoplay, and test play with the keyboard</li>
+              <li>The song manager: title plate, disc, preview window, song-select wheel</li>
+              <li>Issues, the keysound workbench, stems and slicing</li>
+              <li>Import and export, into files kept in memory</li>
+              <li>Korean and Japanese: Preferences, <kbd>Ctrl</kbd>&nbsp;<kbd>,</kbd></li>
+            </ul>
+          </section>
+          <section class="col desk">
+            <h2>Only in the desktop app</h2>
+            <ul>
+              <li>Sound: this page plays silently</li>
+              <li>EZ2PORT: <kbd>F5</kbd> test runs and publishing to your songs folder</li>
+              <li>Your game folder, controllers and real files</li>
+              <li>Updates, file types and the crash log</li>
+            </ul>
+          </section>
+        </div>
+        <fieldset class="opts">
+          <legend>Open with</legend>
+          <label class="opt" for="opt-modes">
+            <input type="checkbox" id="opt-modes" checked />
+            <span>A chart in every mode</span>
+            <small
+              >An NM chart per mode beside the demo's 5K and 7K charts: each mode's lanes.</small
+            >
+          </label>
+          <label class="opt" for="opt-game">
+            <input type="checkbox" id="opt-game" />
+            <span>A made-up EZ2AC install</span>
+            <small
+              >Songs to import, a game to export to, and made-up lane and note art. Nothing in it
+              comes from the real game.</small
+            >
+          </label>
+        </fieldset>
+        <div class="go">
+          <button class="open" id="welcome-open" type="button">Open the demo song</button>
+          <p class="fail" id="welcome-fail" hidden></p>
+        </div>
+        <p class="keys">
+          <kbd>Space</kbd> play · <kbd>Tab</kbd> Edit/Play · <kbd>Shift</kbd>&nbsp;<kbd>Tab</kbd>
+          test play · <kbd>Ctrl</kbd>&nbsp;<kbd>K</kbd> commands ·
+          <kbd>Ctrl</kbd>&nbsp;<kbd>Shift</kbd>&nbsp;<kbd>L</kbd> song manager. On a touchscreen,
+          two fingers scroll the chart and pinch its zoom; the ⌘ button opens the commands.
+        </p>
+      </main>
+    </div>
+    <script type="module" src="/src/hosted.ts"></script>
+  </body>
+</html>

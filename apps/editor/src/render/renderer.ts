@@ -29,6 +29,13 @@ import {
   type StemSlice,
   type TimingMap,
 } from '@ez2bms/chart-core';
+// The desktop app's content security policy (src-tauri/tauri.conf.json:
+// `default-src 'self'`, no 'unsafe-eval') forbids the functions Pixi builds at
+// run time to upload uniforms and shaders, and Pixi then refuses to start: the
+// playfield stays empty. This module swaps in Pixi's eval-free versions. It
+// must be imported before the Application is created. The e2e suite runs
+// under the same policy (vite.config.ts), so dropping it fails every test.
+import 'pixi.js/unsafe-eval';
 import { Application, Container, FillGradient, Graphics, Sprite } from 'pixi.js';
 import { channelHue } from '../colors';
 import { i18n, t } from '../i18n/i18n.svelte';
