@@ -195,6 +195,82 @@ export async function openGame(
   };
 }
 
+/** An executable found beside (or set for) a game folder. */
+export interface ExeCandidate {
+  name: string;
+  bytes: Uint8Array;
+}
+
+/** What one candidate holds. */
+export interface ExeCheck {
+  name: string;
+  /** Its .ez/.ezi/.ini key tables are there and verify (they carry digests). */
+  keys: boolean;
+  /**
+   * Its song.bin tables decrypt the game's own song.bin to "EZSL" - or
+   * undefined when every song.bin is plaintext and there is nothing to prove.
+   */
+  songdb: boolean | undefined;
+}
+
+export interface ExePick {
+  /** The one to read the tables from, if any holds them. */
+  exe?: ExeCandidate;
+  checks: ExeCheck[];
+}
+
+/**
+ * Which executable holds this game's tables. Only the key tables carry a
+ * digest; song.bin's have none, and any Windows program of the era maps
+ * their address, so reading "an executable with that address" read another
+ * program's bytes and every mode's song.bin said the wrong magic (the
+ * owner's install, 2026-09-28). Each candidate is proved instead: on the
+ * game's own encrypted song.bin (it must decrypt to "EZSL", the port's own
+ * check) and on the key digests. Both right wins, then the song tables, then
+ * the keys; earlier candidates win ties (the one set by the user comes first).
+ */
+export async function pickExe(fs: GameFs, candidates: ExeCandidate[]): Promise<ExePick> {
+  const sample = await encryptedSongdb(fs);
+  const checks = candidates.map((c): ExeCheck => {
+    let keys = false;
+    try {
+      keyTableFromExe(c.bytes, 'ez');
+      keys = true;
+    } catch {
+      // Not this executable's, or not one at all.
+    }
+    let songdb: boolean | undefined;
+    if (sample) {
+      try {
+        readSongdb(sample, c.bytes);
+        songdb = true;
+      } catch {
+        songdb = false;
+      }
+    }
+    return { name: c.name, keys, songdb };
+  });
+  const score = (k: ExeCheck) => (k.songdb === true ? 2 : 0) + (k.keys ? 1 : 0);
+  let best = -1;
+  checks.forEach((k, i) => {
+    if (score(k) > 0 && (best < 0 || score(k) > score(checks[best]!))) best = i;
+  });
+  return { ...(best >= 0 ? { exe: candidates[best]! } : {}), checks };
+}
+
+/** The first mode's song.bin that is encrypted (a plaintext one proves nothing). */
+async function encryptedSongdb(fs: GameFs): Promise<Uint8Array | undefined> {
+  const system = await fs.list('system');
+  for (const m of MODES) {
+    const dir = system.find((d) => d.toLowerCase() === m.portName.toLowerCase());
+    if (!dir) continue;
+    const b = await findIn(fs, `system/${dir}`, 'song.bin');
+    const bytes = b && (await fs.read(b));
+    if (bytes && bytes.length >= 4 && decodeCp949(bytes.subarray(0, 4)) !== 'EZSL') return bytes;
+  }
+  return undefined;
+}
+
 const bpmOf = (e: SongEntry) => e.steps.find((s) => s.level > 0)?.b ?? e.steps[0].b;
 
 /**

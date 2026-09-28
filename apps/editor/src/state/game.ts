@@ -4,11 +4,10 @@
 // tables, and the port's title manifest.
 
 import {
-  exeRead,
-  keyTableFromExe,
   openGame,
-  SONGDB_TABLE_SIZE,
-  SONGDB_TABLE_VA,
+  pickExe,
+  type ExeCandidate,
+  type ExePick,
   type Game,
   type GameFs,
 } from '@ez2bms/chart-core';
@@ -26,33 +25,41 @@ export function gameFs(backend: Backend, root: string): GameFs {
 }
 
 /**
- * The user's unpacked executable: the one set, else (as EZ2PORT does) the
- * first .exe in the game folder whose bytes hold the keys.
+ * The user's unpacked executable: the one set on the EZ2PORT panel first,
+ * then every .exe in the game folder - each proved on the game's own
+ * song.bin and key digests (chart-core pickExe), not taken because it maps
+ * the address. With what each candidate held, to say why none was taken.
  */
 export async function findExe(
   backend: Backend,
   settings: Settings,
   root: string,
-): Promise<Uint8Array | undefined> {
-  const set = settings.data.exe;
-  if (set) return backend.readFile(set).catch(() => undefined);
-  for (const e of await backend.list(root).catch(() => [])) {
-    if (e.is_dir || !/\.exe$/i.test(e.name)) continue;
-    const bytes = await backend.readFile(joinPath(root, e.name)).catch(() => undefined);
-    if (!bytes) continue;
-    try {
-      keyTableFromExe(bytes, 'ez');
-      return bytes;
-    } catch {
-      try {
-        exeRead(bytes, SONGDB_TABLE_VA, SONGDB_TABLE_SIZE);
-        return bytes;
-      } catch {
-        // not this one
-      }
-    }
+): Promise<ExePick & { set?: string }> {
+  const set = settings.data.exe ?? undefined;
+  const candidates: ExeCandidate[] = [];
+  if (set) {
+    const bytes = await backend.readFile(set).catch(() => undefined);
+    if (bytes) candidates.push({ name: set, bytes });
   }
-  return undefined;
+  for (const e of await backend.list(root).catch(() => [])) {
+    const path = joinPath(root, e.name);
+    if (e.is_dir || !/\.exe$/i.test(e.name) || path === set) continue;
+    const bytes = await backend.readFile(path).catch(() => undefined);
+    if (bytes) candidates.push({ name: path, bytes });
+  }
+  return { ...(await pickExe(gameFs(backend, root), candidates)), ...(set ? { set } : {}) };
+}
+
+/** Why no executable was taken, for the top of the game's problems. */
+function exeProblem(pick: ExePick & { set?: string }): string | undefined {
+  if (pick.exe) return undefined;
+  // Nothing to prove against (every song.bin plaintext) and no keys: the
+  // charts say what they need when they are read.
+  if (pick.checks.every((c) => c.songdb === undefined)) return undefined;
+  const name = (p: string) => p.split(/[\\/]/).pop() ?? p;
+  if (pick.set) return t('import.game.exeSetWrong', { file: name(pick.set) });
+  if (!pick.checks.length) return t('import.game.exeNoFiles');
+  return t('import.game.exeNone', { files: pick.checks.map((c) => name(c.name)).join(', ') });
 }
 
 /**
@@ -63,7 +70,7 @@ export async function findExe(
 export async function loadGame(backend: Backend, settings: Settings): Promise<Game> {
   const root = settings.data.gameRoot;
   if (!root) throw new Error(t('import.game.noRoot'));
-  const exe = await findExe(backend, settings, root);
+  const pick = await findExe(backend, settings, root);
   // The port's song titles: text/ beside ez2play, else in the game folder.
   const play = settings.data.ez2play;
   const manifestAt = [
@@ -79,10 +86,14 @@ export async function loadGame(backend: Backend, settings: Settings): Promise<Ga
       break;
     }
   }
-  return openGame(
+  const game = await openGame(
     gameFs(backend, root),
-    exe,
+    pick.exe?.bytes,
     manifest,
     backend.devGameTables ? { tables: backend.devGameTables } : {},
   );
+  // First: the importer and exporter show the first problem when no song reads.
+  const why = exeProblem(pick);
+  if (why) game.problems.unshift(why);
+  return game;
 }

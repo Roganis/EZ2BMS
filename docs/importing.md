@@ -20,8 +20,13 @@ titles as text, only the plate images; without the manifest a song goes by
 its folder name.
 
 The tables and charts are encrypted with keys that live in your unpacked
-EZ2AC executable, the one set on the EZ2PORT panel. If none is set, EZ2BMS
-looks for an `.exe` in the game folder that holds the keys, as EZ2PORT does.
+EZ2AC executable. EZ2BMS tries the one set on the EZ2PORT panel first, then
+every `.exe` in the game folder, and proves each: the chart keys against
+their digests, and the song tables by decrypting the game's own `song.bin`,
+which must then begin with `EZSL` (song.bin's tables have no digest, and any
+program of the era has memory at their address, so an address alone proves
+nothing). When none decrypts `song.bin`, the import says which files it
+tried; choose your unpacked executable on the EZ2PORT panel.
 Nothing of the game is kept by EZ2BMS: it reads your files when you import.
 
 What a song becomes:

@@ -65,6 +65,10 @@ English, Korean and Japanese.
 - The AppImage starts on up-to-date distributions (Arch with Mesa 26): it
   no longer carries its own libwayland-client, which was too old for the
   system's graphics drivers and made it abort at start.
+- Importing from the game folder finds the right executable: each `.exe`
+  is proved on the game's own song.bin, where another program with memory
+  at the right address used to be taken and every mode's song.bin failed.
+  When none fits, the message names the files it tried.
 - Sound on Linux when ALSA's default device does not open (an ALSA
   configuration line newer alsa-lib rejects): the other outputs are tried,
   PipeWire's and PulseAudio's first, and the message names each one's error.

@@ -6,6 +6,12 @@ import type { transfer as en } from '../en/transfer';
 export const transfer: Record<keyof typeof en, string> = {
   'import.game.noRoot': '先にEZ2PORTパネルでEZ2ACのデータフォルダを設定してください',
   'import.game.noSongs': '楽曲が見つかりません。sound/とsystem/が入っているフォルダですか？',
+  'import.game.exeNone':
+    'ゲームフォルダの.exeのどれもsong.binを復号できません（試したもの：{files}）。EZ2PORTパネルでアンパック済みのEZ2AC実行ファイルを選んでください。',
+  'import.game.exeSetWrong':
+    'EZ2PORTパネルで選んだ実行ファイル（{file}）ではsong.binを復号できず、ゲームフォルダの他のファイルも同様です。アンパックされていないものか、別バージョンのEZ2ACかもしれません。',
+  'import.game.exeNoFiles':
+    'ゲームフォルダに.exeがなく、song.binは暗号化されています。EZ2PORTパネルでアンパック済みのEZ2AC実行ファイルを選んでください。',
 
   'import.label': '楽曲をインポート',
   'import.title': 'インポート',
