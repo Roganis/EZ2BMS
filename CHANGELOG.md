@@ -17,8 +17,9 @@ English, Korean and Japanese.
 - Hear and judge the chart exactly as EZ2PORT will: the same compile, voice
   rules, judgement, holds and gauge; test play with EZ2PORT's keys or your
   controller; F5 runs it in EZ2PORT itself.
-- Keysound workbench, and Classic mode: placing a note keys the sound
-  already playing there, so charting over a finished mix never changes it.
+- Keysound workbench, and Classic mode: placing a note keys a note already
+  in the background, pulled there by a magnet as in BmsTWO, so charting over
+  a finished mix never changes it.
 - Stems: waveform strips on the tick axis, cut by hand, to the grid or at
   detected onsets, slices dragged onto lanes; long stems cached on disk.
 - Record mode: play along and the presses become notes, with latency
@@ -74,3 +75,11 @@ English, Korean and Japanese.
   PipeWire's and PulseAudio's first, and the message names each one's error.
 - A browser preview of the editor, to share as a web page
   ([docs/hosted-preview.md](docs/hosted-preview.md)).
+- Classic mode never writes a note of its own. Placing where the background
+  had no note used to cut the sound playing there and key the new slice:
+  the song sounded the same in autoplay, but not to a player who presses
+  early, late or not at all. Now only a background note already at the spot
+  is keyed, and a magnet like BmsTWO's pulls the note onto one: the backing
+  track of the last note keyed or clicked first, then any, within a measure.
+  Clicking a note picks its sound. Recorded takes follow the same rule
+  (within half a grid step). Splitting stays the right-click.

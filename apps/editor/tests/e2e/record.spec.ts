@@ -1,7 +1,8 @@
 // Record mode end to end, with presses at exact song times through the
 // browser build's pretend controller (window.__ez2bmsPad): a brush take lands
 // on its pulses, skips a note already there and goes in as one undo step; a
-// Classic take keys what plays and sounds exactly the same; Discard leaves
+// Classic take keys the background notes it lands on (never a new one) and
+// sounds exactly the same; Discard leaves
 // the chart alone; ScratchMix records the frets the turntable strums.
 
 import { expect, test, type Page } from '@playwright/test';
@@ -176,26 +177,46 @@ test('a brush take lands on its pulses, skips a note already there, and undoes i
   expect(await notes(page)).toBe(before);
 });
 
-test('a Classic take keys what plays there, and the song sounds exactly the same', async ({
+test('a Classic take keys the background notes it lands on, and the song sounds exactly the same', async ({
   page,
 }) => {
   await open(page);
   await page.getByTestId('classic-toggle').click();
   await setup(page, '[Keys]\nKey2 = S, 0810:e501/b1\n');
   const p = await plan(page);
+  // A background note lane 12 can take, and a spot a whole step from any.
+  const spots = await page.evaluate(
+    ({ from, res }) => {
+      const d = (window as unknown as W).__ez2bms.doc;
+      const bg = d.data.notes.filter((n) => n.x === 0).map((n) => n.y);
+      const onLane = (y: number) =>
+        d.data.notes.some((n) => n.x === 12 && n.y <= y && n.y + n.l >= y);
+      const key = bg.filter((y) => y > from && !onLane(y)).sort((a, b) => a - b)[0]!;
+      let none = from + res / 4;
+      while (bg.some((y) => Math.abs(y - none) <= res / 8)) none += res / 4;
+      return { key, none: none + (none === key ? res : 0) };
+    },
+    { from: p.from, res: p.res },
+  );
   await page.evaluate((from) => ((window as unknown as W).__ez2bms.view.cursor = from), p.from);
   const sound = await page.evaluate(() => {
     const app = (window as unknown as W).__ez2bms;
     return app.classic.fingerprint(app.doc);
   });
+  const count = await page.evaluate(() => (window as unknown as W).__ez2bms.doc.data.notes.length);
   await page.keyboard.press('r');
-  await perform(page, [
-    { pulse: p.tap, button: 1, down: true },
-    { pulse: p.tap + 10, button: 1, down: false },
-  ]);
+  // A little late on the background note: the magnet brings it back (within half a 1/16 step).
+  const presses = [
+    { pulse: spots.key + p.res / 16, button: 1, down: true },
+    { pulse: spots.key + p.res / 16 + 10, button: 1, down: false },
+    { pulse: spots.none, button: 1, down: true },
+    { pulse: spots.none + 10, button: 1, down: false },
+  ].sort((a, b) => a.pulse - b.pulse);
+  await perform(page, presses);
   await page.keyboard.press('r');
   await expect(page.getByTestId('record-review')).toBeVisible();
   await expect(page.getByTestId('record-ok')).toHaveText('1 to place');
+  await expect(page.getByTestId('record-silent')).toHaveText('1 with nothing to key');
   await page.getByTestId('record-keep').click();
   await expect(page.getByTestId('record-review')).toBeHidden();
   const after = await page.evaluate((y) => {
@@ -203,9 +224,11 @@ test('a Classic take keys what plays there, and the song sounds exactly the same
     return {
       sound: app.classic.fingerprint(app.doc),
       keyed: app.doc.data.notes.filter((n) => n.x === 12 && n.y === y).length,
+      count: app.doc.data.notes.length,
     };
-  }, p.tap);
+  }, spots.key);
   expect(after.keyed).toBe(1);
+  expect(after.count).toBe(count);
   expect(after.sound).toBe(sound);
 });
 

@@ -152,8 +152,10 @@ Two song-wide changes behave differently on purpose:
   would start to mean.
 
 **Classic mode** (`edit/classic.ts`, on per song in `ez2bms.song.json`)
-charts over music already complete in the background: placing keys the
-sound playing there, deleting un-keys it. Every such edit is dry-run
+charts over music already complete in the background: placing keys a note
+the background already has at that spot (`classicMagnet` pulls the pointer
+onto one, the picked sound's group first), deleting un-keys it; placing
+never adds a note. Every such edit is dry-run
 through `publish/audible.ts` - only for the sound files it touches, against
 a cached analysis of the chart - and refused if the music would change.
 What that promise covers, and what it cannot, is in `ez2port-compat.md`.

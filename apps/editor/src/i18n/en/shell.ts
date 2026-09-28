@@ -22,7 +22,8 @@ export const shell = {
   'top.snap': 'SNAP',
   'top.speed': 'SPEED',
   'top.zoom': 'ZOOM',
-  'top.classicTitle': 'Classic mode: placing a note keys the sound playing there (Ctrl+Shift+K)',
+  'top.classicTitle':
+    'Classic mode: placing a note keys the background note already there (Ctrl+Shift+K)',
   'top.classic': 'CLASSIC',
   'top.undo': 'Undo (Ctrl+Z)',
   'top.redo': 'Redo (Ctrl+Shift+Z)',

@@ -609,6 +609,36 @@ To confirm on the owner's machines:
   here in Chromium under a policy like the host's, not on the host itself);
 - two-finger scrolling on a real touchscreen.
 
+### Classic mode keys only notes already there, 2026-09-28
+
+The owner, charting their game's songs in Classic mode, found placing could
+key a slice that did not exist yet: with no note at the spot, EZ2BMS (as
+BmsTWO does) split the sound still playing there and keyed the new
+continuation. The music in autoplay was unchanged, but a lane note sounds
+only when hit, so such a slice changes what the player hears. Their rule:
+charting never writes a note where the background has none. Placing and
+recorded takes now only move a background note already at the spot
+(`edit/classic.ts`, `edit/record.ts`); a split stays the explicit right-click.
+
+They also asked for BmsTWO's magnet, with the picked sound's backing track
+first. `classicMagnet` pulls a placed note onto the nearest background note
+within a measure, that group first, passing over spots the lane cannot
+take; clicking a note picks its sound, as in BmsTWO. The measure's reach and
+the background-only pull differ from BmsTWO (reasons in
+`docs/ez2port-compat.md`). The Korean and Japanese for the changed messages
+are drafts, as the rest.
+
+Tests: unit tests (nothing is keyed where no note is; the tiers; the magnet's
+group first, reach and blocked spots; a property that the magnet never lands
+where nothing can be keyed; the model-based Classic run now also checks that
+keying never changes the note count; a take's presses pulled within half a
+step) and Playwright (a rack click picks the track the magnet prefers; Alt
+placement where no note is adds nothing; a Classic take keys what it lands
+on and counts the rest as silent).
+
+To confirm on the owner's machine: that the magnet feels like BmsTWO's on a
+real song, and whether a measure is the right reach.
+
 ---
 
 ## Verification status
@@ -711,6 +741,9 @@ To confirm on the owner's machines:
 | The playfield draws in a build with its files embedded (WebKitGTK)                  | built here, run under Xvfb, before and after the fix     | Yes, in the container |
 | First run on the owner's Arch machine (AMD): the chart draws, controls work         | the owner, the `.deb`'s binary on Arch's own libraries   | Yes - owner           |
 | Sound on the owner's Arch machine after the device fallback                         | the owner                                                | Yes - owner           |
-| The AppImage starts on the owner's Arch machine (CLI 2.12, no libwayland-client)    | Mesa 26's needs checked against the carried libraries    | **No** - owner        |
+| The AppImage starts on the owner's Arch machine (CLI 2.12, no libwayland-client)    | the owner                                                | Yes - owner           |
+| The game's songs listed for import on the owner's install (the proved executable)   | the owner                                                | Yes - owner           |
+| Classic placing keys only notes already there; the magnet prefers the picked track  | unit tests, a property, Playwright                       | Yes, in the container |
+| The magnet feels right on a real song                                               | not run                                                  | **No** - owner        |
 | The playfield draws in an installed build on Windows (WebView2)                     | not run                                                  | **No** - owner        |
 | The browser preview runs on its host                                                | Chromium under a policy like the host's                  | **No** - owner        |

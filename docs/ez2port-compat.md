@@ -132,11 +132,33 @@ is transcribed and checked with unit and Playwright tests on a synthetic panel
 ## Classic mode: keying never changes the music (not in the oracle)
 
 Classic mode (BmsTWO's Classic BMS Mode) charts over a song that is already
-complete in the background: placing a note keys the sound playing there,
-deleting sends it back. Its promise is that **what autoplay plays does not
-change**, and it is kept by checking, not by construction: every Classic
-edit - key, un-key, a lane move, split, heal, reset all - is dry-run first
-and refused, with the reason, if anything audible would differ.
+complete in the background: placing a note keys a note the background
+already has at that spot, deleting sends it back. Its promise is that **what
+autoplay plays does not change**, and it is kept by checking, not by
+construction: every Classic edit - key, un-key, a lane move, split, heal,
+reset all - is dry-run first and refused, with the reason, if anything
+audible would differ.
+
+**Placing never adds a note** (the owner's rule, 2026-09-28). A lane note
+plays only when it is hit: a slice keyed where the stem had no cut would be
+a new sound on the lane, heard alone on an early or late press and missing
+from the music on a miss. So placing only moves a background note that is
+already there onto the lane (keyed notes on other lanes at the same spot
+come after it, as in BmsTWO's `FindSampleChannelAtTime`), and where there is
+none it is refused. BmsTWO instead splits the sample still sounding there
+(`FindSoundingSampleChannelAtTime`); EZ2BMS keeps that split for the
+explicit right-click and the stem strips. A recorded take follows the same
+rule.
+
+**The magnet** brings a placed note onto such a note. BmsTWO's
+`SnapToSampleInCurrentGroup` pulls to the nearest note of the current
+channel's name group, keyed or not, however far away. EZ2BMS pulls to
+background notes only, within a measure: first those of the picked sound's
+group (the backing track of the note last keyed or clicked; clicking a note
+picks its sound, as BmsTWO's click does), then any; beyond a measure there
+is nothing to key (Alt places freely, and is then refused). A spot the lane
+cannot take (a note there, or a hold over it) is passed over. A recorded
+press is pulled the same way, within half a grid step.
 
 What "audible" means is chart-core's `publish/audible.ts`, built from the
 same per-channel code as the publisher (`ChartClock`, `channelEvents`). For

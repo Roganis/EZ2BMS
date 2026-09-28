@@ -6,9 +6,10 @@
 // - Presses come from the input hub (keyboard and controllers, the player's
 //   bindings, each timed when it happened and corrected by the input offset)
 //   and are routed as EZ2PORT routes the channels.
-// - In a song charted in Classic mode a press keys the background sound
-//   playing there, so the music stays as it is (chart-core edit/record.ts);
-//   it is silent while recording, since the music already holds that sound.
+// - In a song charted in Classic mode a press keys the background note
+//   nearest it (within half a grid step), so the music stays as it is
+//   (chart-core edit/record.ts); it is silent while recording, since the
+//   music already holds that sound.
 //   Otherwise a press is a note with the brush sound, which it plays.
 // - ScratchMix records as it plays: a fret alone is nothing, the turntable
 //   strums the frets held (and a fret just after a strum still counts); taps
@@ -170,11 +171,20 @@ export class Recorder {
     const o = this.options();
     const res = this.slot!.doc.resolution;
     const exact = o.quantize === 'exact' && res % 48 === 0;
+    const doc = this.slot!.doc;
     return {
       step: exact ? res / 48 : (res * 4) / this.app.view.snap,
       holds: !this.scratch,
       holdMinMs: o.holdMinMs,
       fromPulse: this.from,
+      // Classic keys only notes already there: a press lands on the nearest
+      // background note within half a step, the picked sound's track first.
+      ...(this.classic
+        ? {
+            magnet: (x: number, p: number, reach: number) =>
+              this.app.classic.magnet(doc, x, p, reach),
+          }
+        : {}),
     };
   }
 
@@ -296,7 +306,6 @@ export class Recorder {
     const slot = this.slot;
     if (this.state !== 'review' || !r || !slot) return;
     const res = applyTake(slot.doc, r.notes, this.target(), t('record.undoStep'));
-    if (res.splits.length) this.app.classic.remember(slot.doc, res.splits);
     const { placed, clash, silent, refused, shortened } = res;
     toast(t('record.kept', { placed, clash, silent, refused, shortened }), placed ? 'ok' : 'warn');
     this.clear();

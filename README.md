@@ -187,7 +187,7 @@ deferred.
 - [x] M7.3 Key names as SDL spells them, and each channel routed to the lane EZ2PORT sends it to
 - [x] M7.4 The port's input layer: alternates, debounce, hats, the analog turntable
 - [x] M7.5 ScratchMix as fret-and-strum in test play
-- [x] M7.6 A recorded take snapped, reviewed and applied as one undo step (Classic: keying what plays)
+- [x] M7.6 A recorded take snapped, reviewed and applied as one undo step (Classic: keying the notes already there)
 - [x] M7.7 Controllers through SDL3, named and timed as EZ2PORT's (`crates/ez2bms-input`)
 - [x] M7.8 The host's controller commands, closed for every EZ2PORT test run; the browser build's pretend pads
 - [x] M7.9 One input path for keyboard and controllers into test play and step input; bindings from EZ2PORT's `keys.ini`

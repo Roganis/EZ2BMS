@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   classicCandidates,
   classicHeal,
+  classicMagnet,
   classicKey,
   classicMove,
   classicSplit,
@@ -67,16 +68,19 @@ const state = (doc: ChartDoc) =>
   });
 
 describe('Classic keying', () => {
-  it('keys a stem mid-slice with a continuation that sounds the same', () => {
+  it('keys only a note already at the spot, and never adds one', () => {
     const doc = stemSong();
     const env: ClassicEnv = { samples, brush: 1 };
     const before = fingerprint(doc.data, samples);
-    const cands = classicCandidates(doc, 11, 360, 0, env);
-    expect(cands[0]).toMatchObject({ kind: 'split', ch: 1, tier: 4 });
-    const r = classicKey(doc, 11, 360, 0, cands[0]!, env);
+    const count = doc.data.notes.length;
+    // Mid-slice the stem is playing, but no note is there: nothing to key.
+    expect(classicCandidates(doc, 11, 360, 0, env)).toEqual([]);
+    const cands = classicCandidates(doc, 11, 480, 0, env);
+    expect(cands[0]).toMatchObject({ kind: 'note', ch: 1, tier: 0 });
+    const r = classicKey(doc, 11, 480, 0, cands[0]!, env);
     expect(r.ok).toBe(true);
-    const n = doc.index.get(r.id!)!;
-    expect(n).toMatchObject({ ch: 1, x: 11, y: 360, c: true });
+    expect(doc.index.get(r.id!)).toMatchObject({ ch: 1, x: 11, y: 480, c: true });
+    expect(doc.data.notes).toHaveLength(count);
     expect(fingerprint(doc.data, samples)).toBe(before);
     expect([...doc.selection.ids]).toEqual([r.id]);
   });
@@ -92,53 +96,100 @@ describe('Classic keying', () => {
     expect(doc.data.notes).toHaveLength(stemSong().data.notes.length);
   });
 
-  it('prefers the brush, then its group, then anything - latest onset first', () => {
+  it('prefers the brush group in the background, then any background, then keyed notes', () => {
     const doc = stemSong();
-    // At beat 4.5 the stem, pad_1 (from 0, 1.2 s) and pad_2 (from beat 4) sound.
-    const y = 4 * 240 + 60;
-    const byGroup = classicCandidates(doc, 13, y, 0, { samples, brush: 2 });
-    expect(byGroup.map((c) => c.ch)).toEqual([3, 1]);
-    // pad_1 ended at 1.2 s (beat 3); the group's other member comes right after the brush.
-    const noBrush = classicCandidates(doc, 13, y, 0, { samples });
-    expect(noBrush.map((c) => c.ch)).toEqual([3, 1]);
-    const stemFirst = classicCandidates(doc, 13, y, 0, { samples, brush: 1 });
-    expect(stemFirst[0]!.ch).toBe(1);
-  });
-
-  it('offers nothing where nothing sounds, and never guesses a length it does not know', () => {
-    const doc = makeDoc([[4, 0, 0, false]]);
-    expect(classicCandidates(doc, 11, 600, 0, { samples })).toEqual([]);
-    // Without a length the hit might still ring - but it is not offered.
-    expect(classicCandidates(doc, 11, 20, 0, {})).toEqual([]);
-    expect(classicCandidates(doc, 11, 20, 0, { samples })).toHaveLength(1);
-  });
-
-  it('marks a candidate that would cut a ringing sound, and refuses to key it', () => {
-    // pad_1 fresh at 0 rings on (whole); pad_1 fresh at 480 starts a chain.
-    const doc = makeDoc([
-      [2, 0, 0, false],
-      [2, 480, 0, false],
-      [2, 720, 0, true],
+    // At beat 4 the stem is cut and pad_2 starts, both in the background.
+    const y = 4 * 240;
+    expect(classicCandidates(doc, 13, y, 0, { samples, brush: 2 }).map((c) => c.ch)).toEqual([
+      3, 1,
     ]);
-    const long: SampleLookup = () => ({ frames: 10 * 44100 });
-    const [c] = classicCandidates(doc, 11, 240, 0, { samples: long });
-    expect(c).toMatchObject({ kind: 'split', ch: 2 });
-    expect(c!.bad).toMatch(/pad_1.wav/);
+    expect(classicCandidates(doc, 13, y, 0, { samples }).map((c) => c.ch)).toEqual([1, 3]);
+    // The stem's note keyed on lane 12 comes after every background note, even its own group's.
+    const [stem] = classicCandidates(doc, 12, y, 0, { samples, brush: 1 });
+    expect(classicKey(doc, 12, y, 0, stem!, { samples }).ok).toBe(true);
+    expect(
+      classicCandidates(doc, 13, y, 0, { samples, brush: 1 }).map((c) => [c.ch, c.tier]),
+    ).toEqual([
+      [3, 1],
+      [1, 2],
+    ]);
+  });
+
+  it('offers nothing where there is no note, however long a sound rings', () => {
+    const doc = makeDoc([[4, 0, 0, false]]);
+    expect(classicCandidates(doc, 11, 20, 0, { samples })).toEqual([]);
+    expect(classicCandidates(doc, 11, 600, 0, { samples })).toEqual([]);
+    expect(classicCandidates(doc, 11, 0, 0, { samples })).toHaveLength(1);
+  });
+
+  it('marks a note whose keying would change the sound, and refuses to key it', () => {
+    // Two channels play one file at once: the one later in play order cuts the
+    // other at its start, so only it is heard (velocity 127, not 90). Keying the
+    // first onto a lane puts it after the second - and it would be heard instead.
+    const doc = makeDoc(
+      [
+        [1, 0, 0, false, 90],
+        [2, 0, 0, false],
+      ],
+      ['pad_1.wav', 'pad_1.wav'],
+    );
+    const cands = classicCandidates(doc, 11, 0, 0, { samples });
+    expect(cands.map((c) => [c.id, !!c.bad])).toEqual([
+      [2, false],
+      [1, true],
+    ]);
+    expect(cands[1]!.bad).toMatch(/pad_1.wav/);
     const before = state(doc);
-    const r = classicKey(doc, 11, 240, 0, c!, { samples: long });
+    const r = classicKey(doc, 11, 0, 0, cands[1]!, { samples });
     expect(r.ok).toBe(false);
     expect(state(doc)).toBe(before);
   });
 
-  it('copies the sounding note’s velocity and pan into the split', () => {
-    const doc = makeDoc([
-      [1, 0, 0, false, 90],
-      [1, 480, 0, true, 90],
-    ]);
-    const [c] = classicCandidates(doc, 11, 240, 0, { samples });
-    const r = classicKey(doc, 11, 240, 0, c!, { samples });
-    expect(r.ok).toBe(true);
-    expect(doc.index.get(r.id!)!.vel).toBe(90);
+  it('refuses a candidate whose note has moved on', () => {
+    const doc = stemSong();
+    const [c] = classicCandidates(doc, 11, 480, 0, { samples });
+    expect(classicKey(doc, 11, 720, 0, c!, { samples }).ok).toBe(false);
+  });
+});
+
+describe('the Classic magnet', () => {
+  // stemSong: the stem cut every beat (240), pad_1 at 0 and pad_2 at 960 (group "pad"),
+  // hits on 120, 600, 1080... - all in the background.
+  it('pulls to the picked sound’s group first, within a measure', () => {
+    const doc = stemSong();
+    // The stem at 720 is nearest, but pad_2 (brush pad_1: same group) is within a measure.
+    expect(classicMagnet(doc, 700, { lane: 11, brush: 2 })).toBe(960);
+    expect(classicMagnet(doc, 700, { lane: 11, brush: 1 })).toBe(720);
+    // No brush: the nearest background note of any sound.
+    expect(classicMagnet(doc, 610, { lane: 11 })).toBe(600);
+    // The group beyond the reach: the nearest background note instead.
+    expect(classicMagnet(doc, 1950, { lane: 11, brush: 2 })).toBe(1920);
+    expect(classicMagnet(doc, 1950, { lane: 11, brush: 2, reach: 60 })).toBe(1920);
+    expect(classicMagnet(doc, 1950, { lane: 11, brush: 2, reach: 20 })).toBeUndefined();
+    // Nothing within a measure of the end of the song.
+    expect(classicMagnet(doc, 3600 + 1000, { lane: 11 })).toBeUndefined();
+  });
+
+  it('passes over spots the lane cannot take', () => {
+    const doc = stemSong();
+    const [stem] = classicCandidates(doc, 12, 960, 0, { samples, brush: 1 });
+    expect(stem).toMatchObject({ ch: 1 });
+    expect(classicKey(doc, 12, 960, 0, stem!, { samples }).ok).toBe(true);
+    // pad_2 at 960 is in the background still, but lane 12 has a note there.
+    expect(classicMagnet(doc, 950, { lane: 12, brush: 3, reach: 480 })).toBe(1080);
+    expect(classicMagnet(doc, 950, { lane: 13, brush: 3, reach: 480 })).toBe(960);
+  });
+
+  it('never lands where nothing can be keyed', () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: 4000 }), fc.constantFrom(11, 12, 13), (p, x) => {
+        const doc = stemSong();
+        const y = classicMagnet(doc, p, { lane: x, brush: 2 });
+        if (y === undefined) return;
+        expect(Math.abs(y - p)).toBeLessThanOrEqual(960);
+        expect(classicCandidates(doc, x, y, 0, { samples, brush: 2 }).length).toBeGreaterThan(0);
+      }),
+    );
   });
 });
 
@@ -147,6 +198,8 @@ describe('Classic un-keying, splitting, healing', () => {
     const doc = stemSong();
     const env = { samples, brush: 1 };
     const before = fingerprint(doc.data, samples);
+    const [s] = splitCandidates(doc, 360, env);
+    expect(classicSplit(doc, 360, s!, env).ok).toBe(true);
     const [c] = classicCandidates(doc, 11, 360, 0, env);
     const { id } = classicKey(doc, 11, 360, 0, c!, env);
     const count = doc.data.notes.length;
@@ -199,14 +252,25 @@ describe('Classic un-keying, splitting, healing', () => {
     expect(fingerprint(doc.data, samples)).toBe(before);
   });
 
+  it('copies the sounding note’s velocity and pan into a split', () => {
+    const doc = makeDoc([
+      [1, 0, 0, false, 90],
+      [1, 480, 0, true, 90],
+    ]);
+    const [c] = splitCandidates(doc, 240, { samples });
+    const r = classicSplit(doc, 240, c!, { samples });
+    expect(r.ok).toBe(true);
+    expect(doc.index.get(r.id!)!.vel).toBe(90);
+  });
+
   it('resets every lane note to the background at once', () => {
     const doc = stemSong();
     const env = { samples, brush: 1 };
     const before = fingerprint(doc.data, samples);
     for (const [x, y] of [
-      [11, 360],
-      [12, 600],
-      [13, 840],
+      [11, 480],
+      [12, 720],
+      [13, 960],
     ] as const) {
       const [c] = classicCandidates(doc, x, y, 0, env);
       expect(classicKey(doc, x, y, 0, c!, env).ok).toBe(true);
@@ -220,10 +284,10 @@ describe('Classic un-keying, splitting, healing', () => {
   it('moves keyed notes across lanes, never in time', () => {
     const doc = stemSong();
     const env = { samples, brush: 1 };
-    const [c] = classicCandidates(doc, 11, 360, 0, env);
-    const { id } = classicKey(doc, 11, 360, 0, c!, env);
+    const [c] = classicCandidates(doc, 11, 480, 0, env);
+    const { id } = classicKey(doc, 11, 480, 0, c!, env);
     expect(classicMove(doc, [{ id: id!, x: 15 }], env).ok).toBe(true);
-    expect(doc.index.get(id!)).toMatchObject({ x: 15, y: 360 });
+    expect(doc.index.get(id!)).toMatchObject({ x: 15, y: 480 });
   });
 
   it('snaps to the nearest note of a group', () => {
@@ -343,14 +407,17 @@ describe('Classic operations (model-based)', () => {
           let ok = true;
           switch (c.k) {
             case 'key': {
-              const cand = pickOf(classicCandidates(doc, c.x, c.y, c.l, env), c.pick);
+              // Where the editor would put it: the magnet, else the spot itself.
+              const y = classicMagnet(doc, c.y, { lane: c.x, brush: env.brush }) ?? c.y;
+              const cand = pickOf(classicCandidates(doc, c.x, y, c.l, env), c.pick);
               if (!cand) break;
-              const r = classicKey(doc, c.x, c.y, c.l, cand, env);
+              const count = doc.data.notes.length;
+              const r = classicKey(doc, c.x, y, c.l, cand, env);
               ok = r.ok;
-              if (r.ok) {
-                keyed++;
-                if (cand.kind === 'split') made.add(r.id!);
-              } else refused++;
+              if (r.ok) keyed++;
+              else refused++;
+              // Keying only ever moves a note.
+              expect(doc.data.notes).toHaveLength(count);
               break;
             }
             case 'unkey': {
@@ -365,7 +432,10 @@ describe('Classic operations (model-based)', () => {
             }
             case 'split': {
               const cand = pickOf(splitCandidates(doc, c.y, env), c.pick);
-              if (cand) ok = classicSplit(doc, c.y, cand, env).ok;
+              if (!cand) break;
+              const r = classicSplit(doc, c.y, cand, env);
+              ok = r.ok;
+              if (r.ok) made.add(r.id!);
               break;
             }
             case 'heal': {

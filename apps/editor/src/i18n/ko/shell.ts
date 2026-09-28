@@ -27,7 +27,7 @@ export const shell: Record<keyof typeof en, string> = {
   'top.speed': '배속',
   'top.zoom': '줌',
   'top.classicTitle':
-    '클래식 모드: 노트를 놓으면 그 위치에서 재생 중인 사운드가 키음이 됩니다 (Ctrl+Shift+K)',
+    '클래식 모드: 노트를 놓으면 그 위치에 이미 있는 배경음 노트가 키음이 됩니다 (Ctrl+Shift+K)',
   'top.classic': '클래식',
   'top.undo': '실행 취소 (Ctrl+Z)',
   'top.redo': '다시 실행 (Ctrl+Shift+Z)',

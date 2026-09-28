@@ -1,14 +1,16 @@
 // Classic mode for the open song (BmsTWO's Classic BMS Mode): placing a note
-// keys the sound already playing there, deleting un-keys it, right-click
-// splits or heals a slice. Whether it is on is saved with the song
-// (ez2bms.song.json); the rules - and the promise that none of it changes
-// what autoplay sounds like - are chart-core's (edit/classic.ts).
+// keys a note already in the background there - the magnet brings the pointer
+// onto one, the picked sound's backing track first - deleting un-keys it,
+// right-click splits or heals a slice. Whether it is on is saved with the
+// song (ez2bms.song.json); the rules - and the promise that none of it
+// changes what autoplay sounds like - are chart-core's (edit/classic.ts).
 
 import {
   classicCandidates,
   classicCheck,
   classicHeal,
   classicKey,
+  classicMagnet,
   classicSplit,
   classicUnkey,
   fingerprint,
@@ -16,9 +18,9 @@ import {
   resetAllToBgm,
   snapToSample,
   splitCandidates,
-  type Candidate,
   type ChartDoc,
   type ClassicEnv,
+  type KeyCandidate,
   type NoteId,
   type NoteRec,
 } from '@ez2bms/chart-core';
@@ -28,7 +30,7 @@ import { toast } from './toasts.svelte';
 
 export class ClassicState {
   /** What a note at the pointer would key, best first. */
-  cands = $state.raw<Candidate[]>([]);
+  cands = $state.raw<KeyCandidate[]>([]);
   /** Which of them (Q / Shift+Q cycle). */
   index = $state(0);
   private at: { doc: ChartDoc; x: number; y: number; l: number; version: number } | undefined;
@@ -72,7 +74,7 @@ export class ClassicState {
     this.at = undefined;
   }
 
-  get current(): Candidate | undefined {
+  get current(): KeyCandidate | undefined {
     return this.cands[this.index];
   }
 
@@ -81,7 +83,7 @@ export class ClassicState {
     if (n) this.index = (this.index + d + n) % n;
   }
 
-  /** "stem_pad.wav (2/3) · slice", for the ghost and the status bar. */
+  /** "stem_pad.wav (2/3)", for the ghost and the status bar. */
   label(doc: ChartDoc): string {
     const c = this.current;
     if (!c) return t('classic.nothingHere');
@@ -89,14 +91,13 @@ export class ClassicState {
       sound: doc.channel(c.ch)?.name ?? '?',
       i: this.index + 1,
       n: this.cands.length,
-      state: c.bad ? 'bad' : c.kind === 'split' ? 'slice' : 'none',
+      state: c.bad ? 'bad' : 'none',
     });
   }
 
-  /** The note in the rack the current candidate comes from. */
+  /** The note in the rack the current candidate is. */
   get hint(): NoteId | null {
-    const c = this.current;
-    return c ? (c.kind === 'note' ? c.id : c.from) : null;
+    return this.current?.id ?? null;
   }
 
   private madeOf(doc: ChartDoc): Set<NoteId> {
@@ -120,16 +121,9 @@ export class ClassicState {
       toast(t('classic.cantKey', { reason: r.reason }), 'warn');
       return false;
     }
-    if (c.kind === 'split' && r.id !== undefined) this.madeOf(doc).add(r.id);
     this.app.view.brush = c.ch;
     this.clear();
     return true;
-  }
-
-  /** Splits made on Classic's behalf (a recorded take's): un-keying heals them too. */
-  remember(doc: ChartDoc, splits: Iterable<NoteId>): void {
-    const s = this.madeOf(doc);
-    for (const id of splits) s.add(id);
   }
 
   /** Delete in Classic mode: back to the background (and heal splits Classic made). */
@@ -159,6 +153,7 @@ export class ClassicState {
     }
     const r = classicSplit(doc, y, c, env);
     if (!r.ok) toast(t('classic.cantSplit', { reason: r.reason }), 'warn');
+    else if (r.id !== undefined) this.madeOf(doc).add(r.id);
   }
 
   /** Whether a drag may put notes on these lanes (same positions) without changing the sound. */
@@ -173,11 +168,24 @@ export class ClassicState {
     else toast(t('classic.reset', { n: r.count }), 'ok');
   }
 
-  /** Snap to the picked sound's group (BmsTWO's magnet in Classic mode). */
+  /** Snap to the picked sound's group (hold ends, cuts): its note within `within`, else the grid. */
   snap(doc: ChartDoc, p: number, within: number): number | undefined {
     const b = this.app.view.brush;
     const ch = b !== null ? doc.channel(b) : undefined;
     return ch ? snapToSample(doc, p, within, groupKeyOf(ch.name)) : undefined;
+  }
+
+  /**
+   * Where a note placed on lane x near p lands: the background note the magnet
+   * pulls to (the picked sound's backing track first), within `reach` pulses
+   * (a measure by default), or undefined when there is none near.
+   */
+  magnet(doc: ChartDoc, x: number, p: number, reach?: number): number | undefined {
+    return classicMagnet(doc, p, {
+      lane: x,
+      brush: this.app.view.brush,
+      ...(reach !== undefined ? { reach } : {}),
+    });
   }
 
   /** How the chart sounds, as a string (end-to-end tests compare it across edits). */

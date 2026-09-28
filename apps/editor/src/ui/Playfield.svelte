@@ -58,6 +58,7 @@
         ? {
             classic: {
               snap: (p, within) => app.classic.snap(slot.doc, p, within),
+              magnet: (x, p) => app.classic.magnet(slot.doc, x, p),
               place: (x, y, l) => {
                 if (app.classic.key(slot.doc, x, y, l)) {
                   const name = slot.doc.channel(v.brush ?? -1)?.name;
@@ -230,13 +231,14 @@
     const y = Math.max(0, Math.round(v.cursor / step) * step);
     const there = d.index.at(x, y);
     if (classicOn) {
-      // Classic: the key un-keys what is there, or keys what is sounding.
+      // Classic: the key un-keys what is there, or keys the background note
+      // nearest the cursor (within half a step; the picked sound's first).
       if (there.length)
         app.classic.unkey(
           d,
           there.map((n) => n.id),
         );
-      else app.classic.key(d, x, y, 0);
+      else app.classic.key(d, x, app.classic.magnet(d, x, v.cursor, step / 2) ?? y, 0);
       return;
     }
     if (there.length)

@@ -1,9 +1,19 @@
 // Classic-mode charting (BmsTWO's "Classic BMS Mode", docs/Classic-BMS-Mode.md
 // there): the music is already complete in the background - sliced stems,
-// a converted BMS - and charting means moving what is already sounding onto
-// lanes. Placing a note keys the sound playing at that spot; deleting one
-// un-keys it; splits and heals only cut or join slices. None of it may change
-// what autoplay sounds like.
+// a converted BMS - and charting means moving what is already there onto
+// lanes. Placing a note keys a note the background already has at that spot;
+// deleting one un-keys it; splits and heals only cut or join slices. None of
+// it may change what autoplay sounds like.
+//
+// Placing never makes a note of its own: only a note already at the spot is
+// keyed, and the magnet (classicMagnet) brings the pointer onto one. A split
+// of a sound still playing through the spot is the explicit right-click (or a
+// stem strip's cut), never a side effect of placing. That is the owner's rule
+// (2026-09-28): a keyed slice that starts where the stem had no cut is a new
+// sound on the lane - heard alone when the player presses early or late, and
+// silent when they miss - so charting must only take slices that already
+// exist. BmsTWO falls back to such a split when no note is at the spot
+// (SequenceViewWriteMode.cpp, FindSoundingSampleChannelAtTime); EZ2BMS does not.
 //
 // Every operation here is checked before it is applied: the change is dry-run
 // through audible() (publish/audible.ts) for exactly the source files it
@@ -12,8 +22,11 @@
 // below being right; they only decide what to offer.
 //
 // From BmsTWO (sequence_view/SequenceViewWriteMode.cpp, SequenceView.cpp
-// FindSampleChannelAtTime / FindSoundingSampleChannelAtTime / DeleteSelectedNotes
-// / ResetAllNotesToBgm), with these differences:
+// FindSampleChannelAtTime / SnapToSampleInCurrentGroup / DeleteSelectedNotes /
+// ResetAllNotesToBgm), with these differences:
+// - no split when nothing is at the spot (above);
+// - the magnet reaches a measure, not the whole chart, and pulls to background
+//   notes only, the picked sound's group first (below);
 // - un-keying keeps a note's velocity, pan, hold kind, `up`, `x_stop` and
 //   unknown fields (BmsTWO rebuilds the note and drops them);
 // - a split copies the sounding note's velocity and pan (a split at another
@@ -40,19 +53,27 @@ export interface ClassicEnv {
   brush?: ChannelId | null;
 }
 
-export type Candidate =
-  /** A note already at this position (any lane): it moves to the lane, keeping its `c`. */
-  | { kind: 'note'; id: NoteId; ch: ChannelId; tier: number; bad?: string }
-  /** A sound playing through this position: a continuation is inserted on the lane. */
-  | {
-      kind: 'split';
-      ch: ChannelId;
-      /** The note whose sound it continues (velocity and pan are copied from it). */
-      from: NoteId;
-      onsetMs: number;
-      tier: number;
-      bad?: string;
-    };
+/** A note already at this position (any lane): keying moves it to the lane, keeping its `c`. */
+export interface KeyCandidate {
+  kind: 'note';
+  id: NoteId;
+  ch: ChannelId;
+  tier: number;
+  bad?: string;
+}
+
+/** A sound playing through a position: a split inserts a background continuation there. */
+export interface SplitCandidate {
+  kind: 'split';
+  ch: ChannelId;
+  /** The note whose sound it continues (velocity and pan are copied from it). */
+  from: NoteId;
+  onsetMs: number;
+  tier: number;
+  bad?: string;
+}
+
+export type Candidate = KeyCandidate | SplitCandidate;
 
 /**
  * Done, or refused with why (and where the change would be heard). The reason
@@ -131,13 +152,12 @@ export function classicCheck(doc: ChartDoc, change: ClassicChange, env: ClassicE
 const KEEP = 8;
 
 /**
- * What a note placed at (x, y) could key, best first. Exact notes at y come
- * first (moving one is always an option BmsTWO prefers): background notes of
- * the brush's group, any background note, keyed notes of the group, any keyed
- * note. Then sounds playing through y: the brush's own channel, its group,
- * any - most recent onset first; a sample of unknown length is never taken to
- * be sounding. The first few are dry-run checked; those that would change the
- * sound go last, marked `bad` with the reason.
+ * What a note placed at (x, y) could key, best first: only notes already at
+ * y (FindSampleChannelAtTime's order) - background notes of the brush's
+ * group, any background note, keyed notes of the group, any keyed note. None
+ * there, nothing to key: placing is refused, never turned into a split. The
+ * first few are dry-run checked; those that would change the sound go last,
+ * marked `bad` with the reason.
  */
 export function classicCandidates(
   doc: ChartDoc,
@@ -145,20 +165,11 @@ export function classicCandidates(
   y: number,
   l: number,
   env: ClassicEnv = {},
-): Candidate[] {
-  const brush = env.brush != null ? doc.channel(env.brush) : undefined;
-  const group = brush ? groupKeyOf(brush.name) : undefined;
-  const order = new Map(doc.data.channels.map((c, i) => [c.id, i]));
-  const inGroup = (ch: ChannelId) => {
-    const c = doc.channel(ch);
-    return group !== undefined && !!c && groupKeyOf(c.name) === group;
-  };
-
-  const exact: Candidate[] = [];
-  const atY = new Set<ChannelId>();
+): KeyCandidate[] {
+  const inGroup = groupTest(doc, env.brush);
+  const exact: KeyCandidate[] = [];
   for (const lane of doc.index.laneKeys()) {
     for (const n of doc.index.at(lane, y)) {
-      atY.add(n.ch);
       if (n.x === x) continue;
       if (placementRule(doc, x, y, x === BGM ? 0 : l, new Set([n.id]))) continue;
       const bgm = n.x === BGM;
@@ -166,25 +177,15 @@ export function classicCandidates(
       exact.push({ kind: 'note', id: n.id, ch: n.ch, tier });
     }
   }
-  exact.sort(
-    (p, q) =>
-      p.tier - q.tier ||
-      (order.get(p.ch) ?? 0) - (order.get(q.ch) ?? 0) ||
-      (p.kind === 'note' && q.kind === 'note' ? p.id - q.id : 0),
-  );
-
-  const sounding = x !== BGM && !placementRule(doc, x, y, l) ? soundingAt(doc, y, env, atY) : [];
-
-  return checked(doc, [...exact, ...sounding], (cand) => keyChange(doc, x, y, l, cand), env);
+  return checked(doc, byTier(doc, exact), (cand) => keyChange(x, l, cand), env);
 }
 
 /**
- * What a recorded press could key at (x, y), unchecked and background only:
- * notes already there in the background (never a note keyed on another lane
- * - a take must not take another lane's keyings away), then sounds playing
- * through. Ordered as classicCandidates orders them; classicKey's own check
- * refuses one that would change the sound. No dry runs, which is what makes
- * a take of hundreds of presses affordable.
+ * What a recorded press could key at (x, y), unchecked: notes already there
+ * in the background only (never a note keyed on another lane - a take must
+ * not take another lane's keyings away), the brush's group first. No dry
+ * runs, which is what makes a take of hundreds of presses affordable;
+ * classicKey's own check refuses one that would change the sound.
  */
 export function recordCandidates(
   doc: ChartDoc,
@@ -192,40 +193,48 @@ export function recordCandidates(
   y: number,
   l: number,
   env: ClassicEnv = {},
-): Candidate[] {
-  const brush = env.brush != null ? doc.channel(env.brush) : undefined;
-  const group = brush ? groupKeyOf(brush.name) : undefined;
-  const order = new Map(doc.data.channels.map((c, i) => [c.id, i]));
-  const exact: Candidate[] = [];
-  const atY = new Set<ChannelId>();
-  for (const lane of doc.index.laneKeys()) {
-    for (const n of doc.index.at(lane, y)) {
-      atY.add(n.ch);
-      if (n.x !== BGM) continue;
-      const c = doc.channel(n.ch);
-      const tier = group !== undefined && c && groupKeyOf(c.name) === group ? 0 : 1;
-      exact.push({ kind: 'note', id: n.id, ch: n.ch, tier });
+): KeyCandidate[] {
+  const inGroup = groupTest(doc, env.brush);
+  const exact: KeyCandidate[] = [];
+  if (x === BGM || placementRule(doc, x, y, l)) return exact;
+  for (const n of doc.index.at(BGM, y))
+    exact.push({ kind: 'note', id: n.id, ch: n.ch, tier: inGroup(n.ch) ? 0 : 1 });
+  return byTier(doc, exact);
+}
+
+/** Whether a channel is in the brush's group (the backing track it came from). */
+function groupTest(doc: ChartDoc, brush: ChannelId | null | undefined): (ch: ChannelId) => boolean {
+  const b = brush != null ? doc.channel(brush) : undefined;
+  if (!b) return () => false;
+  const group = groupKeyOf(b.name);
+  const memo = new Map<ChannelId, boolean>();
+  return (ch) => {
+    let g = memo.get(ch);
+    if (g === undefined) {
+      const c = doc.channel(ch);
+      memo.set(ch, (g = !!c && groupKeyOf(c.name) === group));
     }
-  }
-  exact.sort(
-    (p, q) =>
-      p.tier - q.tier ||
-      (order.get(p.ch) ?? 0) - (order.get(q.ch) ?? 0) ||
-      (p.kind === 'note' && q.kind === 'note' ? p.id - q.id : 0),
+    return g;
+  };
+}
+
+/** Tier, then the channel's place in the list, then the note's age. */
+function byTier(doc: ChartDoc, cands: KeyCandidate[]): KeyCandidate[] {
+  const order = new Map(doc.data.channels.map((c, i) => [c.id, i]));
+  return cands.sort(
+    (p, q) => p.tier - q.tier || (order.get(p.ch) ?? 0) - (order.get(q.ch) ?? 0) || p.id - q.id,
   );
-  const sounding = !placementRule(doc, x, y, l) ? soundingAt(doc, y, env, atY) : [];
-  return [...exact, ...sounding];
 }
 
 /** Dry-run the first few candidates; those that would change the sound go last, with the reason. */
-function checked(
+function checked<C extends Candidate>(
   doc: ChartDoc,
-  all: Candidate[],
-  change: (c: Candidate) => ClassicChange,
+  all: C[],
+  change: (c: C) => ClassicChange,
   env: ClassicEnv,
-): Candidate[] {
-  const good: Candidate[] = [];
-  const bad: Candidate[] = [];
+): C[] {
+  const good: C[] = [];
+  const bad: C[] = [];
   all.forEach((cand, i) => {
     if (i >= KEEP) return good.push(cand);
     const v = classicCheck(doc, change(cand), env);
@@ -245,13 +254,13 @@ function soundingAt(
   y: number,
   env: ClassicEnv,
   atY: ReadonlySet<ChannelId>,
-): Candidate[] {
+): SplitCandidate[] {
   const a = analysis(doc);
   const brush = env.brush != null ? doc.channel(env.brush) : undefined;
   const group = brush ? groupKeyOf(brush.name) : undefined;
   const order = new Map(doc.data.channels.map((c, i) => [c.id, i]));
   const t = a.clock.msAt(a.clock.tick(y));
-  const out: (Candidate & { kind: 'split' })[] = [];
+  const out: SplitCandidate[] = [];
   for (const c of doc.data.channels) {
     if (atY.has(c.id)) continue;
     const evs = a.eventsOf(c.id);
@@ -279,13 +288,16 @@ function soundingAt(
   );
 }
 
-/** The change keying a candidate at (x, y) makes. */
-function keyChange(doc: ChartDoc, x: number, y: number, l: number, cand: Candidate): ClassicChange {
-  const len = x === BGM ? 0 : l;
-  if (cand.kind === 'note') return { patch: [{ id: cand.id, patch: { x, l: len } }] };
+/** The change keying a note onto lane x (a hold of length l) makes: the note moves, nothing is added. */
+function keyChange(x: number, l: number, cand: KeyCandidate): ClassicChange {
+  return { patch: [{ id: cand.id, patch: { x, l: x === BGM ? 0 : l } }] };
+}
+
+/** The change splitting a sound at y makes: a background continuation. */
+function splitChange(doc: ChartDoc, y: number, cand: SplitCandidate): ClassicChange {
   const from = doc.index.get(cand.from);
   // The id the note will get, so a dry run orders same-instant notes as the real one will.
-  const rec: NoteRec = { id: doc.peekNoteId(), ch: cand.ch, x, y, l: len, c: true };
+  const rec: NoteRec = { id: doc.peekNoteId(), ch: cand.ch, x: BGM, y, l: 0, c: true };
   if (from?.vel !== undefined) rec.vel = from.vel;
   if (from?.pan !== undefined) rec.pan = from.pan;
   return { insert: [rec] };
@@ -295,35 +307,33 @@ function keyChange(doc: ChartDoc, x: number, y: number, l: number, cand: Candida
 
 export type ClassicResult = Verdict & { id?: NoteId };
 
-/** Key a candidate onto lane x at y (a hold of length l). Refused, unchanged, when it would change the sound. */
+/**
+ * Key a note already at y onto lane x (a hold of length l): the note moves,
+ * nothing is added. Refused, unchanged, when the note is not at y any more or
+ * the move would change the sound.
+ */
 export function classicKey(
   doc: ChartDoc,
   x: number,
   y: number,
   l: number,
-  cand: Candidate,
+  cand: KeyCandidate,
   env: ClassicEnv = {},
 ): ClassicResult {
   if (x === BGM) return { ok: false, reason: sayText(said('classic.no-lane')) };
+  const n = doc.index.get(cand.id);
+  if (!n || n.y !== y) return { ok: false, reason: sayText(said('edit.note-gone')) };
   const len = Math.max(0, l);
-  const ignore = cand.kind === 'note' ? new Set([cand.id]) : new Set<NoteId>();
-  const why = placementConflict(doc, x, y, len, ignore);
+  const why = placementConflict(doc, x, y, len, new Set([cand.id]));
   if (why) return { ok: false, reason: why };
-  const change = keyChange(doc, x, y, len, cand);
+  const change = keyChange(x, len, cand);
   const v = classicCheck(doc, change, env);
   if (!v.ok) return v;
-  const id = doc.transact(sayText(said('undo.key-sound')), (tx) => {
-    let keyed: NoteId;
-    if (cand.kind === 'note') {
-      tx.patchNotes(change.patch!);
-      keyed = cand.id;
-    } else {
-      keyed = tx.insertNotes([{ ...change.insert![0]!, id: doc.newNoteId() }])[0]!.id;
-    }
-    tx.select([keyed], keyed);
-    return keyed;
+  doc.transact(sayText(said('undo.key-sound')), (tx) => {
+    tx.patchNotes(change.patch!);
+    tx.select([cand.id], cand.id);
   });
-  return { ok: true, id };
+  return { ok: true, id: cand.id };
 }
 
 /** Move keyed notes to other lanes at the same position (Classic never moves a sound in time). */
@@ -388,10 +398,10 @@ export function classicUnkey(
 }
 
 /** Sounds playing through y that could be split there (a background continuation). */
-export function splitCandidates(doc: ChartDoc, y: number, env: ClassicEnv = {}): Candidate[] {
+export function splitCandidates(doc: ChartDoc, y: number, env: ClassicEnv = {}): SplitCandidate[] {
   const atY = new Set<ChannelId>();
   for (const lane of doc.index.laneKeys()) for (const n of doc.index.at(lane, y)) atY.add(n.ch);
-  return checked(doc, soundingAt(doc, y, env, atY), (cand) => keyChange(doc, BGM, y, 0, cand), env);
+  return checked(doc, soundingAt(doc, y, env, atY), (cand) => splitChange(doc, y, cand), env);
 }
 
 /** Split the sound of `cand` at y with a background continuation. */
@@ -403,7 +413,7 @@ export function classicSplit(
 ): ClassicResult {
   if (cand.kind !== 'split')
     return { ok: false, reason: sayText(said('classic.nothing-to-split')) };
-  const change = keyChange(doc, BGM, y, 0, cand);
+  const change = splitChange(doc, y, cand);
   const v = classicCheck(doc, change, env);
   if (!v.ok) return v;
   const id = doc.transact(
@@ -464,4 +474,62 @@ export function snapToSample(
     }
   }
   return best;
+}
+
+/** How far the magnet reaches when a note is placed by hand: a measure. */
+export const MAGNET_BEATS = 4;
+
+export interface MagnetOptions {
+  /** How far from p it pulls, in pulses (default a measure, MAGNET_BEATS beats). */
+  reach?: number;
+  /** The lane the note goes on: a spot it cannot take (a note there, or a hold over it) is passed over. */
+  lane?: number;
+  /** The picked sound (the last note keyed or clicked): its group's notes pull first. */
+  brush?: ChannelId | null;
+}
+
+/**
+ * The magnet: where a note placed near p goes in Classic mode - always onto
+ * a note already in the background, since that is all placing may key.
+ * BmsTWO's SnapToSampleInCurrentGroup (SequenceView.cpp) pulls to the nearest
+ * note of the current channel's name group, keyed or not, however far; here
+ * the picked sound's group (the backing track the last keyed or clicked note
+ * came from) pulls first too, then any background note, the nearest within
+ * `reach` pulses - so a group with a long rest does not drag the note off the
+ * screen, and another track's note under the pointer is taken instead.
+ * Undefined when there is none: nothing near to key.
+ */
+export function classicMagnet(doc: ChartDoc, p: number, o: MagnetOptions = {}): number | undefined {
+  const bg = doc.index.lane(BGM);
+  const reach = o.reach ?? MAGNET_BEATS * doc.resolution;
+  const inGroup = groupTest(doc, o.brush);
+  const grouped = o.brush != null && !!doc.channel(o.brush);
+  const lane = o.lane;
+  const open = new Map<number, boolean>();
+  const takes = (y: number) => {
+    if (lane === undefined || lane === BGM) return y >= 0;
+    let f = open.get(y);
+    if (f === undefined) open.set(y, (f = !placementRule(doc, lane, y, 0)));
+    return f;
+  };
+  // Outward from p, nearest first (at or after p wins a tie, as in BmsTWO).
+  let up = 0;
+  let hi = bg.length;
+  while (up < hi) {
+    const mid = (up + hi) >>> 1;
+    if (bg[mid]!.y < p) up = mid + 1;
+    else hi = mid;
+  }
+  let down = up - 1;
+  let any: number | undefined;
+  while (down >= 0 || up < bg.length) {
+    const dDown = down >= 0 ? p - bg[down]!.y : Infinity;
+    const dUp = up < bg.length ? bg[up]!.y - p : Infinity;
+    const n = dUp <= dDown ? bg[up++]! : bg[down--]!;
+    if (Math.abs(n.y - p) > reach) break;
+    if (!takes(n.y)) continue;
+    if (!grouped || inGroup(n.ch)) return n.y;
+    any ??= n.y;
+  }
+  return any;
 }

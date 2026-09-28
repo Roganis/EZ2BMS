@@ -3,6 +3,7 @@
 // song keying what plays, with the music exactly as it was.
 
 import { describe, expect, it } from 'vitest';
+import { classicMagnet } from '../src/edit/classic';
 import { ChartDoc } from '../src/edit/doc';
 import { placeNote } from '../src/edit/commands';
 import { applyTake, previewTake, snapTake, takeStats, type TakePress } from '../src/edit/record';
@@ -137,29 +138,51 @@ describe('applying a take', () => {
     expect(state(d)).toBe(before);
   });
 
-  it('in a Classic song: keys what plays, sounding exactly the same; one undo', () => {
+  it('in a Classic song: keys the notes already there, sounding exactly the same; one undo', () => {
     const d = stemSong();
     const before = state(d);
     const sound = fingerprint(d.data, samples);
+    const count = d.data.notes.length;
     const env = { samples, brush: 1 };
     const notes = [
       // On a slice: the background note there is keyed.
       { x: 11, y: 240, l: 0, offsetMs: 0 },
-      // Between slices: the stem is split there.
+      { x: 13, y: 720, l: 0, offsetMs: 0 },
+      // Between slices the stem plays, but a take never cuts it: nothing to key.
       { x: 12, y: 360, l: 0, offsetMs: 0 },
-      { x: 13, y: 600, l: 0, offsetMs: 0 },
-      // Past the stem's 12 s: nothing plays there.
+      // Past the stem's 12 s: nothing there.
       { x: 11, y: 240 * 40, l: 0, offsetMs: 0 },
     ];
-    expect(previewTake(d, notes, { classic: env })).toEqual(['ok', 'ok', 'ok', 'silent']);
+    expect(previewTake(d, notes, { classic: env })).toEqual(['ok', 'ok', 'silent', 'silent']);
     const r = applyTake(d, notes, { classic: env });
-    expect(r).toMatchObject({ placed: 3, silent: 1, clash: 0 });
-    expect(r.splits).toHaveLength(2);
+    expect(r).toMatchObject({ placed: 2, silent: 2, clash: 0 });
+    expect(d.data.notes).toHaveLength(count);
     expect(fingerprint(d.data, samples)).toBe(sound);
     expect(d.data.notes.filter((n) => n.x === 11 && n.y === 240)).toHaveLength(1);
     d.undo();
     expect(state(d)).toBe(before);
     d.redo();
     expect(fingerprint(d.data, samples)).toBe(sound);
+  });
+
+  it('in a Classic song: a press lands on the background note within half a step', () => {
+    const d = stemSong();
+    const tl = timelineOf(d);
+    const magnet = (x: number, p: number, reach: number) =>
+      classicMagnet(d, p, { lane: x, brush: 1, reach });
+    // A 1/8 grid (120 pulses): the magnet reaches 60 pulses (100 ms) either side.
+    const presses: TakePress[] = [
+      // 80 ms late on the slice at beat 1: lands on it.
+      { x: 11, downMs: 400 + 80 },
+      // 150 ms after beat 2: no slice within reach, so the grid's 600 - where nothing is.
+      { x: 12, downMs: 800 + 150 },
+    ];
+    const notes = snapTake(presses, tl, { step: 120, holds: false, holdMinMs: 200, magnet });
+    expect(notes.map((n) => [n.x, n.y])).toEqual([
+      [11, 240],
+      [12, 600],
+    ]);
+    expect(notes[0]!.offsetMs).toBeCloseTo(80, 6);
+    expect(previewTake(d, notes, { classic: { samples, brush: 1 } })).toEqual(['ok', 'silent']);
   });
 });

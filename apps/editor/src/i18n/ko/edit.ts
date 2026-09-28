@@ -34,12 +34,12 @@ export const edit: Record<keyof typeof en, string> = {
   'notes.stopPulses': 'STOP 길이는 펄스 수로 입력합니다',
   'notes.scrollRate': '스크롤 변속은 0보다 큰 배율입니다 (예: 1.5)',
 
-  'classic.on': '클래식 모드: 노트를 놓으면 그 자리에서 나는 소리를 키음으로 만듭니다',
+  'classic.on': '클래식 모드: 노트를 놓으면 그 자리에 이미 있는 배경음 노트를 키음으로 만듭니다',
   'classic.off': '클래식 모드 끔: 노트에 고른 사운드를 씁니다',
   'classic.label':
-    '{sound}{n, plural, =1 {} other { ({i}/{n})}}{state, select, bad { - 소리가 달라짐} slice { · 슬라이스} other {}}',
-  'classic.nothingHere': '여기엔 소리 없음',
-  'classic.nothingToKey': '그곳에는 키음으로 만들 소리가 없습니다',
+    '{sound}{n, plural, =1 {} other { ({i}/{n})}}{state, select, bad { - 소리가 달라짐} other {}}',
+  'classic.nothingHere': '여기엔 키음으로 만들 노트 없음',
+  'classic.nothingToKey': '그곳에는 키음으로 만들 배경음 노트가 없습니다',
   'classic.cantKey': '키음으로 만들 수 없습니다: {reason}',
   'classic.cantUnkey': '클래식 모드에서는 할 수 없습니다: {reason}',
   'classic.soundStarts': '사운드가 시작되는 자리입니다 - 클래식 모드는 이를 지우지 않습니다',
@@ -207,7 +207,7 @@ export const edit: Record<keyof typeof en, string> = {
   'cmd.timing.scroll': '커서 위치에 스크롤 변속 설정…',
   'cmd.timing.stopPrompt': '여기에 STOP…',
 
-  'cmd.view.classic': '클래식 모드 켜기/끄기 (그 자리의 소리를 키음으로)',
+  'cmd.view.classic': '클래식 모드 켜기/끄기 (그 자리의 배경음 노트를 키음으로)',
   'cmd.classic.next': '클래식: 다음 키음 후보',
   'cmd.classic.prev': '클래식: 이전 키음 후보',
   'cmd.classic.resetAll': '클래식: 모든 노트를 배경음으로 되돌리기',
