@@ -64,3 +64,11 @@ release of this repository (not drafts, not pre-releases).
 The `.deb` does not update itself (Linux packages are updated by the
 package manager); on a `.deb` install the app offers the release page
 instead.
+
+## A build to try, without a release
+
+Actions → **Release** → **Run workflow**, on the branch to try. With no tag
+the run makes no release; the Windows installer and the Linux AppImage and
+`.deb` are kept on the run's page under **Artifacts** (`ez2bms-windows`,
+`ez2bms-linux`, zipped by GitHub) for 90 days. They are unsigned and cannot
+update themselves.

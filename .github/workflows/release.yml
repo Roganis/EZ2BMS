@@ -5,6 +5,10 @@ name: Release
 # checked and published by hand (docs/releasing.md). Published as a normal
 # release, it is what installed copies update to.
 #
+# Run by hand on a branch (Actions > Release > Run workflow), it makes no
+# release: the same builds are kept on the run's page as artifacts, to try
+# a branch on a real machine before tagging it.
+#
 # What the repository's secrets and variables turn on
 # (scripts/release-config.mjs):
 # - TAURI_SIGNING_PRIVATE_KEY (+ _PASSWORD) and the variable
@@ -88,3 +92,13 @@ jobs:
           # Not a pre-release: once published by hand, installed copies update to it.
           prerelease: false
           includeUpdaterJson: true
+      # Every run keeps what it built on its page (without a tag, tauri-action
+      # only builds, and the files would be lost with the runner).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ez2bms-${{ runner.os == 'Windows' && 'windows' || 'linux' }}
+          path: |
+            target/release/bundle/appimage/*.AppImage
+            target/release/bundle/deb/*.deb
+            target/release/bundle/nsis/*.exe
+          if-no-files-found: error
