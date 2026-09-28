@@ -87,3 +87,6 @@ English, Korean and Japanese.
   keeps them outside the song's folder (`system/disc`, `system/eyecatch`),
   where the import did not look, so the song manager had none. The Art tab
   also takes the game's `.abm` pictures now.
+- The song manager's Preview plays its loop. The rendered loop went into the
+  sound bank but not to the audio thread, which found nothing to play until
+  the chart was next edited; a newly loaded sound had the same gap.

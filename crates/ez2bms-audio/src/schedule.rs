@@ -169,6 +169,12 @@ impl Schedule {
         Schedule::new(rate, samples, events)
     }
 
+    /// The same events over another sample list (ids unchanged; a replaced
+    /// sample's ranges clamped to it again).
+    pub fn with_samples(&self, samples: Vec<Arc<Sample>>) -> Result<Self> {
+        Schedule::new(self.rate, samples, self.events.clone())
+    }
+
     pub fn rate(&self) -> u32 {
         self.rate
     }

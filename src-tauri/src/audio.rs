@@ -257,6 +257,17 @@ impl Audio {
     /// Decode (or re-decode, if changed) and give each file its id.
     pub fn load(&self, paths: &[PathBuf]) -> Vec<Loaded> {
         let results = self.cache.load_many(paths);
+        let loaded = self.put_loaded(paths, results);
+        // A file just loaded can be auditioned before the editor's next sync.
+        let _ = self.share_bank();
+        loaded
+    }
+
+    fn put_loaded(
+        &self,
+        paths: &[PathBuf],
+        results: Vec<ez2bms_audio::Result<Arc<Sample>>>,
+    ) -> Vec<Loaded> {
         let mut bank = self.bank.lock().unwrap();
         paths
             .iter()
@@ -480,7 +491,19 @@ impl Audio {
         };
         let s = Arc::new(Sample::from_pcm16(rate, 2, &pcm));
         let id = self.put_generated(PREVIEW_KEY, s.clone());
+        self.share_bank()?;
         Ok(Audition { sample: id, seconds: s.seconds(), voice: PREVIEW_VOICE })
+    }
+
+    /// The bank as it is now, to the audio thread under the events playing.
+    /// It finds a triggered sample only in the playing schedule's list
+    /// (ez2bms-audio engine.rs), which a sync from the editor replaces - so
+    /// a sound put in the bank without one, the rendered preview above all,
+    /// was never heard ("Play the loop" was silent, 2026-09-28).
+    fn share_bank(&self) -> CmdResult<()> {
+        let samples = self.bank.lock().unwrap().samples.clone();
+        self.engine.set_samples(samples)?;
+        Ok(())
     }
 
     /// A sound made here (not a file) into the bank under `key`, replacing
@@ -506,11 +529,15 @@ impl Audio {
     /// in the bank for the editor to schedule as events.
     pub fn clicks(&self) -> Clicks {
         let rate = self.engine.rate();
-        Clicks {
+        let clicks = Clicks {
             accent: self.put_generated(CLICK_ACCENT_KEY, Arc::new(click(rate, true))),
             plain: self.put_generated(CLICK_KEY, Arc::new(click(rate, false))),
             voice: CLICK_VOICE,
-        }
+        };
+        // The clicks are scheduled with the events that follow; shared now
+        // too, so one triggered first is heard. Nothing to report if not.
+        let _ = self.share_bank();
+        clicks
     }
 
     pub fn trigger(&self, t: &TriggerDto) -> CmdResult<bool> {
@@ -659,6 +686,28 @@ mod tests {
         for k in ["frame", "host_ns", "latency_frames", "rate", "playing", "generation", "now_ns"] {
             assert!(c.get(k).is_some(), "{k}");
         }
+    }
+
+    #[test]
+    fn a_rendered_preview_is_in_the_audio_threads_list_at_once() {
+        // "Play the loop" triggered a sample the playing schedule did not
+        // list, and the audio thread dropped it: the preview was silent.
+        let audio = Audio::from_engine(Engine::start_null(48_000), "null", None);
+        let job = |from_ms: f64| PreviewJob {
+            sources: vec![],
+            events: vec![],
+            file: None,
+            from_ms,
+            length_ms: 500.0,
+            fade_ms: 10.0,
+        };
+        let a = audio.preview(&job(0.0)).unwrap();
+        let listed = || audio.engine.schedule().samples().get(a.sample as usize).cloned();
+        assert!(Arc::ptr_eq(&listed().expect("listed"), &audio.sample(a.sample).unwrap()));
+        // Rendered again (another window): the same id, the new sound.
+        let b = audio.preview(&job(100.0)).unwrap();
+        assert_eq!(a.sample, b.sample);
+        assert!(Arc::ptr_eq(&listed().unwrap(), &audio.sample(b.sample).unwrap()));
     }
 
     #[test]

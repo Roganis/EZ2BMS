@@ -21,6 +21,7 @@ use crate::clock::{Clock, ClockSnapshot};
 use crate::error::{AudioError, Result};
 use crate::level::output_stage;
 use crate::mixer::Mixer;
+use crate::sample::Sample;
 use crate::schedule::{Schedule, VoiceStart};
 
 const TRIGGER_RING: usize = 1024;
@@ -302,6 +303,18 @@ impl Engine {
         }
         let mut ctl = self.ctl.lock().unwrap();
         ctl.schedule = schedule;
+        self.publish(&mut ctl, Cue::Keep, Vec::new());
+        Ok(())
+    }
+
+    /// Hand the audio thread a new sample list under the same events. The
+    /// thread finds a triggered sample in the playing schedule's list, so a
+    /// sound added to the host's bank outside a schedule - a rendered
+    /// preview, a file just loaded - is silent when triggered until this (or
+    /// the next schedule) carries it. Ids must be stable.
+    pub fn set_samples(&self, samples: Vec<Arc<Sample>>) -> Result<()> {
+        let mut ctl = self.ctl.lock().unwrap();
+        ctl.schedule = Arc::new(ctl.schedule.with_samples(samples)?);
         self.publish(&mut ctl, Cue::Keep, Vec::new());
         Ok(())
     }
