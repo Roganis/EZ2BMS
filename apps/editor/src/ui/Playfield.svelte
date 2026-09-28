@@ -48,6 +48,7 @@
       },
       setMarquee: (m) => (marquee = m),
       pan: (d) => (v.cursor = Math.max(0, v.cursor + d)),
+      setRackScroll: (u) => (v.rackScroll = u),
       say: (m) => toast(m, 'warn'),
       audition: (ch) => {
         const name = slot.doc.channel(ch)?.name;
@@ -381,8 +382,13 @@
   function onWheel(e: WheelEvent) {
     e.preventDefault();
     if (!renderer) return;
-    // Shift+wheel over the rack scrolls it sideways (it can be wider than its share).
-    if (e.shiftKey && renderer.overRack(e.offsetX)) {
+    // Over the rack, a sideways swipe (a touchpad, a tilting wheel), Shift+wheel
+    // or the wheel over its names and scrollbar scroll it sideways: it can be
+    // wider than its window.
+    const bar = renderer.rackBar();
+    const overNames = !!bar && e.offsetY <= bar.top + bar.height + 3;
+    const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+    if (renderer.overRack(e.offsetX) && (e.shiftKey || sideways || overNames)) {
       const d = (e.deltaX || e.deltaY) * (e.deltaMode === 1 ? 40 : 1);
       const scale = renderer.currentLayout?.scale ?? 1;
       v.rackScroll = Math.max(0, Math.min(renderer.rackMaxScroll, v.rackScroll + d / scale));

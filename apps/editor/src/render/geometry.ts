@@ -34,8 +34,16 @@ export const RACK_LABEL = 16;
 /** A stem strip's width and the gap between strips (BmsTWO's wide sound column is 64). */
 export const STRIP_W = 64;
 const STRIP_GAP = 6;
-/** The rack never takes more than this share of the window; a wider one scrolls sideways. */
+/**
+ * The rack takes the window's width beside the lanes (at least this share of
+ * it); a rack wider than that first narrows its sub-lanes, to RACK_SUB_MIN,
+ * and only then scrolls sideways - with many sounds, the owner could not see
+ * every group (2026-09-28).
+ */
 const RACK_SHARE = 0.4;
+export const RACK_SUB_MIN = 7;
+/** The scrollbar under the group names, design units tall. */
+export const RACK_BAR = 5;
 /** The judge line, in design units above the bottom edge. */
 const JUDGE_FROM_BOTTOM = 64;
 
@@ -130,10 +138,16 @@ export function computeLayout(i: LayoutInput): Layout {
   const nStrips = i.strips ?? 0;
   const stripUnits = nStrips ? (nStrips * (STRIP_W + STRIP_GAP) + 6) * i.extras : 0;
   const groups = i.rackGroups;
-  const contentUnits = groups.length
+  const fullUnits = groups.length
     ? groups.reduce((w, g) => w + g.subLanes * RACK_SUB, 0) + RACK_GAP * (groups.length - 1)
     : 0;
-  const shownUnits = Math.min(contentUnits, (RACK_SHARE * i.width) / scale);
+  // The room beside everything else at full scale, or the share if that is more.
+  const besides = GUTTER + laneUnits + 12 + offUnits + stripUnits + 12 + 16;
+  const room = Math.max((RACK_SHARE * i.width) / scale, i.width / scale - besides);
+  // Narrower sub-lanes before a scrollbar.
+  const narrow = fullUnits > room ? Math.max(RACK_SUB_MIN / RACK_SUB, room / fullUnits) : 1;
+  const contentUnits = fullUnits * narrow;
+  const shownUnits = Math.min(contentUnits, room);
   const rackUnits = (shownUnits + (groups.length ? 12 : 0)) * i.extras;
   const need = GUTTER + laneUnits + 12 + offUnits + stripUnits + rackUnits + 16;
   // Shrink to fit a narrow window rather than overflow it.
@@ -191,7 +205,7 @@ export function computeLayout(i: LayoutInput): Layout {
     offLanes,
     gutter: { left: Math.max(0, fieldLeft - GUTTER * s), right: fieldLeft - 6 * s },
     strips,
-    rack: rackGeom(x, s * i.extras, groups, contentUnits, shownUnits, i.rackScroll ?? 0),
+    rack: rackGeom(x, s * i.extras, narrow, groups, contentUnits, shownUnits, i.rackScroll ?? 0),
     design: boxes ? { x0, judgeY: i.skin!.judgeY } : null,
   };
 }
@@ -235,6 +249,7 @@ export class Viewport {
 function rackGeom(
   left: number,
   k: number,
+  narrow: number,
   groups: readonly { key: string; subLanes: number }[],
   contentUnits: number,
   shownUnits: number,
@@ -249,11 +264,12 @@ function rackGeom(
     width,
     content,
     scroll,
-    sub: RACK_SUB * k,
+    sub: RACK_SUB * narrow * k,
     labelH: RACK_LABEL * k,
     groups: groups.map((g) => {
-      const geom = { key: g.key, left: at, width: g.subLanes * RACK_SUB * k, subLanes: g.subLanes };
-      at += geom.width + RACK_GAP * k;
+      const width = g.subLanes * RACK_SUB * narrow * k;
+      const geom = { key: g.key, left: at, width, subLanes: g.subLanes };
+      at += width + RACK_GAP * narrow * k;
       return geom;
     }),
   };

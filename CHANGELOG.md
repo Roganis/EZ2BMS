@@ -90,3 +90,8 @@ English, Korean and Japanese.
 - The song manager's Preview plays its loop. The rendered loop went into the
   sound bank but not to the audio thread, which found nothing to play until
   the chart was next edited; a newly loaded sound had the same gap.
+- Every background group can be reached. The rack beside the lanes now takes
+  all the room there, narrows its sub-lanes before it hides any, and
+  scrolls the rest with a bar under the group names you can drag, a
+  touchpad's sideways swipe, Shift+wheel, or the wheel over the names. It
+  used to stop at 40% of the window and scroll only with Shift+wheel.

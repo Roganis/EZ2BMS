@@ -8,6 +8,8 @@
 //   right button              erase what the pointer touches
 //   middle button             pan
 //   Alt+click a note          take its sound as the brush
+//   the rack's scrollbar      drag it (under the group names, when the
+//                             background rack is wider than its window)
 //
 // In a stem strip, whatever the tool: right-click cuts the stem there (on a
 // cut, heals it); drag a cut to move it; click a slice to select it (Shift
@@ -61,6 +63,8 @@ export interface ToolHost {
   setGhost(g: { x: number; y: number; l: number } | null): void;
   setMarquee(m: { x0: number; y0: number; x1: number; y1: number } | null): void;
   pan(dPulses: number): void;
+  /** Scroll the background rack to this many design units. */
+  setRackScroll(units: number): void;
   say(msg: string): void;
   /** Hear a sound (placing or picking a note). */
   audition(ch: ChannelId): void;
@@ -122,6 +126,7 @@ type Gesture =
   | { kind: 'marquee'; x0: number; y0: number; base: Set<NoteId> }
   | { kind: 'erase'; ids: Set<NoteId>; draft: Draft }
   | { kind: 'pan'; lastY: number }
+  | { kind: 'rackbar'; grab: number }
   | { kind: 'cut'; id: NoteId; strip: number; from: number; y: number }
   | { kind: 'slices'; ids: NoteId[]; y: number; sx: number; sy: number; moved: boolean };
 
@@ -225,6 +230,21 @@ export class PointerTool {
     const p = r.pulseAt(py);
     if (e.button === 1) {
       this.g = { kind: 'pan', lastY: py };
+      return;
+    }
+    const bar = e.button === 0 ? r.rackBar() : undefined;
+    if (
+      bar &&
+      px >= bar.left &&
+      px <= bar.left + bar.width &&
+      py >= bar.top - 3 &&
+      py <= bar.top + bar.height + 3
+    ) {
+      // On the thumb: drag it from where it was taken; beside it: jump there.
+      const on = px >= bar.thumbLeft && px <= bar.thumbLeft + bar.thumbWidth;
+      const grab = on ? px - bar.thumbLeft : bar.thumbWidth / 2;
+      h.setRackScroll(r.rackScrollAtThumb(px - grab));
+      this.g = { kind: 'rackbar', grab };
       return;
     }
     const strip = h.strips?.at(px);
@@ -393,6 +413,9 @@ export class PointerTool {
         g.lastY = py;
         return;
       }
+      case 'rackbar':
+        h.setRackScroll(r.rackScrollAtThumb(px - g.grab));
+        return;
     }
   }
 

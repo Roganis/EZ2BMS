@@ -139,6 +139,14 @@ missing name as a card, grouped by chart-core's port of BmsTWO's
 is used (`sound/usage.ts`). Only the cards on screen are built, and their
 waveforms come from the host in batches (`audio/thumbs.ts`).
 
+The **background rack** beside the lanes shows the same groups, a column
+each, sub-lanes where their sounds overlap (BmsTWO's Classic BMS view). It
+takes the room right of the lanes and strips (at least 40% of the field),
+narrows its sub-lanes to half before anything is hidden, and scrolls the
+rest (`render/geometry.ts`): by the bar under the group names, a sideways
+swipe, Shift+wheel, or the wheel over the names. Closing the drawers gives
+it more room.
+
 Two song-wide changes behave differently on purpose:
 
 - **Replace** points channels at another file. The notes now play

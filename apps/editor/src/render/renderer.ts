@@ -44,6 +44,7 @@ import { GameSkinTextures } from './gameskin';
 import {
   computeLayout,
   laneAtX,
+  RACK_BAR,
   RACK_LABEL,
   Viewport,
   type LaneGeom,
@@ -417,6 +418,43 @@ export class PlayfieldRenderer {
     return hit ? { slice: hit, part: 'body' } : undefined;
   }
 
+  /**
+   * The rack's scrollbar, under its group names, when it is wider than its
+   * window: the track and the thumb (screen pixels).
+   */
+  rackBar():
+    | {
+        left: number;
+        width: number;
+        top: number;
+        height: number;
+        thumbLeft: number;
+        thumbWidth: number;
+      }
+    | undefined {
+    const l = this.layout;
+    if (!l || !this.extras || l.rack.content <= l.rack.width + 0.5) return undefined;
+    const r = l.rack;
+    const k = r.width / r.content;
+    return {
+      left: r.left,
+      width: r.width,
+      top: r.labelH,
+      height: Math.max(4, RACK_BAR * l.scale),
+      thumbLeft: r.left + r.scroll * k,
+      thumbWidth: Math.max(12, r.width * k),
+    };
+  }
+
+  /** The rack scroll (design units) that puts the thumb's left edge at screen x. */
+  rackScrollAtThumb(px: number): number {
+    const l = this.layout;
+    const bar = this.rackBar();
+    if (!l || !bar) return 0;
+    const f = (px - bar.left) / Math.max(1, bar.width - bar.thumbWidth);
+    return Math.max(0, Math.min(1, f)) * this.rackMaxScroll;
+  }
+
   /** How far the rack can scroll, design units (0 when it fits). */
   get rackMaxScroll(): number {
     const l = this.layout;
@@ -616,12 +654,16 @@ export class PlayfieldRenderer {
           t.position.set(x0 + 2, (r.labelH - t.height) / 2);
         }
       }
-      if (r.content > r.width) {
-        // A scrollbar under the labels shows where the window onto the rack is.
-        const k = r.width / r.content;
-        g.rect(r.left + r.scroll * k, r.labelH, r.width * k, 2).fill({
+      const bar = this.rackBar();
+      if (bar) {
+        // Under the names: where the window onto the rack is, to drag.
+        g.rect(bar.left, bar.top, bar.width, bar.height).fill({
+          color: 0x1a2034,
+          alpha: 0.9 * this.extras,
+        });
+        g.roundRect(bar.thumbLeft, bar.top, bar.thumbWidth, bar.height, bar.height / 2).fill({
           color: NEON,
-          alpha: 0.6 * this.extras,
+          alpha: 0.75 * this.extras,
         });
       }
     }

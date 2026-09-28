@@ -1,6 +1,14 @@
 import { columnsFor, modeDef } from '@ez2bms/chart-core';
 import { describe, expect, it } from 'vitest';
-import { computeLayout, laneAtX, RACK_GAP, RACK_SUB, STRIP_W, Viewport } from './geometry';
+import {
+  computeLayout,
+  laneAtX,
+  RACK_GAP,
+  RACK_SUB,
+  RACK_SUB_MIN,
+  STRIP_W,
+  Viewport,
+} from './geometry';
 
 const layout = (
   mode: Parameters<typeof modeDef>[0],
@@ -60,22 +68,35 @@ describe('playfield geometry', () => {
     expect(hi).toBeGreaterThan(960);
   });
 
-  it('lays rack groups side by side and scrolls a rack wider than its share', () => {
-    const groups = Array.from({ length: 40 }, (_, i) => ({ key: `g${i}`, subLanes: 1 + (i % 3) }));
+  it('lays rack groups side by side, in the room beside the lanes, narrowing before it scrolls', () => {
+    const many = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ key: `g${i}`, subLanes: 1 + (i % 3) }));
     const base = {
       width: 1200,
       height: 480,
       columns: columnsFor(modeDef('5k'), 'P1'),
       offModeXs: [],
     };
-    const l = computeLayout({ ...base, rackGroups: groups, extras: 1 });
-    const g = l.rack.groups;
-    expect(g[1]!.left).toBeCloseTo(g[0]!.left + (1 * RACK_SUB + RACK_GAP) * l.scale, 9);
-    expect(g[0]!.width).toBeCloseTo(RACK_SUB * l.scale, 9);
-    // Forty groups do not fit in 40% of the window: it shows a part and scrolls.
-    expect(l.rack.width).toBeLessThanOrEqual(0.4 * 1200 + 1);
-    expect(l.rack.content).toBeGreaterThan(l.rack.width);
-    const far = computeLayout({ ...base, rackGroups: groups, rackScroll: 1e9, extras: 1 });
+    // A few groups: full width, side by side, no scrolling.
+    const few = computeLayout({ ...base, rackGroups: many(4), extras: 1 });
+    const g = few.rack.groups;
+    expect(g[1]!.left).toBeCloseTo(g[0]!.left + (1 * RACK_SUB + RACK_GAP) * few.scale, 9);
+    expect(g[0]!.width).toBeCloseTo(RACK_SUB * few.scale, 9);
+    expect(few.rack.content).toBeCloseTo(few.rack.width, 9);
+    // Forty groups: more than the old 40% share - all the room right of the
+    // lanes - with narrower sub-lanes, and everything shown.
+    const forty = computeLayout({ ...base, rackGroups: many(40), extras: 1 });
+    expect(forty.rack.width).toBeGreaterThan(0.4 * 1200);
+    expect(forty.rack.left + forty.rack.width).toBeLessThanOrEqual(1200);
+    expect(forty.rack.sub).toBeLessThan(RACK_SUB * forty.scale);
+    expect(forty.rack.sub).toBeGreaterThanOrEqual(RACK_SUB_MIN * forty.scale - 1e-9);
+    expect(forty.rack.content).toBeCloseTo(forty.rack.width, 6);
+    expect(forty.scale).toBe(few.scale);
+    // Two hundred: as narrow as they go, and the rest scrolls.
+    const lots = computeLayout({ ...base, rackGroups: many(200), extras: 1 });
+    expect(lots.rack.sub).toBeCloseTo(RACK_SUB_MIN * lots.scale, 9);
+    expect(lots.rack.content).toBeGreaterThan(lots.rack.width);
+    const far = computeLayout({ ...base, rackGroups: many(200), rackScroll: 1e9, extras: 1 });
     expect(far.rack.scroll).toBeCloseTo(far.rack.content - far.rack.width, 6);
     const last = far.rack.groups.at(-1)!;
     expect(last.left + last.width).toBeCloseTo(far.rack.left + far.rack.width, 6);
