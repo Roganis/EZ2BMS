@@ -42,6 +42,8 @@ What a song becomes:
 | the `.ini`                                         | judgement and gauge (`judgement_deltas`, `life_deltas`); with no `.ini`, the engine's defaults                                                   |
 | the level in `song.bin`                            | the chart's level (the `.ini`'s when the table has none)                                                                                         |
 | the song's version bank in `song.bin` (1st ... TT) | its category (otherwise CUSTOM)                                                                                                                  |
+| `system/disc/<key>.abm`                            | the song's disc (`disc.bmp`); a tier's own disc (`<key>-hd` ...) when the song has no NM face                                                    |
+| `system/eyecatch/<key>.abm`                        | the song's eyecatch (`eyecatch.bmp`), taken whole                                                                                                |
 
 The new song gets a **new key**. Publishing under the game's own key would
 replace that song on the wheel, so the key comes from the title with a
@@ -52,6 +54,14 @@ Scroll-speed changes become the chart's own (`x_scroll_events`): the Play
 view scrolls with them, the Timing panel edits them, and they publish. Each
 keeps the track and second word it had, so a cabinet export writes the same
 record back.
+
+The disc and the eyecatch live outside the song's `sound/` folder, where the
+port's song select finds them (either name case; `.abm`, or `.bmp` in older
+installs). They become plain BMPs in the song folder, the same pixels, and
+the song manager's Art tab uses them: both are already the size the game
+draws, so publishing cuts them to what they were. The Art tab also takes a
+`.abm` from the game folder for any song, and makes it a `.bmp` as it comes
+in.
 
 Nothing is dropped, and Issues says what will not publish:
 

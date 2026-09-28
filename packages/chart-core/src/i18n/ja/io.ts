@@ -66,6 +66,8 @@ export const io: Record<keyof typeof en, string> = {
     '暗号化されています。復号キーはアンパック済みのEZ2AC実行ファイル内にあります（{why}）',
   'ez.encrypted.no-exe':
     '暗号化されています。復号キーはアンパック済みのEZ2AC実行ファイル内にあります（実行ファイルが設定されていません）',
+  'ez.art.unreadable':
+    'ゲームの{file}を読み込めません（{error}）。この楽曲にはその画像が入りません',
   'ez.key':
     '楽曲キーは{key}です：「{orig}」と「{derived}」はゲーム自身のキーで、どちらかでパブリッシュするとその楽曲を置き換えてしまいます',
 

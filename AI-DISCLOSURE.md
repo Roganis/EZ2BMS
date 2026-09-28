@@ -639,6 +639,18 @@ on and counts the rest as silent).
 To confirm on the owner's machine: that the magnet feels like BmsTWO's on a
 real song, and whether a measure is the right reach.
 
+The owner also found that imported songs had no disc or eyecatch. The game
+keeps them in `system/disc/` and `system/eyecatch/`, which the import never
+read; the paths are the port's song select's (`select.c`). The import now
+brings both as plain BMPs (`abmToBmp`: the oracle-checked `.abm` decoder,
+then a plain BMP writer), and the Art tab takes `.abm` files. Tested on the
+synthetic game's made-up pictures (unit tests: paths in any case, a tier's
+disc, an unreadable picture said and skipped, every `.abm` version and depth
+kept pixel for pixel; a Rust test that the host decodes the BMP layout
+written; Playwright: the imported song's Art tab draws both, an `.abm`
+dropped in is converted once). Not seen on a real install: the owner's
+`system/disc` names and sizes.
+
 ---
 
 ## Verification status
@@ -745,5 +757,7 @@ real song, and whether a measure is the right reach.
 | The game's songs listed for import on the owner's install (the proved executable)   | the owner                                                | Yes - owner           |
 | Classic placing keys only notes already there; the magnet prefers the picked track  | unit tests, a property, Playwright                       | Yes, in the container |
 | The magnet feels right on a real song                                               | not run                                                  | **No** - owner        |
+| A game song's disc and eyecatch come with it, pixel for pixel                       | unit tests, Rust decode test, Playwright (made-up art)   | Yes, in the container |
+| The owner's real discs and eyecatches import and publish as the game shows them     | not run (no install here)                                | **No** - owner        |
 | The playfield draws in an installed build on Windows (WebView2)                     | not run                                                  | **No** - owner        |
 | The browser preview runs on its host                                                | Chromium under a policy like the host's                  | **No** - owner        |

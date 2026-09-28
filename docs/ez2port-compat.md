@@ -302,6 +302,12 @@ Playwright on the synthetic game folder (`bridge/demo-skin.ts`).
   slots naming one file are one channel, so one voice. Issues counts them.
 - **No v4/v5 BPM correction**: some tools (rizu, the Bible) scale old charts'
   tempo by 0.99723; EZ2PORT does not, and neither does the import.
+- **The disc and eyecatch** are looked for where the port's song select
+  looks (`tools/ez2play/select.c`): `system\disc\<key>.abm`, then a tier's
+  `<key>-hd`/`-shd`/`-ex`, and `system\eyecatch\<key>.bmp` (which the vfs
+  resolves to `.abm`), by the table's key in any case. They are decoded as
+  `ez2/abm.c` decodes (the oracle-checked `decodeAbm`) and written as plain
+  24-bit BMPs; the colour key is the game's drawing, so black stays black.
 
 - **Titles** come from the port's `text/manifest.songs.ini` (beside
   `ez2play`, else `<game>/text`), read at run time: the game itself has

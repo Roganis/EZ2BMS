@@ -176,6 +176,38 @@ mod tests {
     }
 
     #[test]
+    fn a_plain_bmp_decodes_as_the_editor_writes_the_games_art() {
+        // chart-core ez2data/abm.ts encodeBmp (an imported disc or eyecatch):
+        // a BITMAPINFOHEADER, 24-bit, bottom-up, rows padded to 4 bytes.
+        let (w, h, row) = (3u32, 2u32, 12usize);
+        let mut b = vec![0u8; 54 + row * 2];
+        let len = b.len() as u32;
+        b[0..2].copy_from_slice(b"BM");
+        b[2..6].copy_from_slice(&len.to_le_bytes());
+        b[10..14].copy_from_slice(&54u32.to_le_bytes());
+        b[14..18].copy_from_slice(&40u32.to_le_bytes());
+        b[18..22].copy_from_slice(&(w as i32).to_le_bytes());
+        b[22..26].copy_from_slice(&(h as i32).to_le_bytes());
+        b[26..28].copy_from_slice(&1u16.to_le_bytes());
+        b[28..30].copy_from_slice(&24u16.to_le_bytes());
+        b[34..38].copy_from_slice(&((row * 2) as u32).to_le_bytes());
+        let top = [[255, 0, 0], [0, 255, 0], [0, 0, 255]];
+        let bottom = [[255, 255, 255], [0, 0, 0], [9, 8, 7]];
+        // Bottom-up: the bottom row is stored first, each pixel as B, G, R.
+        for (r, px) in [bottom, top].iter().enumerate() {
+            for (x, c) in px.iter().enumerate() {
+                let o = 54 + r * row + x * 3;
+                b[o..o + 3].copy_from_slice(&[c[2], c[1], c[0]]);
+            }
+        }
+        let img = crate::decode(&b).unwrap();
+        assert_eq!((img.w, img.h), (w, h));
+        let rgb: Vec<[u8; 3]> = img.px.chunks(4).map(|p| [p[0], p[1], p[2]]).collect();
+        assert_eq!(rgb, [top, bottom].concat());
+        assert!(img.px.chunks(4).all(|p| p[3] == 255));
+    }
+
+    #[test]
     fn a_box_averages_what_it_covers() {
         let mut src = solid(4, 2, [0, 0, 0, 255]);
         // left half white: halving the width averages pairs

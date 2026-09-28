@@ -64,6 +64,7 @@ export const transfer: Record<keyof typeof en, string> = {
   'import.clash': '{dir}にすでに{file}があります',
   'import.noDest': '新しい楽曲の保存先を選んでください',
   'import.copyFailed': 'キー音{n}個をコピーできませんでした：{file}',
+  'import.artFailed': '楽曲は取り込みましたが、画像は入れられませんでした：{files}',
   'import.done': '{n}譜面をインポートしました - 移せなかった内容は問題タブにあります',
   'import.failed': 'インポートに失敗しました：{error}',
 

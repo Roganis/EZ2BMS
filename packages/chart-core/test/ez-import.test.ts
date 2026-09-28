@@ -8,7 +8,8 @@ import { join } from 'node:path';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { synthGame } from '../src/dev/synthgame';
-import { ezSongSource, memoryGameFs, openGame, type Game } from '../src/io/ez/game';
+import { abmToBmp, decodeAbm, encodeBmp, fnv1a64Hex } from '../src/ez2data/abm';
+import { ezSongSource, gameArtPaths, memoryGameFs, openGame, type Game } from '../src/io/ez/game';
 import { f32Decimal, gamePath, importEzSong } from '../src/io/ez/import';
 import { EZ_NOTE, nameField, writeEzff, type EzffRecord } from '../src/io/ez/ezff';
 import { serializeBmson } from '../src/io/bmson/serialize';
@@ -177,6 +178,172 @@ describe('importing a song', () => {
     expect(imp.notes.find((n) => n.rule === 'import-skipped')!.message).toMatch(/encrypted/);
   });
 });
+
+describe("the song's disc and eyecatch", () => {
+  it('come from system/disc and system/eyecatch, in any case, as plain BMPs', async () => {
+    const g = await game();
+    const src = await ezSongSource(g, g.songs[0]!);
+    expect([src.art?.disc?.path, src.art?.eyecatch?.path]).toEqual([
+      'system/disc/alpha.abm',
+      'system/Eyecatch/ALPHA.abm',
+    ]);
+    const imp = importEzSong(src);
+    expect(imp.images.map((i) => [i.to, i.from])).toEqual([
+      ['disc.bmp', 'system/disc/alpha.abm'],
+      ['eyecatch.bmp', 'system/Eyecatch/ALPHA.abm'],
+    ]);
+    // The pictures the game has, pixel for pixel.
+    for (const i of imp.images) {
+      const bmp = decodeBmp(i.bytes);
+      const abm = decodeAbm(src.art![i.to === 'disc.bmp' ? 'disc' : 'eyecatch']!.bytes);
+      expect([bmp.width, bmp.height]).toEqual([abm.width, abm.height]);
+      expect(fnv1a64Hex(bmp.rgba)).toBe(fnv1a64Hex(abm.rgba));
+    }
+    // The eyecatch is already the shape the port draws: stretched is as it is.
+    expect(imp.song.disc).toEqual({ src: 'disc.bmp' });
+    expect(imp.song.eyecatch).toEqual({ src: 'eyecatch.bmp', mode: 'stretch' });
+    expect(parseSongFile(serializeSongFile(imp.song)).song.disc).toEqual({ src: 'disc.bmp' });
+  });
+
+  it("take a tier's disc when there is no NM face, and leave out what the game lacks", async () => {
+    const g = await game();
+    const src = await ezSongSource(g, g.songs[1]!);
+    expect(src.art?.disc?.path).toBe('system/disc/beta-hd.bmp');
+    expect(src.art?.eyecatch).toBeUndefined();
+    const imp = importEzSong(src);
+    // Already a plain BMP: copied as it is.
+    expect(imp.images).toEqual([
+      { to: 'disc.bmp', bytes: src.art!.disc!.bytes, from: 'system/disc/beta-hd.bmp' },
+    ]);
+    expect(imp.song.eyecatch).toBeUndefined();
+  });
+
+  it('says so when a picture cannot be read, and imports the song without it', async () => {
+    const g = synthGame();
+    g.files.set('system/disc/alpha.abm', new Uint8Array([0x41, 0x57, 1, 2, 3]));
+    const manifest = new TextDecoder().decode(g.files.get('text/manifest.songs.ini'));
+    const game2 = await openGame(memoryGameFs(g.files), g.exe, manifest);
+    const imp = importEzSong(await ezSongSource(game2, game2.songs[0]!));
+    expect(imp.images.map((i) => i.to)).toEqual(['eyecatch.bmp']);
+    expect(imp.song.disc).toBeUndefined();
+    const note = imp.notes.find((n) => n.rule === 'import-art')!;
+    expect(note.severity).toBe('warning');
+    expect(note.message).toMatch(/system\/disc\/alpha\.abm/);
+    expect(imp.charts).toHaveLength(3);
+  });
+
+  it('look where the port looks, NM face first', () => {
+    expect(gameArtPaths('abc')).toEqual({
+      disc: [
+        'system/disc/abc.abm',
+        'system/disc/abc.bmp',
+        'system/disc/abc-hd.abm',
+        'system/disc/abc-hd.bmp',
+        'system/disc/abc-shd.abm',
+        'system/disc/abc-shd.bmp',
+        'system/disc/abc-ex.abm',
+        'system/disc/abc-ex.bmp',
+      ],
+      eyecatch: ['system/eyecatch/abc.abm', 'system/eyecatch/abc.bmp'],
+    });
+  });
+});
+
+describe('.abm to BMP', () => {
+  it('writes the BMP the host decodes (ez2bms-media art.rs, the same 3x2 picture)', () => {
+    const top = [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255];
+    const bottom = [255, 255, 255, 255, 0, 0, 0, 255, 9, 8, 7, 255];
+    const bmp = encodeBmp(Uint8Array.from([...top, ...bottom]), 3, 2);
+    const header = [
+      ...[0x42, 0x4d, 78, 0, 0, 0, 0, 0, 0, 0, 54, 0, 0, 0],
+      ...[40, 0, 0, 0, 3, 0, 0, 0, 2, 0, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, 24, 0, 0, 0],
+      ...new Array<number>(16).fill(0),
+    ];
+    // Bottom row first, B G R, each row padded to 12 bytes.
+    const rows = [
+      255, 255, 255, 0, 0, 0, 7, 8, 9, 0, 0, 0, 0, 0, 255, 0, 255, 0, 255, 0, 0, 0, 0, 0,
+    ];
+    expect([...bmp]).toEqual([...header, ...rows]);
+  });
+
+  it('keeps every pixel of every version and depth, in a header any reader takes', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 6 }),
+        fc.integer({ min: 1, max: 9 }),
+        fc.integer({ min: 1, max: 7 }),
+        fc.constantFrom<16 | 24 | 32>(16, 24, 32),
+        fc.boolean(),
+        fc.uint8Array({ minLength: 1024, maxLength: 1024 }),
+        (version, w, h, bpp, topDown, seed) => {
+          const row = Math.floor((w * bpp + 31) / 32) * 4;
+          const abm = synthAbm(version, w, h, bpp, topDown, seed.slice(0, row * h));
+          const bmp = abmToBmp(abm);
+          const dv = new DataView(bmp.buffer, bmp.byteOffset, bmp.byteLength);
+          expect([bmp[0], bmp[1]]).toEqual([0x42, 0x4d]);
+          expect(dv.getUint32(2, true)).toBe(bmp.length);
+          expect([dv.getUint32(0x0a, true), dv.getUint32(0x0e, true)]).toEqual([54, 40]);
+          expect([
+            dv.getInt32(0x12, true),
+            dv.getInt32(0x16, true),
+            dv.getUint16(0x1c, true),
+          ]).toEqual([w, h, 24]);
+          const a = decodeAbm(abm);
+          const b = decodeBmp(bmp);
+          for (let i = 3; i < a.rgba.length; i += 4) a.rgba[i] = 255;
+          expect(fnv1a64Hex(b.rgba)).toBe(fnv1a64Hex(a.rgba));
+        },
+      ),
+      { numRuns: 80 },
+    );
+  });
+});
+
+/** A synthetic .abm: a BMP with its header masked by the version's table (as ez2data.oracle.test.ts). */
+function synthAbm(
+  version: number,
+  w: number,
+  h: number,
+  bpp: number,
+  topDown: boolean,
+  pixels: Uint8Array,
+): Uint8Array {
+  const XOR = [
+    [0x56fe, 0x0831, 0x1019, 0x1120],
+    [0x45ae, 0x9af1, 0x1d1b, 0x67be],
+    [0x85be, 0x96ec, 0xfdeb, 0x67ae],
+    [0x95ab, 0x45bb, 0xae12, 0x78ef],
+    [0x23ff, 0xbdc9, 0x1f01, 0xa97f],
+    [0x109a, 0xcfa1, 0x51ae, 0xb18f],
+  ][version - 1]!;
+  const out = new Uint8Array(0x36 + pixels.length);
+  const dv = new DataView(out.buffer);
+  out[0] = 0x41;
+  out[1] = 0x57;
+  dv.setUint32(0x0a, (0x36 ^ XOR[0]!) >>> 0, true);
+  dv.setUint32(0x0e, 40, true);
+  dv.setUint32(0x12, (w ^ XOR[1]!) >>> 0, true);
+  dv.setUint32(0x16, ((topDown ? -h : h) ^ XOR[2]!) >>> 0, true);
+  dv.setUint32(0x1c, (bpp ^ XOR[3]!) >>> 0, true);
+  out.set(pixels, 0x36);
+  return out;
+}
+
+/** A plain 24-bit bottom-up BMP read back (what abmToBmp writes), top-down RGBA. */
+function decodeBmp(b: Uint8Array): { width: number; height: number; rgba: Uint8Array } {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const off = dv.getUint32(0x0a, true);
+  const w = dv.getInt32(0x12, true);
+  const h = dv.getInt32(0x16, true);
+  const row = Math.floor((w * 24 + 31) / 32) * 4;
+  const rgba = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const i = off + (h - 1 - y) * row + x * 3;
+      rgba.set([b[i + 2]!, b[i + 1]!, b[i]!, 255], (y * w + x) * 4);
+    }
+  return { width: w, height: h, rgba };
+}
 
 describe('helpers', () => {
   it('writes f32 values as their shortest decimal', () => {

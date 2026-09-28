@@ -83,3 +83,7 @@ English, Korean and Japanese.
   track of the last note keyed or clicked first, then any, within a measure.
   Clicking a note picks its sound. Recorded takes follow the same rule
   (within half a grid step). Splitting stays the right-click.
+- A song imported from the game comes with its disc and eyecatch. The game
+  keeps them outside the song's folder (`system/disc`, `system/eyecatch`),
+  where the import did not look, so the song manager had none. The Art tab
+  also takes the game's `.abm` pictures now.

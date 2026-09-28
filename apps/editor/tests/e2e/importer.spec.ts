@@ -1,5 +1,6 @@
 // Importing songs (the wizard, state/importer.svelte.ts): a song of the
-// made-up EZ2AC folder (?game: chart-core dev/synthgame.ts), a Shift-JIS BMS
+// made-up EZ2AC folder (?game: chart-core dev/synthgame.ts) with its disc and
+// eyecatch, a Shift-JIS BMS
 // folder with a #RANDOM, and one written beside its BMS files. The reading
 // itself is chart-core's and tested there (ez-import, bms); this is the
 // path from the start screen to an open song, and what Issues then says.
@@ -60,6 +61,44 @@ test('a song of the EZ2AC folder becomes a song folder: charts, keysounds, key, 
     return String.fromCharCode(...b.subarray(0, 4));
   });
   expect(riff).toBe('RIFF');
+  // The game's disc and eyecatch (system/disc, system/eyecatch) as plain BMPs,
+  // named by the song file - and drawn in the song manager's Art tab.
+  const art = await page.evaluate(async () => {
+    const a = (window as unknown as W).__ez2bms;
+    const head = async (f: string) =>
+      String.fromCharCode(...(await a.backend.readFile(`/songs/Alpha Song/${f}`)).subarray(0, 2));
+    return {
+      disc: a.project.sidecar.disc,
+      eyecatch: a.project.sidecar.eyecatch,
+      heads: [await head('disc.bmp'), await head('eyecatch.bmp')],
+      images: a.project.images,
+    };
+  });
+  expect(art).toEqual({
+    disc: { src: 'disc.bmp' },
+    eyecatch: { src: 'eyecatch.bmp', mode: 'stretch' },
+    heads: ['BM', 'BM'],
+    images: ['disc.bmp', 'eyecatch.bmp'],
+  });
+  await page.getByTestId('open-song').click();
+  await page.getByTestId('song-tab-art').click();
+  for (const card of ['disc', 'eyecatch'] as const) {
+    await expect(page.getByTestId(`art-${card}`)).not.toContainText('not in the song folder');
+    await expect
+      .poll(() =>
+        page
+          .getByTestId(`art-${card}`)
+          .getByTestId('art-preview')
+          .evaluate((c: HTMLCanvasElement) => {
+            const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+            let n = 0;
+            for (let i = 0; i < d.length; i += 16) if (d[i]! + d[i + 1]! + d[i + 2]! > 60) n++;
+            return n / (d.length / 16);
+          }),
+      )
+      .toBeGreaterThan(0.2);
+  }
+  await page.keyboard.press('Escape');
   // What could not come across is in Issues, until forgotten.
   await page.getByTestId('lint').click();
   const issues = page.getByTestId('issues');

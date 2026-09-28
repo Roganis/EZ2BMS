@@ -3,6 +3,7 @@
 // browser build cuts with a canvas (the desktop app with ez2bms-media, whose
 // bytes chart-core's art.oracle test checks against EZ2PORT's importer).
 
+import { synthArt } from '@ez2bms/chart-core';
 import { expect, test, type Page } from '@playwright/test';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the ?e2e hook is the live App */
@@ -153,4 +154,33 @@ test('an image dropped on the art page is imported and can be chosen', async ({ 
   await expect.poll(() => lit(page, 'disc')).toBeGreaterThan(0.5);
   // 300 px across shrinks to the 256 disc: nothing to warn about.
   await expect(page.getByTestId('art-disc')).not.toContainText('Upscaled');
+});
+
+test("the game's own .abm pictures come in as BMPs, once", async ({ page }) => {
+  await openArt(page);
+  // A made-up picture in the game's format (chart-core dev/synthgame.ts).
+  const abm = [...synthArt(64, 64, 5, 'abm')];
+  const first = await page.evaluate(async (bytes) => {
+    const a = (window as unknown as W).__ez2bms;
+    await a.backend.writeBytes('/game-art/GameDisc.abm', Uint8Array.from(bytes), false);
+    return a.art.import(['/game-art/GameDisc.abm']);
+  }, abm);
+  expect(first).toEqual(['GameDisc.bmp']);
+  await expect(page.getByText('Imported 1 image')).toBeVisible();
+  // The same picture again is the same file, not a copy.
+  const again = await page.evaluate(() =>
+    (window as unknown as W).__ez2bms.art.import(['/game-art/GameDisc.abm']),
+  );
+  expect(again).toEqual(['GameDisc.bmp']);
+  const files = await page.evaluate(async () => {
+    const a = (window as unknown as W).__ez2bms;
+    const b = await a.backend.readFile(`${a.project.dir}/GameDisc.bmp`);
+    return { head: String.fromCharCode(b[0], b[1]), images: a.project.images as string[] };
+  });
+  expect(files.head).toBe('BM');
+  expect(files.images.filter((f) => /gamedisc/i.test(f))).toEqual(['GameDisc.bmp']);
+  const source = page.getByTestId('art-disc').getByTestId('art-source');
+  await source.selectOption('GameDisc.bmp');
+  await expect(page.getByTestId('art-disc')).toContainText('64x64');
+  await expect.poll(() => lit(page, 'disc')).toBeGreaterThan(0.2);
 });

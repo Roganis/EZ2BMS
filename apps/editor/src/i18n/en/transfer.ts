@@ -73,6 +73,9 @@ export const transfer = {
   // {file}: the first that failed, followed by ... when there are more.
   'import.copyFailed':
     '{n, plural, one {{n} keysound} other {{n} keysounds}} could not be copied: {file}',
+  // The game's disc or eyecatch picture could not be written into the new song folder; {files}
+  // names each with the reason.
+  'import.artFailed': 'Imported, but its pictures could not be written: {files}',
   'import.done':
     'Imported {n, plural, one {{n} chart} other {{n} charts}} - Issues says what could not come across',
   'import.failed': 'Import failed: {error}',

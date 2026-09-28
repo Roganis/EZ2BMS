@@ -24,12 +24,18 @@
 //   songs' folders), one sound channel per file.
 // - Level from the mode's song.bin, else the .ini; judgement and gauge from
 //   the .ini (the engine's defaults when there is none).
+// - Art: the game keeps a song's disc and eyecatch outside its sound folder,
+//   under `system/disc/` and `system/eyecatch/` (game.ts gameArtPaths). They
+//   come across as plain BMPs (`abmToBmp`) named by the song file, the disc
+//   as it is and the eyecatch stretched - both already the size the port
+//   draws, so publishing cuts them to what they were.
 //
 // Everything with no bmson home is kept rather than dropped - other record
 // types and the header's fields in `x_ez`/`x_ez_records` - and said, as notes
 // Issues shows with the chart.
 
 import { deltasOfIni, parseSongIni, type ParsedSongIni } from '../../engine/songini';
+import { abmToBmp } from '../../ez2data/abm';
 import { ez2Decrypt, looksPlaintext } from '../../ez2data/crypt';
 import type { Gds } from '../../ez2data/gds';
 import { decodeCp949 } from '../../ez2data/initext';
@@ -98,6 +104,23 @@ export interface EzSongSource {
   locate(path: string): string | undefined;
   /** The game's `sound/` folders: shipped keys, which a new key must not be. */
   shipped: readonly string[];
+  /** The song's disc and eyecatch as the game has them (.abm, or a plain .bmp). */
+  art?: { disc?: GameArtFile; eyecatch?: GameArtFile };
+}
+
+export interface GameArtFile {
+  /** Game-relative, as on disk. */
+  path: string;
+  bytes: Uint8Array;
+}
+
+/** An image the import writes into the song folder. */
+export interface SongImage {
+  /** Name in the song folder. */
+  to: string;
+  bytes: Uint8Array;
+  /** The game file it was made from. */
+  from: string;
 }
 
 export interface ImportedChart {
@@ -125,6 +148,8 @@ export interface EzSongImport {
   song: SongFile;
   charts: ImportedChart[];
   copies: SampleCopy[];
+  /** The disc and eyecatch, made from the game's. */
+  images: SongImage[];
   /** About the song as a whole (charts left out, why). */
   notes: OpenNote[];
 }
@@ -208,6 +233,26 @@ export function importEzSong(src: EzSongSource): EzSongImport {
     key: origKey,
     charts: Object.fromEntries(charts.map((c) => [c.file, c.from])),
   };
+  const images: SongImage[] = [];
+  const art = (kind: 'disc' | 'eyecatch', f: GameArtFile | undefined) => {
+    if (!f) return undefined;
+    try {
+      const to = `${kind}.bmp`;
+      images.push({ to, bytes: abmToBmp(f.bytes), from: f.path });
+      return to;
+    } catch (e) {
+      songNotes.push({
+        rule: 'import-art',
+        severity: 'warning',
+        ...saying(said('ez.art.unreadable', { file: f.path, error: errorSaid(e) })),
+      });
+      return undefined;
+    }
+  };
+  const disc = art('disc', src.art?.disc);
+  if (disc) song.disc = { src: disc };
+  const eyecatch = art('eyecatch', src.art?.eyecatch);
+  if (eyecatch) song.eyecatch = { src: eyecatch, mode: 'stretch' };
   if (key !== deriveSongKey(title)) {
     songNotes.push({
       rule: 'import-key',
@@ -220,7 +265,7 @@ export function importEzSong(src: EzSongSource): EzSongImport {
     ...charts.flatMap((c) => c.notes.map((n) => ({ chart: c.file, ...n }))),
   ];
   if (noteList.length) song.source.notes = noteList;
-  return { key, song, charts, copies: samples.copies(), notes: songNotes };
+  return { key, song, charts, copies: samples.copies(), images, notes: songNotes };
 }
 
 /** A key from the title that names no shipped song (a digit added until it is free). */

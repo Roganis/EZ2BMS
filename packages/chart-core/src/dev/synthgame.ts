@@ -4,6 +4,7 @@
 // game content is never committed; tests that need a real install read
 // EZ2_ROOT/EZ2_EXE.)
 
+import { encodeAbm, encodeBmp } from '../ez2data/abm';
 import { SONGDB_TABLE_VA, songdbCrypt, writeSongdb, type SongEntry } from '../ez2data/songdb';
 import { nameField, writeEzff, type EzffChart, type EzffRecord } from '../io/ez/ezff';
 import type { EzTables } from '../io/ez/import';
@@ -167,6 +168,25 @@ function ezff(
   });
 }
 
+/** A made-up picture: a gradient, a ring and the seed's tint, as an .abm or a plain .bmp. */
+export function synthArt(w: number, h: number, seed: number, as: 'abm' | 'bmp'): Uint8Array {
+  const rgba = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const o = (y * w + x) * 4;
+      const d = Math.hypot(x - w / 2, y - h / 2) / (Math.min(w, h) / 2);
+      const ring = Math.abs(d - 0.7) < 0.08 ? 255 : 0;
+      rgba[o] = (x * 255) / w;
+      rgba[o + 1] = Math.max(ring, (y * 255) / h);
+      rgba[o + 2] = (seed * 70) % 256;
+      rgba[o + 3] = 255;
+    }
+  if (as === 'bmp') return encodeBmp(rgba, w, h);
+  const rgb = new Uint8Array(w * h * 3);
+  for (let i = 0; i < w * h; i++) rgb.set(rgba.subarray(i * 4, i * 4 + 3), i * 3);
+  return encodeAbm(rgb, w, h);
+}
+
 const f32bits = (v: number) => {
   const b = new DataView(new ArrayBuffer(4));
   b.setFloat32(0, v, true);
@@ -193,7 +213,10 @@ const entry = (key: string, levels: number[], bpm: number): SongEntry => ({
  *   slot whose file is missing, a note on an unlisted slot, a sample of
  *   `Beta`'s by relative path) and HD (no .ini: the engine's defaults, the
  *   level from song.bin); 7StreetMix NM (v6).
- * - `Beta`: StreetMix NM (v5) with a legacy note-name .ezi.
+ *   Its disc (`system/disc/alpha.abm`) and eyecatch
+ *   (`system/Eyecatch/ALPHA.abm`, another case) are made-up gradients.
+ * - `Beta`: StreetMix NM (v5) with a legacy note-name .ezi; only an HD
+ *   disc, as a plain BMP (`system/disc/beta-hd.bmp`), and no eyecatch.
  * - `AlphaSong`: a folder with no charts, so "alphasong" is a shipped key.
  */
 export function synthGame(): SynthGame {
@@ -225,6 +248,9 @@ export function synthGame(): SynthGame {
       'line = "(Synthetic)" | 246,27,6 | bold | c5c5c5 | right | 236\r\n' +
       '[system/songname/beta.abm]\r\nline = "Beta" | 246,22,9 | bold | ffffff | right | 236\r\n',
   );
+  put('system/disc/alpha.abm', synthArt(128, 128, 1, 'abm'));
+  put('system/Eyecatch/ALPHA.abm', synthArt(128, 64, 2, 'abm'));
+  put('system/disc/beta-hd.bmp', synthArt(96, 96, 3, 'bmp'));
   put('sound/alpha/kick.ssf', synthSsf(4410, 1));
   put('sound/alpha/snare.ssf', synthSsf(6615, 2));
   put('sound/alpha/pad.ssf', synthSsf(44100 * 3, 3));

@@ -64,6 +64,7 @@ export const transfer: Record<keyof typeof en, string> = {
   'import.clash': '{dir}에 이미 {file} 파일이 있습니다',
   'import.noDest': '새 곡을 둘 곳을 고르세요',
   'import.copyFailed': '키음 {n}개를 복사하지 못했습니다: {file}',
+  'import.artFailed': '곡은 가져왔지만 그림은 넣지 못했습니다: {files}',
   'import.done': '채보 {n}개를 가져왔습니다 - 옮기지 못한 내용은 문제 탭에 있습니다',
   'import.failed': '가져오지 못했습니다: {error}',
 
