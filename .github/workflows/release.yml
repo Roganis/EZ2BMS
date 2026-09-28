@@ -92,6 +92,21 @@ jobs:
           # Not a pre-release: once published by hand, installed copies update to it.
           prerelease: false
           includeUpdaterJson: true
+      # The AppImage must not carry libwayland-client. Its copy from the build
+      # machine (Ubuntu 22.04, Wayland 1.20) loads before the host's, and a
+      # newer host Mesa's EGL needs symbols it lacks (Arch, Mesa 26:
+      # wl_fixes_interface and two more), so EGL does not load and WebKit
+      # aborts: "Could not create surfaceless EGL display: EGL_BAD_ALLOC". The
+      # linuxdeploy that Tauri CLI 2.12 uses leaves it out; this keeps it out.
+      - if: runner.os == 'Linux'
+        working-directory: target/release/bundle/appimage
+        run: |
+          ./*.AppImage --appimage-extract > /dev/null
+          if ls squashfs-root/usr/lib | grep -E '^libwayland-client\.so'; then
+            echo "::error::the AppImage bundles libwayland-client (see release.yml)"
+            exit 1
+          fi
+          rm -rf squashfs-root
       # Every run keeps what it built on its page (without a tag, tauri-action
       # only builds, and the files would be lost with the runner).
       - uses: actions/upload-artifact@v4

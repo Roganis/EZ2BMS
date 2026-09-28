@@ -62,6 +62,9 @@ English, Korean and Japanese.
   switch in view down to the smallest window (960 px), hiding the name,
   time and zoom first; the open chart's button is scrolled into view.
 - Touchscreens: two fingers scroll the chart and pinch its zoom.
+- The AppImage starts on up-to-date distributions (Arch with Mesa 26): it
+  no longer carries its own libwayland-client, which was too old for the
+  system's graphics drivers and made it abort at start.
 - Sound on Linux when ALSA's default device does not open (an ALSA
   configuration line newer alsa-lib rejects): the other outputs are tried,
   PipeWire's and PulseAudio's first, and the message names each one's error.

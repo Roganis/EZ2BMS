@@ -65,6 +65,20 @@ The `.deb` does not update itself (Linux packages are updated by the
 package manager); on a `.deb` install the app offers the release page
 instead.
 
+## The AppImage and the host's graphics libraries
+
+An AppImage carries the libraries of the machine it was built on (Ubuntu
+22.04), and they load before the host's. The host's graphics drivers
+(Mesa) are never carried, but they link some of the same libraries: when
+the carried copy is older than the driver needs, the driver does not load
+and WebKit aborts at start ("Could not create surfaceless EGL display").
+`libwayland-client` did that on Arch (Mesa 26 needs symbols Wayland 1.20
+lacks); the linuxdeploy of Tauri CLI 2.12 leaves it out, and the release
+workflow fails if it comes back. To check a new AppImage against a
+distribution's Mesa: extract both, and compare the symbols Mesa's
+`libEGL_mesa`, `libgallium-*` and `libgbm` need from each library the
+AppImage carries (`nm -D --undefined-only` against `nm -D --defined-only`).
+
 ## A build to try, without a release
 
 Actions → **Release** → **Run workflow**, on the branch to try. With no tag
