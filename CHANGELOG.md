@@ -100,3 +100,9 @@ English, Korean and Japanese.
   game does; the Art tab's disc card has a button per difficulty. Published
   songs carry them too, for EZ2PORT to show once it reads them (it shows the
   NM disc for every difficulty of a package so far).
+- Smoother playing. The stem strips were painted again on every frame, the
+  lines and flags rebuilt and the labels laid out afresh, leaving garbage
+  the page had to stop and collect; the playfield now does a third to a half
+  of the work per frame and leaves about a quarter of the garbage. The sound
+  engine's clock also reaches the page less often, and not at all while
+  nothing plays.

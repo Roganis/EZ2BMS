@@ -660,6 +660,35 @@ wheel preview as the port's `select.c` shows them and written into packages
 under keys EZ2PORT does not read yet (a request in `ez2port-requests.md`;
 the oracle checks the port reads such a package as before).
 
+### Playing without stutter, 2026-09-28
+
+The owner saw the editor stutter a few seconds into playing. The work was
+measured before it was changed: CPU and allocation profiles of headless
+Chromium playing the demo song and the 50k-note bench, and the same pages in
+WebKitGTK 2.52 under Xvfb (the Linux app's engine, driven by a small script
+outside the repository), with JavaScriptCore's own collector log. What they
+found and what each change saved is in `docs/perf-log.md` (2026-09-28): stem
+strips painted and uploaded every frame, every Graphics layer triangulated
+again, labels laid out afresh, a channel lookup per rack chip, colours
+converted even when unchanged, and the host sending its clock 125 times a
+second, playing or not.
+
+The strips now paint past the screen and slide; moving lines and marks are
+pooled sprites; unchanged layers are not rebuilt; labels keep their objects
+(`render/pool.ts`, `render/renderer.ts`). The clock goes to the page on
+start, stop and seek and every 32 ms while playing (`src-tauri`, and the
+browser build's mock alike).
+
+Tests: unit tests for the pools (a recorded layer replays in order and is
+left alone while unchanged; rectangles; labels kept by their words), the
+whole Playwright suite (the strip test reads the canvas where it now slides
+to), screenshots of the playfield compared with the old build's at four
+spots on three songs (equal within 6 levels in 255), and clippy for the
+host. The clock's new cadence was not run in the desktop app here.
+
+To confirm on the owner's machine: playing is smooth on WebKitGTK and
+WebView2 with a real GPU, strips included.
+
 ---
 
 ## Verification status
@@ -716,7 +745,7 @@ the oracle checks the port reads such a package as before).
 | Slicing never changes what autoplay plays                                           | exact model, property test, real mixer                   | Yes, in the container |
 | A chopped stem packages to the port importer's own slices                           | oracle, random grids, resolutions, tempi                 | Yes, in the container |
 | Strips draw each slice where it plays; gestures cut, move and key                   | Playwright, browser build (made-up stem)                 | Yes, in the container |
-| Strips stay smooth while playing on WebKitGTK / WebView2                            | headless Chromium only                                   | **No** - owner        |
+| Strips stay smooth while playing on WebKitGTK / WebView2                            | headless Chromium; WebKitGTK under Xvfb (software GL)    | **No** - owner        |
 | Hovering a slice plays it promptly on a real device                                 | not run (no audio device here)                           | **No** - owner        |
 | A song with long stems reopens from the disk cache (desktop app)                    | Rust tests only                                          | **No** - owner        |
 | The game's `.ezi`/`.ini`/`song.bin` read as EZ2PORT reads them                      | oracle, random files and tables                          | Yes, in the container |

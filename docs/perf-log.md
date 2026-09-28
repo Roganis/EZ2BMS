@@ -299,3 +299,80 @@ Reading:
 - The log (M9.1) writes a few lines a session: the start, the update check,
   and errors. Its cost is a file append on the host, off the editor's
   frame.
+
+## 2026-09-28 - stutter while the chart plays
+
+The owner saw the editor stutter a few seconds into playing. Each figure
+below is the old build against the new, in this container, playing from the
+top in the Edit view: the demo song (one stem strip) and the 50k-note bench
+(`?bench`, three strips).
+
+Headless Chromium 141 (SwiftShader), JS only, 10 s of playing (the old build
+once, the new three times):
+
+| What                                     | Before        | After                |
+| ---------------------------------------- | ------------- | -------------------- |
+| Playfield draw, demo (median / p95)      | 2.3 / 4.4 ms  | 1.1-1.3 / 3.2-4.5 ms |
+| Playfield draw, bench (median / p95)     | 3.8 / 6.8 ms  | 1.4 / 3.3-5.1 ms     |
+| Garbage made while playing, demo / bench | 9.9 / 15 MB/s | 2.4 / 3.1 MB/s       |
+| Heap drops (collections) in 10 s, demo   | 23            | 5-6                  |
+| Script time per second of playing, bench | 78 ms         | 40 ms                |
+
+WebKitGTK 2.52 (JavaScriptCore, the Linux app's engine) under Xvfb with
+software GL, the draw per frame over 15 s of playing, two runs:
+
+| What                 | Before           | After       |
+| -------------------- | ---------------- | ----------- |
+| Demo (median / p95)  | 7-8 / 11-12 ms   | 2 / 6 ms    |
+| Bench (median / p95) | 10-19 / 16-26 ms | 3 / 7-10 ms |
+
+`apps/editor/tests/e2e/perf.spec.ts`, one run each (median draw, ms): Edit
+zoom on the bench 6.7 → 4.4, zoomed out 7.3 → 4.6, the rack scrolling 4.1 →
+3.8, three strips while the cursor runs 3.3 → 1.6 (none: 1.1 → 0.7), the
+bench jumping 1 000 pulses a frame 6.1 → 4.3, the Play field 1.1 → 0.8.
+
+Where the time and the garbage went (CPU and allocation profiles):
+
+- **Stem strips** were painted and uploaded again on every frame the
+  cursor moved: 35-45 % of a frame's JS on the bench, and most of the
+  garbage (18-28 MB in 8 s, from working out rows). The canvas now reaches
+  past the screen - a screen ahead while playing, half a screen each way
+  otherwise - and slides; it is painted again once that has gone by, one
+  strip a frame (about 2.5 ms on the bench, 3 ms for the demo's 1 280-row
+  strip). Frames that paint none spend 0.1-0.2 ms on strips. A strip at
+  rest, slid by part of a pixel, is painted again where it stands:
+  screenshots match the old build's within 6 levels in 255.
+- **Graphics** (lanes, grid, flags, strip lines, the overlay) were cleared
+  and triangulated again every frame. The grid, strip marks and hold ticks
+  are sprites now; the other layers are recorded, compared with the last
+  frame, and rebuilt only when they differ.
+- **Labels** were handed out in draw order, so each measure scrolling off
+  gave every label new words, laid out and measured again (~0.4 ms a
+  frame). A label now keeps its object while its words stay.
+- Smaller: rack chips looked their channel up in the whole channel list
+  (1 500 on the bench) per chip per frame; Pixi's tint setter makes an array
+  even for the same colour; the top bar's readouts re-ran the whole bar's
+  template each frame (now a snippet of their own).
+- **The host's clock** sent a snapshot every 8 ms, playing or not. Tauri
+  hands a small channel message to the page as a script the webview
+  compiles and runs on the page's main thread: 125 a second. It now sends
+  one at once on start, stop and seek, then one every 32 ms while playing,
+  and none while stopped; the page extrapolates between them as before.
+  Not measured here: the desktop app's page cannot be driven in this
+  container.
+
+Tried and dropped: giving the busiest layers their own Pixi render groups
+(showing or hiding a sprite rebuilds its group's draw list, and one list for
+the stage made that every layer): no difference in three runs each.
+
+Reading:
+
+- In JavaScriptCore the collector runs alongside the page and paused it
+  under 10 ms here (`JSC_logGC=1`); the gain there is the frames' own JS,
+  three to four times less.
+- The long frames left in WebKitGTK here (250-330 ms, once or twice in 15 s,
+  before as after) were one `drawElements` call inside Mesa's software
+  rasteriser, which compiles a pipeline the first time a new GL state is
+  drawn: an artefact of software GL, to look for on a real GPU.
+- To confirm on the owner's machine: playing with strips on WebKitGTK and
+  WebView2 with a real GPU.

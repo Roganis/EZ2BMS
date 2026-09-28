@@ -94,6 +94,20 @@ clock instead of the user) and the zoom. Flipping between them is an animation,
 not a different renderer. A chart's scroll changes (M8) rescale Play's zoom
 as a whole, as EZ2PORT's live rate does; the axis stays linear.
 
+## Drawing while playing
+
+While the chart plays, the playfield draws every frame, so a frame's cost is
+what it does and what it throws away: garbage is collected later, in pauses
+the page does not choose. What moves with the chart is therefore moved, not
+rebuilt (`render/pool.ts`): notes, grid lines, strip marks and hold ticks
+are pooled sprites (a rectangle is Pixi's white texture, scaled and tinted);
+a label keeps its object while its words stay the same, since new words are
+laid out and measured again; a Graphics layer that looks as it did last frame
+(the lanes, the rack's columns, the judge line) is recorded and compared, not
+triangulated again; tints are set only when they change. The stem strips
+slide (below). What each of these saved is in
+[`perf-log.md`](perf-log.md) (2026-09-28).
+
 ## Audio
 
 `crates/ez2bms-audio` plays what chart-core compiles; it makes no timing or
@@ -122,7 +136,11 @@ voice decisions of its own.
   ring. Playing from any frame picks up every sound already under way,
   mid-sample, with voice cuts applied.
 - **Clock.** Each buffer publishes frame, host time and output latency through
-  a seqlock; `heard_frame_at(now)` is what the speaker is playing.
+  a seqlock; `heard_frame_at(now)` is what the speaker is playing. The page
+  gets a snapshot at once when playing starts, stops or seeks and every
+  32 ms while it plays, none while stopped (`audio_clock_stream`), and
+  extrapolates between them at the device rate: each message is a script
+  the webview runs on the page's main thread, between its frames.
 - **Backends.** `cpal` (feature) for the device, `null` for a real-time clock
   without one; `offline` renders through the same renderer for previews,
   bounces and tests.
@@ -186,7 +204,9 @@ which EZ2PORT plays as consecutive cuts of the file ([slicing](slicing.md)).
 - **The strip.** `render/striprows.ts` works out, per pixel row, the stretch
   of the file playing there and its slice; `render/strip.ts` paints the rows
   on a canvas shown as one texture in the playfield, again only when
-  something it shows changed. Waveform tiles (`audio/peaktiles.ts`) come from
+  something it shows changed. The canvas reaches past the screen (while
+  playing, a screen ahead) and slides with the cursor, so playing paints it
+  once a screen rather than every frame, one strip a frame. Waveform tiles (`audio/peaktiles.ts`) come from
   the host as needed, answered meanwhile from the file's coarse whole level;
   onsets (`audio/analysis.ts`) once per file.
 - **The state.** `state/strips.svelte.ts`: which files have strips, the
@@ -363,7 +383,7 @@ crosses the bridge. Its commands, each mirrored by the web mock in
 | Files    | `fs_read` (raw bytes), `fs_read_text`, `fs_write_text` / `fs_write_bytes` (atomic, optional `.bak`), `fs_list`, `project_scan`, `fs_copy_into` (import: never overwrites), `fs_rename`                    |
 | Settings | `settings_load`, `settings_save` (a JSON object the front end owns, in the app's config folder)                                                                                                           |
 | Audio    | `audio_info`, `audio_load`, `audio_peaks`, `audio_thumbs` (a screenful of waveforms in one call), `audio_set_events`, `audio_play` / `seek` / `stop`, `audio_trigger`, `audio_set_master`                 |
-| Clock    | `audio_clock`, `audio_now` (for offset pings), `audio_clock_stream` (a snapshot every 8 ms over a Tauri channel)                                                                                          |
+| Clock    | `audio_clock`, `audio_now` (for offset pings), `audio_clock_stream` (a snapshot on start, stop and seek, every 32 ms while playing, over a Tauri channel)                                                 |
 | EZ2PORT  | `port_locate`, `port_probe`, `port_publish` (cuts keysounds, writes the package whole), `port_test` / `port_stop` (pads closed for the run), `port_config_files` (where the port keeps `keys.ini`)        |
 | Import   | `import_run` (a new song folder, staged and renamed into place)                                                                                                                                           |
 | Export   | `export_probe` (which keysounds the game's folder already holds), `export_game` (into a game folder, with a backup), `export_folder`, `export_backups`, `export_restore`                                  |

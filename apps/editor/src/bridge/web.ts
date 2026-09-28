@@ -640,8 +640,23 @@ export function webBackend(
       setMaster: async () => {},
       clock: async () => snapshot(),
       now: async () => performance.now() * 1e6,
+      // As the host sends it (src-tauri audio_clock_stream): at once when
+      // playing starts, stops or seeks, then every 32 ms while playing.
       streamClock: (on) => {
-        const t = setInterval(() => on(snapshot()), 8);
+        let sent: { playing: boolean; generation: number; at: number } | undefined;
+        const t = setInterval(() => {
+          const c = snapshot();
+          const now = performance.now();
+          if (
+            sent &&
+            sent.playing === c.playing &&
+            sent.generation === c.generation &&
+            (!c.playing || now - sent.at < 32)
+          )
+            return;
+          sent = { playing: c.playing, generation: c.generation, at: now };
+          on(c);
+        }, 8);
         return () => clearInterval(t);
       },
       // No mixer here: a likeness from how many sounds start near each column.

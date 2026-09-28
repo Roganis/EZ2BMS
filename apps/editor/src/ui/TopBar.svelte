@@ -77,19 +77,24 @@
     {/each}
   </nav>
 
-  <div class="readouts">
-    <div class="ro">
-      <span>{t('top.bpm')}</span><b data-testid="ro-bpm">{bpm.toFixed(bpm % 1 ? 2 : 0)}</b>
+  <!-- A snippet has its own effects: the readouts change on every frame
+       while playing, and in the bar's own template they re-ran all of it. -->
+  {@render readouts()}
+  {#snippet readouts()}
+    <div class="readouts">
+      <div class="ro">
+        <span>{t('top.bpm')}</span><b data-testid="ro-bpm">{bpm.toFixed(bpm % 1 ? 2 : 0)}</b>
+      </div>
+      <div class="ro wide"><span>{t('top.pos')}</span><b data-testid="ro-pos">{pos}</b></div>
+      <div class="ro wide time"><span>{t('top.time')}</span><b>{time}</b></div>
+      <div class="ro snap"><span>{t('top.snap')}</span><b data-testid="ro-snap">1/{v.snap}</b></div>
+      <div class="ro zoom">
+        {#if v.mode === 'play'}<span>{t('top.speed')}</span><b>{v.speed}%</b>{:else}<span
+            >{t('top.zoom')}</span
+          ><b>{Math.round((v.zoom / 76.8) * 100)}%</b>{/if}
+      </div>
     </div>
-    <div class="ro wide"><span>{t('top.pos')}</span><b data-testid="ro-pos">{pos}</b></div>
-    <div class="ro wide time"><span>{t('top.time')}</span><b>{time}</b></div>
-    <div class="ro snap"><span>{t('top.snap')}</span><b data-testid="ro-snap">1/{v.snap}</b></div>
-    <div class="ro zoom">
-      {#if v.mode === 'play'}<span>{t('top.speed')}</span><b>{v.speed}%</b>{:else}<span
-          >{t('top.zoom')}</span
-        ><b>{Math.round((v.zoom / 76.8) * 100)}%</b>{/if}
-    </div>
-  </div>
+  {/snippet}
 
   <div class="actions">
     <button
