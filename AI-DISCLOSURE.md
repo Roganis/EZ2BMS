@@ -651,6 +651,15 @@ written; Playwright: the imported song's Art tab draws both, an `.abm`
 dropped in is converted once). Not seen on a real install: the owner's
 `system/disc` names and sizes.
 
+The same day: the Preview tab's loop was silent (the audio thread was never
+given the rendered loop; engine and host tests, the host's failing without
+the fix); every background group can now be reached (the rack takes the
+room beside the lanes, narrows, then scrolls by a bar, a swipe or the
+wheel); and a game song's discs per difficulty come with it, shown on the
+wheel preview as the port's `select.c` shows them and written into packages
+under keys EZ2PORT does not read yet (a request in `ez2port-requests.md`;
+the oracle checks the port reads such a package as before).
+
 ---
 
 ## Verification status
@@ -759,5 +768,8 @@ dropped in is converted once). Not seen on a real install: the owner's
 | The magnet feels right on a real song                                               | not run                                                  | **No** - owner        |
 | A game song's disc and eyecatch come with it, pixel for pixel                       | unit tests, Rust decode test, Playwright (made-up art)   | Yes, in the container |
 | The owner's real discs and eyecatches import and publish as the game shows them     | not run (no install here)                                | **No** - owner        |
+| The preview loop is heard on the owner's machine                                    | engine and host tests; not heard here (no sound device)  | **No** - owner        |
+| Every background group reachable; the rack scrolls by bar, swipe and wheel          | geometry tests, Playwright                               | Yes, in the container |
+| A difficulty's own disc: imported, shown on the wheel, published beside NM's        | unit and oracle tests, Playwright (made-up art)          | Yes, in the container |
 | The playfield draws in an installed build on Windows (WebView2)                     | not run                                                  | **No** - owner        |
 | The browser preview runs on its host                                                | Chromium under a policy like the host's                  | **No** - owner        |

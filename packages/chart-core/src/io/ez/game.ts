@@ -23,6 +23,7 @@ import { parseSongTitles, type SongTitle } from '../../ez2data/songtext';
 import { said, sayText, type Said } from '../../i18n/say';
 import type { Tier } from '../../model/types';
 import { MODES, type ModeId } from '../../modes/ids';
+import { DISC_TIERS, type DiscTier } from '../../song/art';
 import { errorSaid } from '../said-error';
 import { gamePath, type EzSongSource, type EzTables, type GameArtFile } from './import';
 import { eziResolve, parseEzi } from './ezi';
@@ -329,6 +330,7 @@ export async function ezSongSource(game: Game, song: GameSong): Promise<EzSongSo
     listings.set(d.toLowerCase(), { real, names: real ? await fs.list(real) : [] });
   }
   const art = await gameArt(fs, song.key, song.dir);
+  const hasArt = !!(art.disc || art.discs || art.eyecatch);
   const locate = (path: string): string | undefined => {
     const slash = path.lastIndexOf('/');
     const l = listings.get(path.slice(0, slash).toLowerCase());
@@ -347,32 +349,40 @@ export async function ezSongSource(game: Game, song: GameSong): Promise<EzSongSo
     ...(song.title ? { title: song.title } : {}),
     locate,
     shipped: game.sound,
-    ...(art.disc || art.eyecatch ? { art } : {}),
+    ...(hasArt ? { art } : {}),
   };
 }
 
 /**
- * Where the game keeps a song's disc and eyecatch, best first, as EZ2PORT's
- * song select looks for them (tools/ez2play/select.c, select_refresh and
- * select_eyecatch): `system/disc/<key>.abm` - the NM face; a tier's own
- * `<key>-hd` and friends only when there is no NM face - and
- * `system/eyecatch/<key>`. The game names them `.bmp` and ships `.abm`
- * (vfs.c resolves one to the other), so both are looked for.
+ * Where the game keeps a song's discs and eyecatch, as EZ2PORT's song select
+ * looks for them (tools/ez2play/select.c, select_refresh and select_eyecatch):
+ * `system/disc/<key>` - the NM face - and a tier's own `<key>-hd`, `-shd`,
+ * `-ex`, and `system/eyecatch/<key>`. The game names them `.bmp` and ships
+ * `.abm` (vfs.c resolves one to the other), so both are looked for.
  */
-export function gameArtPaths(key: string): { disc: string[]; eyecatch: string[] } {
+export function gameArtPaths(key: string): {
+  disc: string[];
+  discs: Record<DiscTier, string[]>;
+  eyecatch: string[];
+} {
   const both = (stem: string) => [`${stem}.abm`, `${stem}.bmp`];
   return {
-    disc: ['', '-hd', '-shd', '-ex'].flatMap((t) => both(`system/disc/${key}${t}`)),
+    disc: both(`system/disc/${key}`),
+    discs: {
+      HD: both(`system/disc/${key}-hd`),
+      SHD: both(`system/disc/${key}-shd`),
+      EX: both(`system/disc/${key}-ex`),
+    },
     eyecatch: both(`system/eyecatch/${key}`),
   };
 }
 
-/** The song's disc and eyecatch files, matched in any case; by the table's key, else the folder's. */
+/** The song's disc, tier discs and eyecatch files, matched in any case; by the table's key, else the folder's. */
 async function gameArt(
   fs: GameFs,
   key: string,
   dir: string,
-): Promise<{ disc?: GameArtFile; eyecatch?: GameArtFile }> {
+): Promise<NonNullable<EzSongSource['art']>> {
   const listings = new Map<string, { real: string; names: string[] } | null>();
   const listing = async (folder: string) => {
     const k = folder.toLowerCase();
@@ -404,9 +414,17 @@ async function gameArt(
     return undefined;
   };
   const keys = [...new Set([key, dir])];
-  const disc = await find(keys.flatMap((k) => gameArtPaths(k).disc));
-  const eyecatch = await find(keys.flatMap((k) => gameArtPaths(k).eyecatch));
-  return { ...(disc ? { disc } : {}), ...(eyecatch ? { eyecatch } : {}) };
+  const paths = keys.map(gameArtPaths);
+  const out: NonNullable<EzSongSource['art']> = {};
+  const disc = await find(paths.flatMap((p) => p.disc));
+  if (disc) out.disc = disc;
+  for (const tier of DISC_TIERS) {
+    const f = await find(paths.flatMap((p) => p.discs[tier]));
+    if (f) (out.discs ??= {})[tier] = f;
+  }
+  const eyecatch = await find(paths.flatMap((p) => p.eyecatch));
+  if (eyecatch) out.eyecatch = eyecatch;
+  return out;
 }
 
 /** A GameFs over a map of game-relative paths (the synthetic game, tests). */

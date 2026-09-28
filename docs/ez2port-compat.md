@@ -302,6 +302,12 @@ Playwright on the synthetic game folder (`bridge/demo-skin.ts`).
   slots naming one file are one channel, so one voice. Issues counts them.
 - **No v4/v5 BPM correction**: some tools (rizu, the Bible) scale old charts'
   tempo by 0.99723; EZ2PORT does not, and neither does the import.
+- **A disc per difficulty.** The game's `system\disc\<key>-hd` (`-shd`,
+  `-ex`) come across as the song's tier discs (`discs` in the song file);
+  the wheel preview shows the tier's once the swing passes 180 degrees and
+  the NM face before, as `select.c` draws `bigdisc`/`bigdisc_nm`. A package
+  can carry one disc only; EZ2BMS writes the others as `Disc.HD` and friends,
+  which build 1582 ignores (request 12 in `ez2port-requests.md`).
 - **The disc and eyecatch** are looked for where the port's song select
   looks (`tools/ez2play/select.c`): `system\disc\<key>.abm`, then a tier's
   `<key>-hd`/`-shd`/`-ex`, and `system\eyecatch\<key>.bmp` (which the vfs

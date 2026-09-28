@@ -95,3 +95,8 @@ English, Korean and Japanese.
   scrolls the rest with a bar under the group names you can drag, a
   touchpad's sideways swipe, Shift+wheel, or the wheel over the names. It
   used to stop at 40% of the window and scroll only with Shift+wheel.
+- A disc for each difficulty. A game song's HD, SHD and EX discs come with
+  it; the wheel preview turns from the NM face to the difficulty's as the
+  game does; the Art tab's disc card has a button per difficulty. Published
+  songs carry them too, for EZ2PORT to show once it reads them (it shows the
+  NM disc for every difficulty of a package so far).

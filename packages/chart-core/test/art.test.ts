@@ -12,9 +12,11 @@ import {
   centreSquare,
   centredVisible,
   defaultEyecatch,
+  discFor,
   eyecatchExtent,
   findImage,
   parseSongFile,
+  readTierDiscs,
   serializeSongFile,
   songArt,
 } from '../src/song';
@@ -120,6 +122,39 @@ describe("the song's art", () => {
     expect(rules(songArt({ disc: { src: 'nope.png' } }, [], () => undefined)).sort()).toEqual([
       'art-missing:error',
     ]);
+  });
+});
+
+describe("a tier's own disc", () => {
+  it('shows for its tier; a tier without one shows the song disc', () => {
+    const art = songArt(
+      { disc: { src: 'disc.bmp' }, discs: { HD: { src: 'disc-hd.bmp' } } },
+      [],
+      (n) => n,
+    );
+    expect(discFor(art, 'NM')?.src).toBe('disc.bmp');
+    expect(discFor(art, 'HD')).toMatchObject({ src: 'disc-hd.bmp', job: { kind: 'disc' } });
+    expect(discFor(art, 'SHD')?.src).toBe('disc.bmp');
+    expect(
+      discFor(
+        songArt({}, [], () => undefined),
+        'EX',
+      ),
+    ).toBeUndefined();
+  });
+
+  it('is read from the song file only when every entry is a tier and a disc', () => {
+    expect(readTierDiscs({ HD: { src: 'a.png' }, EX: { src: 'b.png' } })).toEqual({
+      HD: { src: 'a.png' },
+      EX: { src: 'b.png' },
+    });
+    expect(readTierDiscs({ NM: { src: 'a.png' } })).toBeUndefined();
+    expect(readTierDiscs({ HD: null })).toBeUndefined();
+    expect(readTierDiscs([])).toBeUndefined();
+    const { song, warnings } = parseSongFile('{"key":"a","discs":{"XX":1}}');
+    expect(song.discs).toBeUndefined();
+    expect(song.extra.discs).toEqual({ XX: 1 });
+    expect(warnings).toHaveLength(1);
   });
 });
 

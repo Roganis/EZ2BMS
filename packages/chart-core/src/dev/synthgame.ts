@@ -213,8 +213,8 @@ const entry = (key: string, levels: number[], bpm: number): SongEntry => ({
  *   slot whose file is missing, a note on an unlisted slot, a sample of
  *   `Beta`'s by relative path) and HD (no .ini: the engine's defaults, the
  *   level from song.bin); 7StreetMix NM (v6).
- *   Its disc (`system/disc/alpha.abm`) and eyecatch
- *   (`system/Eyecatch/ALPHA.abm`, another case) are made-up gradients.
+ *   Its disc (`system/disc/alpha.abm`), HD disc (`alpha-hd.abm`) and
+ *   eyecatch (`system/Eyecatch/ALPHA.abm`, another case) are made-up gradients.
  * - `Beta`: StreetMix NM (v5) with a legacy note-name .ezi; only an HD
  *   disc, as a plain BMP (`system/disc/beta-hd.bmp`), and no eyecatch.
  * - `AlphaSong`: a folder with no charts, so "alphasong" is a shipped key.
@@ -249,6 +249,7 @@ export function synthGame(): SynthGame {
       '[system/songname/beta.abm]\r\nline = "Beta" | 246,22,9 | bold | ffffff | right | 236\r\n',
   );
   put('system/disc/alpha.abm', synthArt(128, 128, 1, 'abm'));
+  put('system/disc/alpha-hd.abm', synthArt(128, 128, 4, 'abm'));
   put('system/Eyecatch/ALPHA.abm', synthArt(128, 64, 2, 'abm'));
   put('system/disc/beta-hd.bmp', synthArt(96, 96, 3, 'bmp'));
   put('sound/alpha/kick.ssf', synthSsf(4410, 1));

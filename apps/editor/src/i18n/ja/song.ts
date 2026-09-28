@@ -126,6 +126,10 @@ export const song: Record<keyof typeof en, string> = {
   'art.disc.name': 'ディスク',
   'art.disc.what': '{w}x{h} - 選曲画面で回転',
   'art.disc.image': 'ディスク画像',
+  'art.disc.tier': '難易度',
+  'art.disc.sameAsNm': 'NMと同じ',
+  'art.disc.tierNote':
+    '選曲画面での{tier}のディスクです。EZ2PORTがこれを読むようになるまで、パブリッシュした楽曲ではすべての難易度でNMのディスクが表示されます。',
   // Crop is トリミング: 分割 is the glossary's chop.
   'art.disc.crop': 'ディスクのトリミング：ドラッグで移動、矢印キーで微調整、+と-で拡大縮小',
   'art.disc.off': 'ディスクなし：この楽曲ではオフです。',

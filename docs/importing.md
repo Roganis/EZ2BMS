@@ -58,7 +58,9 @@ record back.
 The disc and the eyecatch live outside the song's `sound/` folder, where the
 port's song select finds them (either name case; `.abm`, or `.bmp` in older
 installs). They become plain BMPs in the song folder, the same pixels, and
-the song manager's Art tab uses them: both are already the size the game
+the song manager's Art tab uses them (a difficulty's own disc under its
+button on the disc card, and on the wheel preview at that difficulty): all
+are already the size the game
 draws, so publishing cuts them to what they were. The Art tab also takes a
 `.abm` from the game folder for any song, and makes it a `.bmp` as it comes
 in.

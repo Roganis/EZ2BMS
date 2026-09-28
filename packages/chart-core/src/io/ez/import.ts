@@ -48,6 +48,7 @@ import type { ChartData, Extra, NoteRec, ScrollEvent, SoundChannel, Tier } from 
 import { chartBaseName, deriveSongKey, parseChartName } from '../../modes/filenames';
 import { modeNames, type ModeId } from '../../modes/ids';
 import { columnsFromGds, modeDef } from '../../modes/registry';
+import { DISC_TIERS, type DiscTier } from '../../song/art';
 import { newSongFile, type SongFile } from '../../song/songfile';
 import { f32FromWord, scrollEventFromLegacy } from '../../timing/scroll';
 import { f32Decimal } from '../../util/f32';
@@ -104,8 +105,12 @@ export interface EzSongSource {
   locate(path: string): string | undefined;
   /** The game's `sound/` folders: shipped keys, which a new key must not be. */
   shipped: readonly string[];
-  /** The song's disc and eyecatch as the game has them (.abm, or a plain .bmp). */
-  art?: { disc?: GameArtFile; eyecatch?: GameArtFile };
+  /** The song's discs (NM's, and a tier's own) and eyecatch as the game has them (.abm, or a plain .bmp). */
+  art?: {
+    disc?: GameArtFile;
+    discs?: Partial<Record<DiscTier, GameArtFile>>;
+    eyecatch?: GameArtFile;
+  };
 }
 
 export interface GameArtFile {
@@ -234,10 +239,10 @@ export function importEzSong(src: EzSongSource): EzSongImport {
     charts: Object.fromEntries(charts.map((c) => [c.file, c.from])),
   };
   const images: SongImage[] = [];
-  const art = (kind: 'disc' | 'eyecatch', f: GameArtFile | undefined) => {
+  const art = (name: string, f: GameArtFile | undefined) => {
     if (!f) return undefined;
     try {
-      const to = `${kind}.bmp`;
+      const to = `${name}.bmp`;
       images.push({ to, bytes: abmToBmp(f.bytes), from: f.path });
       return to;
     } catch (e) {
@@ -250,7 +255,14 @@ export function importEzSong(src: EzSongSource): EzSongImport {
     }
   };
   const disc = art('disc', src.art?.disc);
-  if (disc) song.disc = { src: disc };
+  for (const tier of DISC_TIERS) {
+    const own = art(`disc-${tier.toLowerCase()}`, src.art?.discs?.[tier]);
+    if (own) (song.discs ??= {})[tier] = { src: own };
+  }
+  // A song with only tier discs still has one to show for NM and for a
+  // package, which carries one disc (usersongs.c): the first tier's.
+  const face = disc ?? DISC_TIERS.map((t) => song.discs?.[t]?.src).find((s) => s);
+  if (face) song.disc = { src: face };
   const eyecatch = art('eyecatch', src.art?.eyecatch);
   if (eyecatch) song.eyecatch = { src: eyecatch, mode: 'stretch' };
   if (key !== deriveSongKey(title)) {

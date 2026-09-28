@@ -20,6 +20,7 @@ cannot read is kept as it is and reported, never silently changed.
   "classic": false,
   "plate": { "tint": "cyan-halo" },
   "disc": { "src": "art/jacket.png", "crop": { "x": 120, "y": 0, "w": 900, "h": 900 } },
+  "discs": { "HD": { "src": "art/jacket-hd.png" } },
   "eyecatch": {
     "src": "art/banner.png",
     "mode": "visible",
@@ -56,6 +57,7 @@ importer would do it" wherever the importer has a rule.
 | `classic`   | Classic-mode charting on or off                                                                                                                                                                                                                                                              | on when a chart already has continuation notes                                     |
 | `plate`     | The title plate: `title`, `subtitle` (words other than the song's; `""` is no subtitle), `tint` (`white`, `green`, `cyan`, `orange-halo`, `cyan-halo`, `custom` with `ink` and `glow` as `rrggbb`), `cjk` (`jp`, `kr`, `sc`, `tc`, `hk`), or `image` (a 256x32 picture of your own)          | the song's title in white, CJK forms guessed from the words                        |
 | `disc`      | `{ src, crop? }`: the image and the square cut to the disc; `null` for no disc                                                                                                                                                                                                               | the first chart's `eyecatch_image`, `title_image` or `back_image`, centred         |
+| `discs`     | `{ HD?, SHD?, EX? }`, each `{ src, crop? }`: a difficulty's own disc, as the game's songs have them (EZ2PORT shows only `disc` for a package so far: `ez2port-requests.md` 12)                                                                                                               | every difficulty shows `disc`                                                      |
 | `eyecatch`  | `{ src, mode, crop? }`: `visible` fills the top-left 640x480 the select screen shows from the 4:3 `crop`; `stretch` squeezes the whole image; `null` for none                                                                                                                                | the first chart's `title_image`, `back_image` or `eyecatch_image`, stretched       |
 | `preview`   | `{ chart?, file?, startMs?, lengthMs?, fadeMs? }`: a chart's mix (by file name) or an audio file, the window and its fades                                                                                                                                                                   | the first chart's mix, 20 s from the first note a quarter of the way in, 1 s fades |
 | `bga`       | `{ file?, startMs? }`: the movie and the chart time its frame 0 shows at (ms, may be negative); `null` for none                                                                                                                                                                              | the first chart's earliest `bga_events` movie, at that event's time                |

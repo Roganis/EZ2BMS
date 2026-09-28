@@ -69,16 +69,18 @@ test('a song of the EZ2AC folder becomes a song folder: charts, keysounds, key, 
       String.fromCharCode(...(await a.backend.readFile(`/songs/Alpha Song/${f}`)).subarray(0, 2));
     return {
       disc: a.project.sidecar.disc,
+      discs: a.project.sidecar.discs,
       eyecatch: a.project.sidecar.eyecatch,
-      heads: [await head('disc.bmp'), await head('eyecatch.bmp')],
+      heads: [await head('disc.bmp'), await head('disc-hd.bmp'), await head('eyecatch.bmp')],
       images: a.project.images,
     };
   });
   expect(art).toEqual({
     disc: { src: 'disc.bmp' },
+    discs: { HD: { src: 'disc-hd.bmp' } },
     eyecatch: { src: 'eyecatch.bmp', mode: 'stretch' },
-    heads: ['BM', 'BM'],
-    images: ['disc.bmp', 'eyecatch.bmp'],
+    heads: ['BM', 'BM', 'BM'],
+    images: ['disc-hd.bmp', 'disc.bmp', 'eyecatch.bmp'],
   });
   await page.getByTestId('open-song').click();
   await page.getByTestId('song-tab-art').click();

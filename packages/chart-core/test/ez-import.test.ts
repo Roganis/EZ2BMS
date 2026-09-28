@@ -183,38 +183,49 @@ describe("the song's disc and eyecatch", () => {
   it('come from system/disc and system/eyecatch, in any case, as plain BMPs', async () => {
     const g = await game();
     const src = await ezSongSource(g, g.songs[0]!);
-    expect([src.art?.disc?.path, src.art?.eyecatch?.path]).toEqual([
+    expect([src.art?.disc?.path, src.art?.discs?.HD?.path, src.art?.eyecatch?.path]).toEqual([
       'system/disc/alpha.abm',
+      'system/disc/alpha-hd.abm',
       'system/Eyecatch/ALPHA.abm',
     ]);
     const imp = importEzSong(src);
     expect(imp.images.map((i) => [i.to, i.from])).toEqual([
       ['disc.bmp', 'system/disc/alpha.abm'],
+      ['disc-hd.bmp', 'system/disc/alpha-hd.abm'],
       ['eyecatch.bmp', 'system/Eyecatch/ALPHA.abm'],
     ]);
     // The pictures the game has, pixel for pixel.
     for (const i of imp.images) {
       const bmp = decodeBmp(i.bytes);
-      const abm = decodeAbm(src.art![i.to === 'disc.bmp' ? 'disc' : 'eyecatch']!.bytes);
+      const from = [src.art!.disc!, src.art!.discs!.HD!, src.art!.eyecatch!].find(
+        (f) => f.path === i.from,
+      )!;
+      const abm = decodeAbm(from.bytes);
       expect([bmp.width, bmp.height]).toEqual([abm.width, abm.height]);
       expect(fnv1a64Hex(bmp.rgba)).toBe(fnv1a64Hex(abm.rgba));
     }
-    // The eyecatch is already the shape the port draws: stretched is as it is.
+    // NM's is the song's disc, HD has its own; the eyecatch is already the
+    // shape the port draws: stretched is as it is.
     expect(imp.song.disc).toEqual({ src: 'disc.bmp' });
+    expect(imp.song.discs).toEqual({ HD: { src: 'disc-hd.bmp' } });
     expect(imp.song.eyecatch).toEqual({ src: 'eyecatch.bmp', mode: 'stretch' });
-    expect(parseSongFile(serializeSongFile(imp.song)).song.disc).toEqual({ src: 'disc.bmp' });
+    const back = parseSongFile(serializeSongFile(imp.song)).song;
+    expect([back.disc, back.discs]).toEqual([imp.song.disc, imp.song.discs]);
   });
 
-  it("take a tier's disc when there is no NM face, and leave out what the game lacks", async () => {
+  it("show a tier's disc for the song when there is no NM face, and leave out what the game lacks", async () => {
     const g = await game();
     const src = await ezSongSource(g, g.songs[1]!);
-    expect(src.art?.disc?.path).toBe('system/disc/beta-hd.bmp');
+    expect(src.art?.disc).toBeUndefined();
+    expect(src.art?.discs?.HD?.path).toBe('system/disc/beta-hd.bmp');
     expect(src.art?.eyecatch).toBeUndefined();
     const imp = importEzSong(src);
     // Already a plain BMP: copied as it is.
     expect(imp.images).toEqual([
-      { to: 'disc.bmp', bytes: src.art!.disc!.bytes, from: 'system/disc/beta-hd.bmp' },
+      { to: 'disc-hd.bmp', bytes: src.art!.discs!.HD!.bytes, from: 'system/disc/beta-hd.bmp' },
     ]);
+    expect(imp.song.disc).toEqual({ src: 'disc-hd.bmp' });
+    expect(imp.song.discs).toEqual({ HD: { src: 'disc-hd.bmp' } });
     expect(imp.song.eyecatch).toBeUndefined();
   });
 
@@ -224,26 +235,23 @@ describe("the song's disc and eyecatch", () => {
     const manifest = new TextDecoder().decode(g.files.get('text/manifest.songs.ini'));
     const game2 = await openGame(memoryGameFs(g.files), g.exe, manifest);
     const imp = importEzSong(await ezSongSource(game2, game2.songs[0]!));
-    expect(imp.images.map((i) => i.to)).toEqual(['eyecatch.bmp']);
-    expect(imp.song.disc).toBeUndefined();
+    // The HD face stands in for the NM face it could not read.
+    expect(imp.images.map((i) => i.to)).toEqual(['disc-hd.bmp', 'eyecatch.bmp']);
+    expect(imp.song.disc).toEqual({ src: 'disc-hd.bmp' });
     const note = imp.notes.find((n) => n.rule === 'import-art')!;
     expect(note.severity).toBe('warning');
     expect(note.message).toMatch(/system\/disc\/alpha\.abm/);
     expect(imp.charts).toHaveLength(3);
   });
 
-  it('look where the port looks, NM face first', () => {
+  it('look where the port looks, a face per tier', () => {
     expect(gameArtPaths('abc')).toEqual({
-      disc: [
-        'system/disc/abc.abm',
-        'system/disc/abc.bmp',
-        'system/disc/abc-hd.abm',
-        'system/disc/abc-hd.bmp',
-        'system/disc/abc-shd.abm',
-        'system/disc/abc-shd.bmp',
-        'system/disc/abc-ex.abm',
-        'system/disc/abc-ex.bmp',
-      ],
+      disc: ['system/disc/abc.abm', 'system/disc/abc.bmp'],
+      discs: {
+        HD: ['system/disc/abc-hd.abm', 'system/disc/abc-hd.bmp'],
+        SHD: ['system/disc/abc-shd.abm', 'system/disc/abc-shd.bmp'],
+        EX: ['system/disc/abc-ex.abm', 'system/disc/abc-ex.bmp'],
+      },
       eyecatch: ['system/eyecatch/abc.abm', 'system/eyecatch/abc.bmp'],
     });
   });

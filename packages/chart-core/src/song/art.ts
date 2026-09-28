@@ -6,7 +6,7 @@
 // image for a song that names none - so a bmson folder publishes the art the
 // port would have made from it.
 
-import type { ChartInfo } from '../model/types';
+import type { ChartInfo, Tier } from '../model/types';
 
 /** A rectangle of source pixels (after the image's EXIF turn); it may reach past the image. */
 export interface ArtCrop {
@@ -118,13 +118,31 @@ export interface ArtSource {
 
 export interface SongArt {
   disc?: ArtSource;
+  /** A tier's own disc, where it has one (the others show `disc`). */
+  discs?: Partial<Record<DiscTier, ArtSource>>;
   eyecatch?: ArtSource;
 }
 
 /** The song file's art settings (`null`: none, even when a chart names an image). */
 export interface ArtSettings {
   disc?: DiscArt | null;
+  discs?: TierDiscs;
   eyecatch?: EyecatchArt | null;
+}
+
+/**
+ * The tiers that can have a disc of their own. The game's song select shows
+ * `system\disc\<key>-hd` (-shd, -ex) for a tier when there is one, and the
+ * NM face while the disc swings through its first half-turn
+ * (tools/ez2play/select.c); `disc` is that NM face.
+ */
+export const DISC_TIERS = ['HD', 'SHD', 'EX'] as const;
+export type DiscTier = (typeof DISC_TIERS)[number];
+export type TierDiscs = Partial<Record<DiscTier, DiscArt>>;
+
+/** The disc a tier shows: its own, else the song's. */
+export function discFor(art: SongArt, tier: Tier): ArtSource | undefined {
+  return (tier !== 'NM' ? art.discs?.[tier] : undefined) ?? art.disc;
 }
 
 type ImageField = NonNullable<ArtSource['field']>;
@@ -168,6 +186,11 @@ export function songArt(
     const d = fromChart(DISC_ORDER, { kind: 'disc' });
     if (d) out.disc = d;
   }
+  for (const tier of DISC_TIERS) {
+    const d = settings.discs?.[tier];
+    if (d)
+      (out.discs ??= {})[tier] = { src: d.src, path: find(d.src), job: discJob(d), from: 'song' };
+  }
   if (settings.eyecatch) {
     const e = settings.eyecatch;
     out.eyecatch = { src: e.src, path: find(e.src), job: eyecatchJob(e), from: 'song' };
@@ -208,6 +231,18 @@ export function readDiscArt(v: unknown): DiscArt | null | undefined {
   if (o.crop === undefined) return { src: o.src };
   if (!isCrop(o.crop) || o.crop.w !== o.crop.h) return undefined;
   return { src: o.src, crop: { x: o.crop.x, y: o.crop.y, w: o.crop.w, h: o.crop.h } };
+}
+
+/** A song file's `discs` member (HD/SHD/EX to a disc), or undefined when it is not one EZ2BMS reads. */
+export function readTierDiscs(v: unknown): TierDiscs | undefined {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const out: TierDiscs = {};
+  for (const [k, d] of Object.entries(v)) {
+    const art = (DISC_TIERS as readonly string[]).includes(k) ? readDiscArt(d) : undefined;
+    if (!art) return undefined;
+    out[k as DiscTier] = art;
+  }
+  return out;
 }
 
 /** A song file's `eyecatch` member, or undefined when it is not one EZ2BMS reads. */

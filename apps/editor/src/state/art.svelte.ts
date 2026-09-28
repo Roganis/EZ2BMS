@@ -4,6 +4,7 @@
 // published - and the .abm files a publish writes, the title plate with them.
 
 import {
+  DISC_TIERS,
   PublishError,
   abmToBmp,
   defaultEyecatch,
@@ -14,6 +15,8 @@ import {
   songMeta,
   type ArtJob,
   type DiscArt,
+  type DiscTier,
+  type Tier,
   type EyecatchArt,
   type PlateCheck,
   type PlateSettings,
@@ -31,6 +34,8 @@ export type ArtKind = 'disc' | 'eyecatch';
 export interface PackageArt {
   songnameAbm?: Uint8Array;
   discAbm?: Uint8Array;
+  /** A tier's own disc (the game's HD/SHD/EX discs); see chart-core SongMeta.discsAbm. */
+  discsAbm?: Partial<Record<DiscTier, Uint8Array>>;
   eyecatchAbm?: Uint8Array;
 }
 
@@ -71,9 +76,20 @@ export class ArtState {
     return imageSize(await this.app.backend.readFile(joinPath(p.dir, path)));
   }
 
-  /** Set (or with undefined, give back to the charts; with null, turn off) the disc. */
-  async setDisc(v: DiscArt | null | undefined): Promise<void> {
-    await this.set('disc', v);
+  /**
+   * Set (or with undefined, give back to the charts; with null, turn off) the
+   * disc - or, for a tier, its own disc (undefined or null: the NM disc again).
+   */
+  async setDisc(v: DiscArt | null | undefined, tier: Tier = 'NM'): Promise<void> {
+    if (tier === 'NM') return this.set('disc', v);
+    const p = this.app.project;
+    if (!p) return;
+    const discs = { ...p.sidecar.discs };
+    if (v) discs[tier] = v;
+    else delete discs[tier];
+    if (Object.keys(discs).length) p.sidecar.discs = discs;
+    else delete p.sidecar.discs;
+    await p.saveSidecar();
   }
 
   async setEyecatch(v: EyecatchArt | null | undefined): Promise<void> {
@@ -284,6 +300,15 @@ export class ArtState {
         throw new PublishError(t(disc ? 'art.disc.failed' : 'art.eyecatch.failed', { error }));
       });
       out[kind === 'disc' ? 'discAbm' : 'eyecatchAbm'] = encodeAbm(px.rgb, px.w, px.h);
+    }
+    for (const tier of DISC_TIERS) {
+      const a = art.discs?.[tier];
+      if (!a) continue;
+      if (!a.path) throw new PublishError(t('art.disc.missing', { file: a.src }));
+      const px = await this.pixels(p, a.path, a.job).catch((e: unknown) => {
+        throw new PublishError(t('art.disc.failed', { error: errorText(e) }));
+      });
+      (out.discsAbm ??= {})[tier] = encodeAbm(px.rgb, px.w, px.h);
     }
     return out;
   }
