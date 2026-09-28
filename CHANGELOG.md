@@ -62,5 +62,8 @@ English, Korean and Japanese.
   switch in view down to the smallest window (960 px), hiding the name,
   time and zoom first; the open chart's button is scrolled into view.
 - Touchscreens: two fingers scroll the chart and pinch its zoom.
+- Sound on Linux when ALSA's default device does not open (an ALSA
+  configuration line newer alsa-lib rejects): the other outputs are tried,
+  PipeWire's and PulseAudio's first, and the message names each one's error.
 - A browser preview of the editor, to share as a web page
   ([docs/hosted-preview.md](docs/hosted-preview.md)).

@@ -1,6 +1,12 @@
-//! The system's default output device, through cpal (WASAPI on Windows, ALSA
-//! on Linux). The stream lives on a thread of its own - cpal streams are not
+//! The system's output device, through cpal (WASAPI on Windows, ALSA on
+//! Linux). The stream lives on a thread of its own - cpal streams are not
 //! `Send` everywhere - and dies with the engine.
+//!
+//! The default device comes first. When it does not open, the others are
+//! tried, sound servers first: on Linux, ALSA's "default" is whatever the
+//! user's ALSA configuration makes it, and a line alsa-lib no longer accepts
+//! (the owner's Arch machine: "Unknown field period_size") leaves it
+//! unusable while PipeWire's own ALSA device plays fine.
 
 use std::sync::mpsc;
 use std::thread::JoinHandle;
@@ -32,6 +38,55 @@ fn dev_err(e: impl std::fmt::Display) -> AudioError {
     AudioError::Device(e.to_string())
 }
 
+/// Names tried after the default, in order: the sound servers' own ALSA
+/// devices, then the card's default. Any other device follows.
+const PREFERRED: [&str; 3] = ["pipewire", "pulse", "sysdefault"];
+
+/// The devices to try: the default, then the rest, preferred names first.
+fn candidates(host: &cpal::Host) -> Vec<(String, cpal::Device)> {
+    let mut out = Vec::new();
+    if let Some(d) = host.default_output_device() {
+        out.push((d.name().unwrap_or_else(|_| "default".into()), d));
+    }
+    let mut rest: Vec<(String, cpal::Device)> = match host.output_devices() {
+        Ok(ds) => ds.map(|d| (d.name().unwrap_or_default(), d)).collect(),
+        Err(_) => Vec::new(),
+    };
+    rest.retain(|(n, _)| !n.is_empty() && n != "null" && !out.iter().any(|(m, _)| m == n));
+    let rank = |n: &str| PREFERRED.iter().position(|p| n == *p || n.starts_with(&format!("{p}:")));
+    rest.sort_by_key(|(n, _)| rank(n).unwrap_or(PREFERRED.len()));
+    out.extend(rest);
+    out
+}
+
+/// Opens and starts a silent stream on the device: proof it plays, before
+/// the engine is built at its rate.
+fn probe(device: &cpal::Device) -> Result<cpal::SupportedStreamConfig> {
+    let supported = device.default_output_config().map_err(dev_err)?;
+    let config: StreamConfig = supported.clone().into();
+    let stream = match supported.sample_format() {
+        SampleFormat::F32 => silent::<f32>(device, &config),
+        SampleFormat::I16 => silent::<i16>(device, &config),
+        SampleFormat::U16 => silent::<u16>(device, &config),
+        SampleFormat::I32 => silent::<i32>(device, &config),
+        other => Err(AudioError::Device(format!("unsupported sample format {other}"))),
+    }?;
+    stream.play().map_err(dev_err)?;
+    drop(stream);
+    Ok(supported)
+}
+
+fn silent<T: SizedSample>(device: &cpal::Device, config: &StreamConfig) -> Result<cpal::Stream> {
+    device
+        .build_output_stream(
+            config,
+            |data: &mut [T], _: &cpal::OutputCallbackInfo| data.fill(T::EQUILIBRIUM),
+            |_| {},
+            None,
+        )
+        .map_err(dev_err)
+}
+
 pub fn start() -> Result<Engine> {
     let (rate_tx, rate_rx) = mpsc::channel::<Result<u32>>();
     let (renderer_tx, renderer_rx) = mpsc::channel::<Renderer>();
@@ -41,16 +96,25 @@ pub fn start() -> Result<Engine> {
         .name("ez2bms-audio-cpal".into())
         .spawn(move || {
             let host = cpal::default_host();
-            let opened = host
-                .default_output_device()
-                .ok_or_else(|| AudioError::Device("no output device".into()))
-                .and_then(|d| d.default_output_config().map(|c| (d, c)).map_err(dev_err));
-            let (device, supported) = match opened {
-                Ok(v) => v,
-                Err(e) => {
-                    let _ = rate_tx.send(Err(e));
-                    return;
+            let mut failed = Vec::new();
+            let mut opened = None;
+            for (name, device) in candidates(&host) {
+                match probe(&device) {
+                    Ok(supported) => {
+                        opened = Some((device, supported));
+                        break;
+                    }
+                    Err(e) => failed.push(format!("{name}: {e}")),
                 }
+            }
+            let Some((device, supported)) = opened else {
+                let why = if failed.is_empty() {
+                    "no output device".to_string()
+                } else {
+                    failed.join("; ")
+                };
+                let _ = rate_tx.send(Err(AudioError::Device(why)));
+                return;
             };
             let format = supported.sample_format();
             let config: StreamConfig = supported.into();

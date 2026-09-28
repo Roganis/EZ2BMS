@@ -709,5 +709,7 @@ To confirm on the owner's machines:
 | The Korean and Japanese read naturally                                              | not read by a native speaker                             | **No** - owner        |
 | The playfield starts under the desktop app's content policy                         | Playwright, Chromium, the policy from `tauri.conf.json`  | Yes, in the container |
 | The playfield draws in a build with its files embedded (WebKitGTK)                  | built here, run under Xvfb, before and after the fix     | Yes, in the container |
+| First run on the owner's Arch machine (AMD): the chart draws, controls work        | the owner, the `.deb`'s binary on Arch's own libraries   | Yes - owner           |
+| Sound on the owner's Arch machine after the device fallback                         | not yet run                                              | **No** - owner        |
 | The playfield draws in an installed build on Windows (WebView2)                     | not run                                                  | **No** - owner        |
 | The browser preview runs on its host                                                | Chromium under a policy like the host's                  | **No** - owner        |
