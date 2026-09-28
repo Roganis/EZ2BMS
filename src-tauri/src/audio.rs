@@ -216,6 +216,17 @@ impl Audio {
             Ok(e) => (e, "cpal", None),
             Err(e) => (Engine::start_null(48_000), "null", Some(e.to_string())),
         };
+        // Which output plays, in the log: the system's own messages (ALSA
+        // prints its configuration errors to stderr as it opens a device)
+        // do not say whether a later device worked.
+        for s in engine.skipped() {
+            log::warn!("audio: passed over {s}");
+        }
+        match (engine.device(), &device_error) {
+            (Some(d), _) => log::info!("audio: playing on {d} at {} Hz", engine.rate()),
+            (None, Some(e)) => log::warn!("audio: no device, silent ({e})"),
+            (None, None) => {}
+        }
         Self::from_engine(engine, backend, device_error)
     }
 

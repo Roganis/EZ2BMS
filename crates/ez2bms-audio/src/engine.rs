@@ -173,6 +173,11 @@ pub struct Engine {
     rate: u32,
     /// Behind a mutex only so the engine is `Sync` whatever the backend is.
     backend: Mutex<Option<Box<dyn Send>>>,
+    /// The output device's name, and the devices tried before it with why
+    /// each did not open (said in the host's log: a silent machine's first
+    /// question is which device was used).
+    device: Option<String>,
+    skipped: Vec<String>,
 }
 
 // Commands on any thread share one engine.
@@ -223,6 +228,8 @@ impl Engine {
             triggers: Mutex::new(tx),
             rate,
             backend: Mutex::new(None),
+            device: None,
+            skipped: Vec::new(),
         };
         (engine, renderer)
     }
@@ -230,6 +237,22 @@ impl Engine {
     /// Keep a backend alive for as long as the engine (dropping it stops output).
     pub fn attach_backend(&mut self, backend: Box<dyn Send>) {
         *self.backend.get_mut().unwrap() = Some(backend);
+    }
+
+    /// Records which device the backend opened, and the ones it passed over.
+    pub fn set_device(&mut self, name: String, skipped: Vec<String>) {
+        self.device = Some(name);
+        self.skipped = skipped;
+    }
+
+    /// The output device's name (none for the silent clock or a test).
+    pub fn device(&self) -> Option<&str> {
+        self.device.as_deref()
+    }
+
+    /// Devices tried before the one in use, each with its error.
+    pub fn skipped(&self) -> &[String] {
+        &self.skipped
     }
 
     /// Output to nowhere in real time: a working clock without a device.

@@ -88,7 +88,7 @@ fn silent<T: SizedSample>(device: &cpal::Device, config: &StreamConfig) -> Resul
 }
 
 pub fn start() -> Result<Engine> {
-    let (rate_tx, rate_rx) = mpsc::channel::<Result<u32>>();
+    let (rate_tx, rate_rx) = mpsc::channel::<Result<(u32, String, Vec<String>)>>();
     let (renderer_tx, renderer_rx) = mpsc::channel::<Renderer>();
     let (ready_tx, ready_rx) = mpsc::channel::<Result<()>>();
     let (stop_tx, stop_rx) = mpsc::channel::<()>();
@@ -101,13 +101,13 @@ pub fn start() -> Result<Engine> {
             for (name, device) in candidates(&host) {
                 match probe(&device) {
                     Ok(supported) => {
-                        opened = Some((device, supported));
+                        opened = Some((name, device, supported));
                         break;
                     }
                     Err(e) => failed.push(format!("{name}: {e}")),
                 }
             }
-            let Some((device, supported)) = opened else {
+            let Some((name, device, supported)) = opened else {
                 let why = if failed.is_empty() {
                     "no output device".to_string()
                 } else {
@@ -118,7 +118,7 @@ pub fn start() -> Result<Engine> {
             };
             let format = supported.sample_format();
             let config: StreamConfig = supported.into();
-            let _ = rate_tx.send(Ok(config.sample_rate.0));
+            let _ = rate_tx.send(Ok((config.sample_rate.0, name, failed)));
             let Ok(renderer) = renderer_rx.recv() else { return };
             let stream = match format {
                 SampleFormat::F32 => build::<f32>(&device, &config, renderer),
@@ -141,8 +141,9 @@ pub fn start() -> Result<Engine> {
             }
         })
         .map_err(dev_err)?;
-    let rate = rate_rx.recv().map_err(dev_err)??;
+    let (rate, name, skipped) = rate_rx.recv().map_err(dev_err)??;
     let (mut engine, renderer) = Engine::with_renderer(rate);
+    engine.set_device(name, skipped);
     renderer_tx.send(renderer).map_err(dev_err)?;
     ready_rx.recv().map_err(dev_err)??;
     engine.attach_backend(Box::new(CpalBackend { stop: Some(stop_tx), thread: Some(thread) }));
