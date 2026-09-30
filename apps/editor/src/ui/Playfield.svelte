@@ -353,6 +353,7 @@
       hidden: app.play.hidden,
       live: v.playing,
       skin: app.skin.current,
+      noteShape: app.settings.data.noteSkin,
       classic: classicOn,
       classicHint: classicOn && ghost ? app.classic.hint : null,
       brush: v.brush,

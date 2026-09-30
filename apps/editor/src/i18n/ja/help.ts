@@ -55,12 +55,17 @@ export const help: Record<keyof typeof en, string> = {
   'cmd.help.updates': 'アップデートを確認',
   'cmd.help.report': '問題レポートをコピー（バージョン、エラー、ログの末尾）',
   'cmd.help.logs': 'ログフォルダを開く',
-  'cmd.app.preferences': '環境設定（言語、アップデート）',
+  'cmd.app.preferences': '環境設定（言語、ノーツスキン、アップデート）',
 
   'prefs.label': '環境設定',
   'prefs.language': '言語',
   'prefs.languageAuto': 'システムに合わせる（{name}）',
   'prefs.languageHint': '日本語訳はAIによる下訳です。誤りがあればお知らせください。',
+  'prefs.noteSkin': 'ノーツスキン',
+  'prefs.noteBar': 'バー',
+  'prefs.noteRound': '丸',
+  'prefs.noteSkinGame':
+    'ゲーム本来のパネルはゲームの画像でノーツを描きます。こちらはパネルがオフのときに表示されます（EZ2PORTタブ）。',
   'prefs.updates': '起動時に新しいバージョンを確認する（1日1回）',
   'prefs.close': '閉じる',
 };

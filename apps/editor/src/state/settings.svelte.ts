@@ -3,6 +3,7 @@
 
 import type { Backend } from '../bridge';
 import type { LanguageChoice } from '../i18n/i18n.svelte';
+import { NOTE_SHAPES, type NoteShape } from '../render/geometry';
 
 export interface SettingsData {
   /** EZ2AC data folder (the one with `sound` and `system`). */
@@ -24,6 +25,8 @@ export interface SettingsData {
   keys: Record<string, string[]>;
   /** Draw the playfield with the game folder's own panel when it has one. */
   gameSkin: boolean;
+  /** The neon skin's note heads: bars across the lane, or orbs. */
+  noteSkin: NoteShape;
   /** Disk kept for long files (stems) decoded across runs, MB; 0 = off. */
   audioCacheMB: number;
   /** Per song folder: the files with stem strips, once the song has chosen. */
@@ -94,6 +97,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   inputOffsetMs: 0,
   keys: {},
   gameSkin: true,
+  noteSkin: 'bar',
   audioCacheMB: 2048,
   strips: {},
   controls: { ini: null, debounceMs: null },
@@ -115,6 +119,8 @@ export class Settings {
       ...DEFAULT_SETTINGS,
       ...r,
       updates: { ...DEFAULT_UPDATES, ...(r.updates ?? {}) },
+      // A shape a later version added, read by this one: the default.
+      noteSkin: NOTE_SHAPES.includes(r.noteSkin!) ? r.noteSkin! : DEFAULT_SETTINGS.noteSkin,
     };
   }
 

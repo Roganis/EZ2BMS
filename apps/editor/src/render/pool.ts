@@ -198,6 +198,7 @@ const MOVE = 3;
 const LINE = 4;
 const FILL = 5;
 const STROKE = 6;
+const CIRCLE = 7;
 
 /** One frame's calls: numbers, and the styles the fills and strokes name by index. */
 class Recording {
@@ -248,6 +249,11 @@ export class Shapes {
     return this;
   }
 
+  circle(x: number, y: number, r: number): this {
+    this.cur.nums.push(CIRCLE, x, y, r);
+    return this;
+  }
+
   poly(points: readonly number[]): this {
     this.cur.nums.push(POLY, points.length, ...points);
     return this;
@@ -289,6 +295,10 @@ export class Shapes {
         case ROUND:
           g.roundRect(n[i]!, n[i + 1]!, n[i + 2]!, n[i + 3]!, n[i + 4]!);
           i += 5;
+          break;
+        case CIRCLE:
+          g.circle(n[i]!, n[i + 1]!, n[i + 2]!);
+          i += 3;
           break;
         case POLY: {
           const k = n[i++]!;

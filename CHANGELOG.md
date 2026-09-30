@@ -52,6 +52,9 @@ English, Korean and Japanese.
   AppImage; the `.deb` points to the release page).
 - A log on your machine: after a run that did not close, the next start
   offers it; About shows the version and copies a report for a bug.
+- A round note skin: orbs instead of bars, holds as capsules, chosen in
+  Preferences (Ctrl+,) or from the palette ("Note skin"). Clicks take a
+  note where it is drawn. The game's own panel keeps its note art.
 
 ### Fixed before release
 
@@ -106,3 +109,6 @@ English, Korean and Japanese.
   of the work per frame and leaves about a quarter of the garbage. The sound
   engine's clock also reaches the page less often, and not at all while
   nothing plays.
+- A hold's body runs from its end to its head. It used to stop short of
+  both, by about a third of the hold at each end, leaving gaps that made a
+  hold look like two notes and a bar.

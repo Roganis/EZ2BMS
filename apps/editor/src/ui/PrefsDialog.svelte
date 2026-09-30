@@ -1,9 +1,11 @@
 <script lang="ts">
-  // The app-wide choices that are not about a song: the language, and
-  // whether to look for updates. (EZ2PORT's folders, controls and timing
-  // keep their own panels, where they are used.)
+  // The app-wide choices that are not about a song: the language, the
+  // neon skin's notes, and whether to look for updates. (EZ2PORT's folders,
+  // the game skin, controls and timing keep their own panels, where they
+  // are used.)
   import { LOCALES, LOCALE_NAMES } from '@ez2bms/chart-core';
   import { i18n, t, type LanguageChoice } from '../i18n/i18n.svelte';
+  import type { NoteShape } from '../render/geometry';
   import { app } from '../state/app.svelte';
 
   const close = () => (app.prefsOpen = false);
@@ -41,6 +43,19 @@
     </select>
   </label>
   {#if i18n.locale !== 'en'}<p class="hint">{t('prefs.languageHint')}</p>{/if}
+
+  <label class="row">
+    <span>{t('prefs.noteSkin')}</span>
+    <select
+      value={app.settings.data.noteSkin}
+      onchange={(e) => app.settings.set('noteSkin', e.currentTarget.value as NoteShape)}
+      data-testid="prefs-note-skin"
+    >
+      <option value="bar">{t('prefs.noteBar')}</option>
+      <option value="round">{t('prefs.noteRound')}</option>
+    </select>
+  </label>
+  {#if app.skin.current}<p class="hint">{t('prefs.noteSkinGame')}</p>{/if}
 
   {#if app.updates.unsupported === 'no-key'}
     <p class="hint">{t('about.noKey')}</p>

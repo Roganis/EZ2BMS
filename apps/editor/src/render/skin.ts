@@ -1,10 +1,12 @@
 // The procedural neon skin: note heads, hold bodies and the selection ring,
 // drawn once per lane size into textures (no filters - glow is baked in, which
 // keeps WebKitGTK fast). Colours follow the EZ2 lane kinds: white and blue
-// keys, red turntable, gold pedal, pink effectors.
+// keys, red turntable, gold pedal, pink effectors. Heads are bars or orbs
+// (geometry.ts `noteBox` says where each sits).
 
 import { Graphics, Rectangle, Texture, type Renderer } from 'pixi.js';
 import type { LaneKind } from '@ez2bms/chart-core';
+import { noteBox, type NoteShape } from './geometry';
 
 export const KIND_COLOR: Record<LaneKind, number> = {
   white: 0xf2f2ff,
@@ -27,13 +29,22 @@ export const NEON = 0x58e1ff;
 export const NEON_2 = 0xff4fd8;
 
 export interface SkinTextures {
+  shape: NoteShape;
   head: Map<string, Texture>;
+  /** Baked without padding above and below: stretched, it spans exactly the hold. */
   body: Map<string, Texture>;
+  /** A hold's far end: a stub of the body across a bar, a half disc closing an orb's capsule. */
+  cap: Map<string, Texture>;
   ring: Map<string, Texture>;
+  /** The bar's ring whatever the shape, for notes drawn in the game's art (stretched to their height). */
+  frame: Map<string, Texture>;
   chip: Texture;
   /** A small red cross: a background continuation (BmsTWO marks them the same way). */
   cross: Texture;
+  /** A head's height in a key lane. */
   noteH: number;
+  /** How far from a note's line a pointer still takes it (NoteBox.reach). */
+  reach: number;
 }
 
 const key = (kind: LaneKind, w: number) => `${kind}:${Math.round(w)}`;
@@ -47,31 +58,52 @@ export class NeonSkin {
 
   constructor(private readonly renderer: Renderer) {}
 
-  /** Textures for these lane widths at this scale, rebuilt when either changes. */
-  textures(lanes: { kind: LaneKind; width: number }[], scale: number): SkinTextures {
+  /** Textures for these lane widths at this scale and shape, rebuilt when any changes. */
+  textures(
+    lanes: { kind: LaneKind; width: number }[],
+    scale: number,
+    shape: NoteShape,
+  ): SkinTextures {
     if (
       this.cache &&
       this.forScale === scale &&
+      this.cache.shape === shape &&
       lanes.every((l) => this.cache!.head.has(key(l.kind, l.width)))
     ) {
       return this.cache;
     }
     this.destroy();
-    const noteH = Math.max(6, Math.round(9 * scale));
+    const full = noteBox(shape, Infinity, scale);
     const t: SkinTextures = {
+      shape,
       head: new Map(),
       body: new Map(),
+      cap: new Map(),
       ring: new Map(),
+      frame: new Map(),
       chip: this.chip(scale),
       cross: this.cross(scale),
-      noteH,
+      noteH: full.h,
+      reach: full.reach,
     };
     for (const l of lanes) {
       const k = key(l.kind, l.width);
       if (t.head.has(k)) continue;
-      t.head.set(k, this.head(l.kind, l.width, noteH));
-      t.body.set(k, this.body(l.kind, l.width));
-      t.ring.set(k, this.ring(l.width, noteH));
+      const b = noteBox(shape, l.width, scale);
+      const bar = shape === 'bar' ? b : noteBox('bar', l.width, scale);
+      const body = this.body(l.kind, b.bodyW);
+      const frame = this.ring(bar.w, bar.h);
+      t.body.set(k, body);
+      t.frame.set(k, frame);
+      if (shape === 'round') {
+        t.head.set(k, this.orb(l.kind, b.w));
+        t.cap.set(k, this.cap(l.kind, b.bodyW));
+        t.ring.set(k, this.orbRing(b.w));
+      } else {
+        t.head.set(k, this.head(l.kind, b.w, b.h));
+        t.cap.set(k, body);
+        t.ring.set(k, frame);
+      }
     }
     this.cache = t;
     this.forScale = scale;
@@ -86,15 +118,23 @@ export class NeonSkin {
     return t.body.get(key(kind, width)) ?? Texture.WHITE;
   }
 
+  capFor(t: SkinTextures, kind: LaneKind, width: number): Texture {
+    return t.cap.get(key(kind, width)) ?? Texture.WHITE;
+  }
+
   ringFor(t: SkinTextures, kind: LaneKind, width: number): Texture {
     return t.ring.get(key(kind, width)) ?? Texture.WHITE;
   }
 
-  /** Bake a drawing whose content sits in [0, w] x [0, h] plus PAD all round. */
-  private bake(g: Graphics, w: number, h: number): Texture {
+  frameFor(t: SkinTextures, kind: LaneKind, width: number): Texture {
+    return t.frame.get(key(kind, width)) ?? Texture.WHITE;
+  }
+
+  /** Bake a drawing whose content sits in [0, w] x [0, h] plus PAD all round (or only at the sides). */
+  private bake(g: Graphics, w: number, h: number, padY = PAD): Texture {
     const tex = this.renderer.generateTexture({
       target: g,
-      frame: new Rectangle(0, 0, Math.ceil(w + 2 * PAD), Math.ceil(h + 2 * PAD)),
+      frame: new Rectangle(0, PAD - padY, Math.ceil(w + 2 * PAD), Math.ceil(h + 2 * padY)),
       resolution: window.devicePixelRatio || 1,
       antialias: true,
     });
@@ -102,42 +142,98 @@ export class NeonSkin {
     return tex;
   }
 
+  /** A bar head, `w` x `h`. */
   private head(kind: LaneKind, w: number, h: number): Texture {
     const c = KIND_COLOR[kind];
     const g = new Graphics();
-    const iw = Math.max(4, w - 2);
     const r = Math.min(3, h / 3);
     const o = PAD;
     // Soft glow halo, then the body, then a bright top edge.
-    g.roundRect(o - 3, o - 3, iw + 6, h + 6, r + 3).fill({ color: c, alpha: 0.12 });
-    g.roundRect(o - 1.5, o - 1.5, iw + 3, h + 3, r + 1.5).fill({ color: c, alpha: 0.22 });
-    g.roundRect(o, o, iw, h, r).fill({ color: c, alpha: 1 });
-    g.roundRect(o + 1, o + 1, iw - 2, Math.max(1, h * 0.35), r).fill({
+    g.roundRect(o - 3, o - 3, w + 6, h + 6, r + 3).fill({ color: c, alpha: 0.12 });
+    g.roundRect(o - 1.5, o - 1.5, w + 3, h + 3, r + 1.5).fill({ color: c, alpha: 0.22 });
+    g.roundRect(o, o, w, h, r).fill({ color: c, alpha: 1 });
+    g.roundRect(o + 1, o + 1, w - 2, Math.max(1, h * 0.35), r).fill({
       color: 0xffffff,
       alpha: 0.55,
     });
-    g.rect(o + 1, o + h - 2, iw - 2, 1).fill({ color: 0x000000, alpha: 0.25 });
-    return this.bake(g, iw, h);
+    g.rect(o + 1, o + h - 2, w - 2, 1).fill({ color: 0x000000, alpha: 0.25 });
+    return this.bake(g, w, h);
   }
 
-  private body(kind: LaneKind, w: number): Texture {
+  /**
+   * An orb head, `d` across: the bar's halo and dark lower edge, and its
+   * bright top as a highlight up and to the left, so it reads as a ball.
+   */
+  private orb(kind: LaneKind, d: number): Texture {
     const c = KIND_COLOR[kind];
     const g = new Graphics();
-    const bw = Math.max(4, Math.round(w * 0.72));
+    const r = d / 2;
+    const cx = PAD + r;
+    const cy = PAD + r;
+    g.circle(cx, cy, r + 3).fill({ color: c, alpha: 0.12 });
+    g.circle(cx, cy, r + 1.5).fill({ color: c, alpha: 0.22 });
+    g.circle(cx, cy, r).fill({ color: c, alpha: 1 });
+    // Each arc from its own start: a path's first arc is joined to (0, 0).
+    const a = Math.PI * 0.15;
+    g.moveTo(cx + (r - 0.75) * Math.cos(a), cy + (r - 0.75) * Math.sin(a));
+    g.arc(cx, cy, r - 0.75, a, Math.PI - a).stroke({
+      width: 1.5,
+      color: 0x000000,
+      alpha: 0.25,
+    });
+    g.ellipse(cx - r * 0.22, cy - r * 0.38, r * 0.5, r * 0.3).fill({
+      color: 0xffffff,
+      alpha: 0.55,
+    });
+    return this.bake(g, d, d);
+  }
+
+  private body(kind: LaneKind, bw: number): Texture {
+    const c = KIND_COLOR[kind];
+    const g = new Graphics();
     const o = PAD;
     g.rect(o, o, bw, 8).fill({ color: c, alpha: 0.3 });
     g.rect(o, o, 2, 8).fill({ color: c, alpha: 0.95 });
     g.rect(o + bw - 2, o, 2, 8).fill({ color: c, alpha: 0.95 });
-    return this.bake(g, bw, 8);
+    return this.bake(g, bw, 8, 0);
   }
 
+  /**
+   * The top half of a disc as wide as the body, its rim continuing the
+   * body's two edges: set on a round hold's end, it closes the capsule.
+   */
+  private cap(kind: LaneKind, bw: number): Texture {
+    const c = KIND_COLOR[kind];
+    const g = new Graphics();
+    const r = bw / 2;
+    const cx = PAD + r;
+    const cy = PAD + r;
+    g.moveTo(cx - r, cy)
+      .arc(cx, cy, r, Math.PI, 0)
+      .fill({ color: c, alpha: 0.3 });
+    g.moveTo(cx - r + 1, cy)
+      .arc(cx, cy, r - 1, Math.PI, 0)
+      .stroke({ width: 2, color: c, alpha: 0.95 });
+    return this.bake(g, bw, r);
+  }
+
+  /** The selection ring around a bar, `w` x `h`. */
   private ring(w: number, h: number): Texture {
     const g = new Graphics();
-    const iw = Math.max(4, w - 2);
     const o = PAD;
-    g.roundRect(o - 3.5, o - 3.5, iw + 7, h + 7, 5).stroke({ width: 3, color: NEON, alpha: 0.3 });
-    g.roundRect(o - 1.5, o - 1.5, iw + 3, h + 3, 4).stroke({ width: 1.5, color: NEON, alpha: 1 });
-    return this.bake(g, iw, h);
+    g.roundRect(o - 3.5, o - 3.5, w + 7, h + 7, 5).stroke({ width: 3, color: NEON, alpha: 0.3 });
+    g.roundRect(o - 1.5, o - 1.5, w + 3, h + 3, 4).stroke({ width: 1.5, color: NEON, alpha: 1 });
+    return this.bake(g, w, h);
+  }
+
+  /** The selection ring around an orb, `d` across. */
+  private orbRing(d: number): Texture {
+    const g = new Graphics();
+    const r = d / 2;
+    const c = PAD + r;
+    g.circle(c, c, r + 3.5).stroke({ width: 3, color: NEON, alpha: 0.3 });
+    g.circle(c, c, r + 1.5).stroke({ width: 1.5, color: NEON, alpha: 1 });
+    return this.bake(g, d, d);
   }
 
   private chip(scale: number): Texture {
@@ -160,11 +256,13 @@ export class NeonSkin {
   }
 
   destroy(): void {
-    if (!this.cache) return;
-    for (const m of [this.cache.head, this.cache.body, this.cache.ring])
-      for (const t of m.values()) t.destroy(true);
-    this.cache.chip.destroy(true);
-    this.cache.cross.destroy(true);
+    const c = this.cache;
+    if (!c) return;
+    // A bar's cap is its body and its ring its frame: each texture once.
+    const all = new Set([c.head, c.body, c.cap, c.ring, c.frame].flatMap((m) => [...m.values()]));
+    for (const t of all) t.destroy(true);
+    c.chip.destroy(true);
+    c.cross.destroy(true);
     this.cache = undefined;
   }
 }

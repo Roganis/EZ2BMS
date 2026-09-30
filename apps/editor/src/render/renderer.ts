@@ -44,11 +44,14 @@ import { GameSkinTextures } from './gameskin';
 import {
   computeLayout,
   laneAtX,
+  noteBox,
   RACK_BAR,
   RACK_LABEL,
   Viewport,
   type LaneGeom,
   type Layout,
+  type NoteBox,
+  type NoteShape,
   type SkinGeometry,
 } from './geometry';
 import { RectPool, Shapes, SpritePool, TextPool, tint } from './pool';
@@ -81,6 +84,8 @@ export interface FieldState {
   live: boolean;
   /** The game's own skin for this mode and side; null draws the neon one. */
   skin: GameSkin | null;
+  /** The neon skin's note heads (the game skin's lanes draw its own art). */
+  noteShape: NoteShape;
   /** Classic mode: the rack keeps keyed notes too (as outlines), so keying does not reshuffle it. */
   classic: boolean;
   /** The picked sound; its group's rack column is lit. */
@@ -145,7 +150,7 @@ export class PlayfieldRenderer {
   private tex: SkinTextures | undefined;
   /** The game skin's textures and lane boxes, rebuilt when a different skin arrives. */
   private game: { skin: GameSkin; tex: GameSkinTextures; geom: SkinGeometry } | undefined;
-  /** Note height on screen, for hit testing (the taller of the two skins' notes). */
+  /** The game skin's note height on screen, for hit testing (0 without it). */
   private noteHpx = 0;
   private raf = 0;
   private shownPx = 0;
@@ -381,7 +386,7 @@ export class PlayfieldRenderer {
     const lane = this.laneAt(px);
     const vp = this.vp;
     if (!s || !lane || !vp || !this.tex) return undefined;
-    const tol = Math.max(this.tex.noteH, this.noteHpx) * 0.9;
+    const tol = Math.max(this.tex.reach, this.noteHpx * 0.9);
     const p = vp.pulseOf(py);
     const span = tol / vp.pxPerPulse;
     const near = s.doc.index.inRange(lane.x, p - span, p + span);
@@ -596,7 +601,7 @@ export class PlayfieldRenderer {
     else animating = true;
     const vp = new Viewport(res, s.cursor, this.shownPx, l.judgeY);
     this.vp = vp;
-    const tex = this.skin.textures([...l.lanes, ...l.offLanes], l.scale);
+    const tex = this.skin.textures([...l.lanes, ...l.offLanes], l.scale, s.noteShape);
     this.tex = tex;
     const [p0, p1] = vp.visible(H);
     const pad = res;
@@ -955,7 +960,6 @@ export class PlayfieldRenderer {
     this.ringPool.begin();
     this.beamPool.begin();
     this.chipText.begin();
-    const noteH = tex.noteH;
     for (const lane of [...l.lanes, ...l.offLanes]) {
       if (lane.width < 1) continue;
       const alpha = lane.offMode ? 0.4 * this.extras : 1;
@@ -966,8 +970,12 @@ export class PlayfieldRenderer {
       }
       const head = this.skin.headFor(tex, lane.kind, lane.width);
       const body = this.skin.bodyFor(tex, lane.kind, lane.width);
+      const cap = this.skin.capFor(tex, lane.kind, lane.width);
       const ring = this.skin.ringFor(tex, lane.kind, lane.width);
-      const bw = Math.max(4, Math.round(lane.width * 0.72));
+      const box = noteBox(tex.shape, lane.width, l.scale);
+      const bw = box.bodyW;
+      const bx = lane.left + (lane.width - bw) / 2;
+      const hx = lane.left + box.inset;
       for (const n of s.doc.index.inRange(lane.x, p0, p1)) {
         let y = vp.yOf(n.y);
         if (s.hidden.has(n.id)) {
@@ -978,16 +986,23 @@ export class PlayfieldRenderer {
         const sel = s.selection.has(n.id);
         if (n.l > 0) {
           const ye = vp.yOf(n.y + n.l);
+          // The body is baked without padding above and below, so stretched
+          // it runs from the end to the head and no further.
           const b = this.bodyPool.next(body);
-          b.position.set(lane.left + (lane.width - bw) / 2 - PAD, ye - PAD);
-          b.height = y - ye + 2 * PAD;
+          b.position.set(bx - PAD, ye);
+          b.height = y - ye;
           b.width = bw + 2 * PAD;
           b.alpha = alpha;
-          // The end cap: a thin bar in the body's colour, clearly part of the hold.
-          const tail = this.bodyPool.next(body);
-          tail.position.set(lane.left + (lane.width - bw) / 2 - PAD - 2, ye - 2 - PAD);
-          tail.width = bw + 4 + 2 * PAD;
-          tail.height = 4 + 2 * PAD;
+          const tail = this.bodyPool.next(cap);
+          if (tex.shape === 'round') {
+            // A half disc on the end: the hold is a capsule.
+            tail.position.set(bx - PAD, ye - bw / 2 - PAD);
+          } else {
+            // The end cap: a thin bar in the body's colour, clearly part of the hold.
+            tail.position.set(bx - PAD - 2, ye - 2);
+            tail.width = bw + 4 + 2 * PAD;
+            tail.height = 4;
+          }
           tail.alpha = alpha;
           if (n.kind !== undefined && n.kind !== 0 && y - ye > 28) {
             const t = this.chipText.next(this.holdLabel(s, n), 1, Infinity, KIND_COLOR[lane.kind]);
@@ -996,11 +1011,11 @@ export class PlayfieldRenderer {
           }
         }
         const h = this.headPool.next(head);
-        h.position.set(lane.left + 1 - PAD, y - noteH / 2 - PAD);
+        h.position.set(hx - PAD, y - box.h / 2 - PAD);
         h.alpha = alpha;
         if (sel) {
           const r = this.ringPool.next(ring);
-          r.position.set(lane.left + 1 - PAD, y - noteH / 2 - PAD);
+          r.position.set(hx - PAD, y - box.h / 2 - PAD);
         }
       }
     }
@@ -1047,7 +1062,8 @@ export class PlayfieldRenderer {
         sp.height = Math.abs(len);
       }
     };
-    const ring = this.skin.ringFor(this.tex!, lane.kind, lane.width);
+    // The game's notes are bars whatever the neon skin's shape: ring them as bars.
+    const ring = this.skin.frameFor(this.tex!, lane.kind, lane.width);
     for (const n of s.doc.index.inRange(lane.x, p0, p1)) {
       let y = vp.yOf(n.y);
       if (s.hidden.has(n.id)) {
@@ -1524,7 +1540,12 @@ export class PlayfieldRenderer {
       g.rect(fl, jy - 2.5 * l.scale, fw, 5 * l.scale).fill({ color: NEON, alpha: 0.25 });
       g.rect(fl, jy - 1, fw, 2).fill({ color: 0xffffff, alpha: 0.95 });
     }
-    const noteH = gs ? gs.noteH : tex.noteH;
+    // Ghosts take the skin's note shape: the game's art is bars, of its height.
+    const round = !gs && tex.shape === 'round';
+    const outline = (lane: LaneGeom) =>
+      gs
+        ? { ...noteBox('bar', lane.width, l.scale), h: gs.noteH }
+        : noteBox(tex.shape, lane.width, l.scale);
     // The cursor's handle in the gutter.
     const hx = l.field.left - 5;
     g.poly([hx - 10 * l.scale, jy - 6 * l.scale, hx, jy, hx - 10 * l.scale, jy + 6 * l.scale]).fill(
@@ -1546,22 +1567,17 @@ export class PlayfieldRenderer {
           );
           t.position.set(lane.left + lane.width + 6, y - t.height / 2);
         }
+        const box = outline(lane);
         if (s.ghost.l > 0) {
           const ye = vp.yOf(s.ghost.y + s.ghost.l);
-          g.rect(lane.left + lane.width * 0.14, ye, lane.width * 0.72, y - ye).fill({
+          g.rect(lane.left + (lane.width - box.bodyW) / 2, ye, box.bodyW, y - ye).fill({
             color: c,
             alpha: 0.18,
           });
         }
-        g.roundRect(lane.left + 1, y - noteH / 2, lane.width - 2, noteH, 3).fill({
-          color: c,
-          alpha: 0.35,
-        });
-        g.roundRect(lane.left + 1, y - noteH / 2, lane.width - 2, noteH, 3).stroke({
-          width: 1,
-          color: c,
-          alpha: 0.8,
-        });
+        noteShape(g, lane.left + box.inset, y, box, round)
+          .fill({ color: c, alpha: 0.35 })
+          .stroke({ width: 1, color: c, alpha: 0.8 });
       }
     }
     this.ghostText.end();
@@ -1571,7 +1587,7 @@ export class PlayfieldRenderer {
     this.tickRects.end();
     const top = this.overlayTopShapes;
     top.clear();
-    if (s.take) this.drawTake(top, s.take, l, vp, noteH);
+    if (s.take) this.drawTake(top, s.take, l, vp, outline, round);
     if (s.marquee) {
       const m = s.marquee;
       const x = Math.min(m.x0, m.x1);
@@ -1736,26 +1752,37 @@ export class PlayfieldRenderer {
     take: NonNullable<FieldState['take']>,
     l: Layout,
     vp: Viewport,
-    noteH: number,
+    outline: (lane: LaneGeom) => NoteBox,
+    round: boolean,
   ): void {
     const lanes = [...l.lanes, ...l.offLanes];
     take.notes.forEach((n, i) => {
       const lane = lanes.find((g2) => g2.x === n.x);
       if (!lane) return;
+      const box = outline(lane);
       const y = vp.yOf(n.y);
       const ye = n.l > 0 ? vp.yOf(n.y + n.l) : y;
-      if (y < -noteH || ye > l.height + noteH) return;
+      if (y < -box.h || ye > l.height + box.h) return;
       const c = TAKE_COLOR[take.states?.[i] ?? 'ok'];
       if (n.l > 0)
         g.rect(lane.left + lane.width * 0.2, ye, lane.width * 0.6, y - ye).fill({
           color: c,
           alpha: 0.22,
         });
-      g.roundRect(lane.left + 2, y - noteH / 2, lane.width - 4, noteH, 3)
+      // A little inside the head, so a take over the chart's notes shows both.
+      const inner = { ...box, w: box.w - 2, h: box.h - (round ? 2 : 0) };
+      noteShape(g, lane.left + box.inset + 1, y, inner, round)
         .fill({ color: c, alpha: 0.28 })
         .stroke({ width: 1.5, color: c, alpha: 0.95 });
     });
   }
+}
+
+/** A note head's outline centred on `y`, its left edge at `x`: an orb or a bar. */
+function noteShape(g: Shapes, x: number, y: number, box: NoteBox, round: boolean): Shapes {
+  return round
+    ? g.circle(x + box.w / 2, y, box.h / 2)
+    : g.roundRect(x, y - box.h / 2, box.w, box.h, 3);
 }
 
 /** One frame's view of the game skin: design space to the screen, and the port's counters. */

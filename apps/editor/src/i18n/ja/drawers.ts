@@ -180,6 +180,7 @@ export const drawers: Record<keyof typeof en, string> = {
   'cmd.view.speed': 'ハイスピード設定…',
   'cmd.view.side': 'P1 / P2の表示を入れ替え',
   'cmd.view.gameSkin': 'ゲームスキンのオン / オフ',
+  'cmd.view.noteSkin': 'ノーツスキン：バー / 丸',
   'cmd.view.left': 'サウンド一覧の表示 / 非表示',
   'cmd.view.workbench': 'キー音ワークベンチ',
   'cmd.view.songManager': '楽曲管理（情報、カテゴリ、全譜面）',

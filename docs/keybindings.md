@@ -22,7 +22,7 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 | Import a song… (EZ2AC, BMS, bmson)                 |          |         |
 | New song…                                          |          |         |
 | Open song folder…                                  | `Ctrl+O` |         |
-| Preferences (language, updates)                    | `Ctrl+,` |         |
+| Preferences (language, note skin, updates)         | `Ctrl+,` |         |
 | Save                                               | `Ctrl+S` |         |
 | Undo a cabinet export…                             |          |         |
 
@@ -94,6 +94,7 @@ M K , L . / ;) or your own `<game>/ez2port/keys.ini`. Esc ends the run.
 | Inspector                                  | `Ctrl+I`          |                |
 | Issues (pre-flight check)                  | `Ctrl+Shift+I`    |                |
 | Keysound workbench                         | `Ctrl+Shift+B`    |                |
+| Note skin: bars / round                    |                   |                |
 | Play speed…                                |                   | `speed 250`    |
 | Show / hide sounds                         | `Ctrl+B`          |                |
 | Snap to…                                   |                   | `snap 1/16`    |

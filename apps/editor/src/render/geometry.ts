@@ -210,6 +210,59 @@ export function computeLayout(i: LayoutInput): Layout {
   };
 }
 
+/**
+ * The neon skin's note heads. `bar` spans the lane, a short slab like the
+ * game's own notes; `round` is an orb of one size in every lane, so a chord
+ * reads as a row of equal dots whatever the lanes' widths, and a hold is a
+ * capsule. The game skin draws notes in its own art and ignores this.
+ */
+export type NoteShape = 'bar' | 'round';
+
+export const NOTE_SHAPES: readonly NoteShape[] = ['bar', 'round'];
+
+/** Where a note's head and hold body sit in a lane, screen pixels. */
+export interface NoteBox {
+  /** From the lane's left edge to the head's. */
+  inset: number;
+  w: number;
+  /** Centred on the note's line. */
+  h: number;
+  /** A hold body's width, centred in the lane. */
+  bodyW: number;
+  /** How far above or below the note's line a pointer still takes it. */
+  reach: number;
+}
+
+/** A bar's height and an orb's diameter, design units. */
+const BAR_H = 9;
+const ORB_D = 18;
+
+export function noteBox(shape: NoteShape, laneWidth: number, scale: number): NoteBox {
+  const barH = Math.max(6, Math.round(BAR_H * scale));
+  if (shape === 'round') {
+    // 18 of the narrowest key's 26 keeps a gap each side; the off-mode
+    // gutter's lanes are narrower still, and shrink it.
+    const d = Math.max(4, Math.min(Math.round(ORB_D * scale), Math.floor(laneWidth) - 4));
+    return {
+      inset: (laneWidth - d) / 2,
+      w: d,
+      h: d,
+      bodyW: Math.max(4, Math.round(d * 0.72)),
+      // The bar's slack past the edge, not the bar's 0.9 of the height: an
+      // orb is twice as tall, and a click that far off it would take it
+      // instead of placing a note beside it.
+      reach: d / 2 + 0.4 * barH,
+    };
+  }
+  return {
+    inset: 1,
+    w: Math.max(4, laneWidth - 2),
+    h: barH,
+    bodyW: Math.max(4, Math.round(laneWidth * 0.72)),
+    reach: 0.9 * barH,
+  };
+}
+
 /** The lane under a screen x, if any (mode lanes, then off-mode lanes). */
 export function laneAtX(l: Layout, px: number): LaneGeom | undefined {
   return (

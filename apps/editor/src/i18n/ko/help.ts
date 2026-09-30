@@ -55,12 +55,17 @@ export const help: Record<keyof typeof en, string> = {
   'cmd.help.updates': '업데이트 확인',
   'cmd.help.report': '문제 보고서 복사 (버전, 오류, 로그 끝부분)',
   'cmd.help.logs': '로그 폴더 열기',
-  'cmd.app.preferences': '환경 설정 (언어, 업데이트)',
+  'cmd.app.preferences': '환경 설정 (언어, 노트 스킨, 업데이트)',
 
   'prefs.label': '환경 설정',
   'prefs.language': '언어',
   'prefs.languageAuto': '시스템 설정 따름 ({name})',
   'prefs.languageHint': '한국어 번역은 AI가 작성한 초안입니다. 고칠 곳을 알려 주세요.',
+  'prefs.noteSkin': '노트 스킨',
+  'prefs.noteBar': '막대',
+  'prefs.noteRound': '원형',
+  'prefs.noteSkinGame':
+    '게임 자체의 패널은 게임의 그림으로 노트를 그립니다. 이 스킨은 패널을 껐을 때 보입니다 (EZ2PORT 탭).',
   'prefs.updates': '시작할 때 새 버전 확인 (하루 한 번)',
   'prefs.close': '닫기',
 };

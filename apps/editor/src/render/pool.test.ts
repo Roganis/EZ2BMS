@@ -9,6 +9,7 @@ function spy() {
     clear: () => (calls.push('clear'), g),
     rect: (...a: number[]) => (calls.push(`rect ${a.join(' ')}`), g),
     roundRect: (...a: number[]) => (calls.push(`roundRect ${a.join(' ')}`), g),
+    circle: (...a: number[]) => (calls.push(`circle ${a.join(' ')}`), g),
     poly: (p: number[]) => (calls.push(`poly ${p.join(' ')}`), g),
     moveTo: (...a: number[]) => (calls.push(`moveTo ${a.join(' ')}`), g),
     lineTo: (...a: number[]) => (calls.push(`lineTo ${a.join(' ')}`), g),
@@ -22,6 +23,7 @@ const frame = (sh: Shapes, y: number, alpha = 0.5) => {
   sh.clear();
   sh.rect(0, y, 10, 2).fill({ color: 0xffffff, alpha });
   sh.poly([0, 0, 4, 2, 0, 4]).fill({ color: 0x58e1ff, alpha: 1 });
+  sh.circle(5, y, 4).fill({ color: 0xffd11f, alpha: 0.35 });
   sh.moveTo(0, y).lineTo(9, y).stroke({ width: 1, color: 0xff0000, alpha: 0.5 });
   sh.commit();
 };
@@ -36,6 +38,8 @@ describe('Shapes', () => {
       'fill {"color":16777215,"alpha":0.5}',
       'poly 0 0 4 2 0 4',
       'fill {"color":5825023,"alpha":1}',
+      'circle 5 3 4',
+      'fill {"color":16765215,"alpha":0.35}',
       'moveTo 0 3',
       'lineTo 9 3',
       'stroke {"width":1,"color":16711680,"alpha":0.5}',

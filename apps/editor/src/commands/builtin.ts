@@ -267,6 +267,16 @@ export function registerBuiltins(app: App): void {
       },
     },
     {
+      id: 'view.noteSkin',
+      title: tEn('cmd.view.noteSkin'),
+      group: 'View',
+      run: () => {
+        app.settings.set('noteSkin', app.settings.data.noteSkin === 'round' ? 'bar' : 'round');
+        // The game's panel draws its own notes: say why nothing changed.
+        if (app.skin.current) toast(t('prefs.noteSkinGame'));
+      },
+    },
+    {
       id: 'view.left',
       title: tEn('cmd.view.left'),
       group: 'View',

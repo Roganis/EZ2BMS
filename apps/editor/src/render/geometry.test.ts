@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   computeLayout,
   laneAtX,
+  noteBox,
   RACK_GAP,
   RACK_SUB,
   RACK_SUB_MIN,
@@ -142,5 +143,58 @@ describe('playfield geometry', () => {
       extras: 0,
     });
     expect(play.strips.every((g) => g.width === 0)).toBe(true);
+  });
+});
+
+describe('note heads', () => {
+  it('keeps the bar as it was: the lane less a pixel each side, 9 tall', () => {
+    const b = noteBox('bar', 30, 1);
+    expect(b).toMatchObject({ inset: 1, w: 28, h: 9, bodyW: 22 });
+    expect(b.reach).toBeCloseTo(8.1, 6);
+    expect(noteBox('bar', 60, 2).h).toBe(18);
+    // Never thinner than 6 pixels.
+    expect(noteBox('bar', 18, 0.6).h).toBe(6);
+  });
+
+  it('draws round heads one size in every lane, centred, inside it', () => {
+    for (const m of ['5k-only', 'scratch', 'ruby', '5k', '7k', '10k', '14k'] as const) {
+      for (const [w, h] of [
+        [1440, 900],
+        [700, 900],
+        [1920, 1080],
+        [960, 480],
+      ] as const) {
+        const l = layout(m, 'P1', w, h);
+        const boxes = l.lanes.map((g) => ({ g, b: noteBox('round', g.width, l.scale) }));
+        const d = boxes[0]!.b.w;
+        for (const { g, b } of boxes) {
+          expect(b.w, `${m} ${w}x${h}`).toBe(d);
+          expect(b.h).toBe(b.w);
+          // Centred, with at least two pixels to spare each side.
+          expect(b.inset).toBeCloseTo((g.width - b.w) / 2, 6);
+          expect(b.inset).toBeGreaterThanOrEqual(2 - 1e-9);
+          // The hold body is narrower than the head, so the head reads over it.
+          expect(b.bodyW).toBeLessThan(b.w);
+        }
+      }
+    }
+  });
+
+  it('shrinks an orb only where the lane is too narrow for it', () => {
+    expect(noteBox('round', 30, 1).w).toBe(18);
+    expect(noteBox('round', 46, 1).w).toBe(18);
+    // The off-mode gutter's 22.
+    expect(noteBox('round', 22, 1)).toMatchObject({ w: 18, inset: 2 });
+    expect(noteBox('round', 15, 1)).toMatchObject({ w: 11, h: 11, inset: 2 });
+    // Play hides that gutter by narrowing it to nothing.
+    expect(noteBox('round', 0, 1).w).toBe(4);
+  });
+
+  it('takes a click as far past an orb as past a bar, not twice as far', () => {
+    for (const scale of [0.6, 1, 1.5, 2.25]) {
+      const bar = noteBox('bar', 30 * scale, scale);
+      const orb = noteBox('round', 30 * scale, scale);
+      expect(orb.reach - orb.h / 2).toBeCloseTo(bar.reach - bar.h / 2, 6);
+    }
   });
 });

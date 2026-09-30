@@ -61,6 +61,13 @@ only changes the lane boxes, the judge line and how things look; scrolling,
 hit testing and the tools are the same code. What is reproduced from the
 port's `scene/skin.c`, and what is not, is in `ez2port-compat.md`.
 
+The neon skin's note heads are bars across the lane or orbs, one size in
+every lane with holds as capsules (Preferences; the `noteSkin` setting).
+`render/geometry.ts`'s `noteBox` says where a head sits and how far from it
+a click still takes it, so the drawing, hit testing, the draw tool's ghost
+and a recorded take agree. The game skin keeps its own art whichever is
+chosen: the shape is the editor's, not one of the game's note styles.
+
 Both skins read the game folder through `skin/vfs.ts`, the port's
 any-case, `.abm`-first resolver. The song manager's wheel preview reads the
 song select's masks through it too (`skin/select.ts`) and draws a Canvas 2D

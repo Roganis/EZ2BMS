@@ -689,6 +689,36 @@ host. The clock's new cadence was not run in the desktop app here.
 To confirm on the owner's machine: playing is smooth on WebKitGTK and
 WebView2 with a real GPU, strips included.
 
+### A round note skin, 2026-09-30
+
+The owner asked for a round note skin. The game's note styles are whatever
+art its `.pvi` lists under `NoteAniTexture`, and the port has no round one,
+so this is the neon skin's: orbs of one size in every lane (18 design units,
+smaller only where a lane is too narrow), holds as capsules, a round
+selection ring and ghost, chosen in Preferences or the palette and kept in
+the settings (`noteSkin`). The game skin's lanes keep the game's art and a
+bar-shaped ring; Preferences and the palette say so when it is showing. The
+size, the capsule and the orb's look are the assistant's choices, not the
+owner's. A click takes an orb as far past its edge as a bar, not in
+proportion to its height, so a note a sixteenth away can still be placed at
+the default zoom. The Korean and Japanese are drafts, as the rest.
+
+Drawing it found that every hold's body stopped short of its head and its
+end: the body texture's transparent margin was stretched with it. Bodies
+are now baked without that margin.
+
+Tests: unit tests (`noteBox`: the bar unchanged, orbs one size, centred and
+inside every lane of every mode at four window sizes, the click's reach; the
+recorded Graphics' circle) and Playwright (Preferences turn the notes round
+and it survives a reload; a click near an orb's rim selects it and one a
+sixteenth above places a note; a hold's body is there just past its head and
+just short of its end, bar and round; the palette switches it, and says why
+over the game's panel). Screenshots of both skins were looked at in headless
+Chromium.
+
+To confirm on the owner's machine: that the orbs' size and look are what
+they wanted, on WebKitGTK and WebView2.
+
 ---
 
 ## Verification status
@@ -802,3 +832,5 @@ WebView2 with a real GPU, strips included.
 | A difficulty's own disc: imported, shown on the wheel, published beside NM's        | unit and oracle tests, Playwright (made-up art)          | Yes, in the container |
 | The playfield draws in an installed build on Windows (WebView2)                     | not run                                                  | **No** - owner        |
 | The browser preview runs on its host                                                | Chromium under a policy like the host's                  | **No** - owner        |
+| Round notes: orbs, capsules, taken where drawn; hold bodies reach their heads       | geometry tests, Playwright, screenshots (Chromium)       | Yes, in the container |
+| The round skin looks as the owner wanted, on WebKitGTK / WebView2                   | not run                                                  | **No** - owner        |
