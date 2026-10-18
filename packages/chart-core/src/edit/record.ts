@@ -5,18 +5,21 @@
 //
 // - Snapping: to the nearest step of the chosen grid (the editor's snap, or
 //   the exact EZ2 tick), by the chart's own clock (PlanTimeline: the f32
-//   tempo EZ2PORT plays, STOPs as gaps). How far each press was from its
-//   step is kept, for the timing figures a calibration needs.
+//   tempo EZ2PORT plays, STOPs as gaps) - or, in a Classic song, to the
+//   nearest background note within half a step (the magnet). How far each
+//   press was from where it landed is kept, for the timing figures a
+//   calibration needs.
 // - Holds: a press held for `holdMinMs` or longer becomes a hold to its
 //   snapped release; shorter is a tap. ScratchMix takes taps only.
 // - Clashes: a note where the lane already has one (or inside a hold) is
 //   skipped and counted - a take never overwrites; a hold that would swallow
 //   a note is shortened to a tap first.
-// - Classic songs (the owner's choice, M7): a press keys the background
-//   sound playing there - a note already in the background at that spot, or
-//   a split of a sound playing through - so the music stays the same. Only
-//   background sounds are taken (never another lane's keying), each checked
-//   by classicKey, and a press with nothing to key is counted as silent.
+// - Classic songs (the owner's choice, M7): a press keys a note already in
+//   the background where it landed, so the music stays the same. As placing
+//   by hand (edit/classic.ts), a take never splits a sound to make a note of
+//   its own (the owner's rule, 2026-09-28). Only background notes are taken
+//   (never another lane's keying), each checked by classicKey, and a press
+//   with no background note within half a step is counted as silent.
 //   Other songs get a note with the brush sound.
 
 import { said, sayText } from '../i18n/say';
@@ -49,6 +52,11 @@ export interface SnapOptions {
   holdMinMs: number;
   /** Presses before this pulse (the count-in) are dropped. */
   fromPulse?: number;
+  /**
+   * Classic: where a press on lane x near pulse p lands - a background note
+   * within `reach` pulses (classicMagnet) - or undefined for the grid.
+   */
+  magnet?: (x: number, p: number, reach: number) => number | undefined;
 }
 
 export function snapTake(
@@ -59,7 +67,8 @@ export function snapTake(
   const out: TakeNote[] = [];
   const seen = new Set<string>();
   for (const p of [...presses].sort((a, b) => a.downMs - b.downMs)) {
-    const y = snapNearest(timeline.pulseAt(p.downMs), o.step);
+    const at = timeline.pulseAt(p.downMs);
+    const y = o.magnet?.(p.x, at, o.step / 2) ?? snapNearest(at, o.step);
     if (y < (o.fromPulse ?? 0)) continue;
     // Two presses snapping onto one step of a lane are one note.
     const key = `${p.x}:${y}`;
@@ -129,7 +138,7 @@ export interface TakeResult {
   placed: number;
   /** Where the lane already had a note. */
   clash: number;
-  /** Classic: nothing sounding there to key. */
+  /** Classic: no background note there to key. */
   silent: number;
   /** Classic: every sound there would have sounded different keyed. */
   refused: number;
@@ -137,8 +146,6 @@ export interface TakeResult {
   shortened: number;
   /** The notes placed or keyed. */
   ids: NoteId[];
-  /** Classic: continuation notes the take inserted (splits it made, which un-keying heals). */
-  splits: NoteId[];
 }
 
 /** Apply a take to the chart as one undo step labelled `label`, and select what it placed. */
@@ -155,7 +162,6 @@ export function applyTake(
     refused: 0,
     shortened: 0,
     ids: [],
-    splits: [],
   };
   const ordered = [...notes].sort((a, b) => a.y - b.y || a.x - b.x);
   if ('brush' in target) {
@@ -194,7 +200,6 @@ export function applyTake(
           const k = classicKey(doc, n.x, n.y, l, cand, env);
           if (k.ok && k.id !== undefined) {
             r.ids.push(k.id);
-            if (cand.kind === 'split') r.splits.push(k.id);
             return 'ok';
           }
         }

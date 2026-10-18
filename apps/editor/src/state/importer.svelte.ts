@@ -16,6 +16,7 @@ import {
   type EzSongImport,
   type Game,
   type GameSong,
+  type SongImage,
 } from '@ez2bms/chart-core';
 import { baseName, dirName, joinPath, type ImportJob } from '../bridge';
 import { errorText, t } from '../i18n/i18n.svelte';
@@ -226,6 +227,9 @@ export class Importer {
           const file = r.failed[0]![0] + (r.failed.length > 1 ? '...' : '');
           toast(t('import.copyFailed', { n: r.failed.length, file }), 'warn');
         }
+        // The game's disc and eyecatch, made plain BMPs by chart-core: small,
+        // so written after the folder rather than through the job's copies.
+        if (this.source === 'game') await this.writeImages(dir, (imp as EzSongImport).images);
       }
       this.open = false;
       if (await this.app.openProject(dir)) toast(t('import.done', { n: imp.charts.length }), 'ok');
@@ -237,5 +241,18 @@ export class Importer {
       this.busy = false;
       this.progress = null;
     }
+  }
+
+  /** Write the song's pictures; one that cannot be written is said, and the song opens without it. */
+  private async writeImages(dir: string, images: readonly SongImage[]): Promise<void> {
+    const failed: string[] = [];
+    for (const im of images) {
+      try {
+        await this.app.backend.writeBytes(joinPath(dir, im.to), im.bytes, false);
+      } catch (e) {
+        failed.push(`${im.to} (${errorText(e)})`);
+      }
+    }
+    if (failed.length) toast(t('import.artFailed', { files: failed.join(', ') }), 'warn');
   }
 }

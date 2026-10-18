@@ -183,6 +183,7 @@ export const drawers: Record<keyof typeof en, string> = {
   'cmd.view.speed': '배속 설정…',
   'cmd.view.side': 'P1 / P2 화면 전환',
   'cmd.view.gameSkin': '게임 스킨 켜기 / 끄기',
+  'cmd.view.noteSkin': '노트 스킨: 막대 / 원형',
   'cmd.view.left': '사운드 목록 표시 / 숨기기',
   'cmd.view.workbench': '키음 워크벤치',
   'cmd.view.songManager': '곡 관리 (정보, 카테고리, 모든 채보)',

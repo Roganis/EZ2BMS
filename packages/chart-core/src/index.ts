@@ -87,6 +87,7 @@ export * from './sound/rename';
 export * from './song';
 export { synthChart, synthDoc, synthSoundName, type SynthOptions } from './dev/synth';
 export {
+  synthArt,
   synthGame,
   synthGds,
   synthPe,

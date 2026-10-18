@@ -5,7 +5,9 @@
   // 10 px). Right, the cut itself, made by the host exactly as it goes into
   // the package: the disc spinning at the wheel's 176 px (its black corners
   // are the game's transparent key), the eyecatch with the part the
-  // song-select screen shows marked.
+  // song-select screen shows marked. The disc has one per difficulty, as the
+  // game's songs do (chart-core song/art.ts): a difficulty without its own
+  // shows NM's, and choosing an image for it gives it one.
   import {
     DISC_SIZE,
     EYECATCH_H,
@@ -16,8 +18,10 @@
     centredVisible,
     defaultEyecatch,
     eyecatchExtent,
+    TIERS,
     type ArtCrop,
     type ArtJob,
+    type Tier,
   } from '@ez2bms/chart-core';
   import { joinPath, type ArtPixels } from '../../bridge';
   import { errorText, t, tParts } from '../../i18n/i18n.svelte';
@@ -28,12 +32,20 @@
   let { project, kind }: { project: Project; kind: ArtKind } = $props();
 
   const disc = $derived(kind === 'disc');
+  // The disc's difficulty being shown, and whether it has a disc of its own.
+  let tier = $state<Tier>('NM');
+  const own = $derived(tier !== 'NM' && !!project.sidecar.discs?.[tier]);
+  /** Where an edit goes: the difficulty's own disc, else NM's (which it shows). */
+  const target = $derived<Tier>(own ? tier : 'NM');
   // Chart info is not reactive itself; each chart's revision says it changed.
   const source = $derived.by(() => {
     for (const c of project.charts) void c.rev;
-    return project.art[kind];
+    const art = project.art;
+    return disc && own && tier !== 'NM' ? (art.discs?.[tier] ?? art.disc) : art[kind];
   });
-  const setting = $derived(project.sidecar[kind]);
+  const setting = $derived(
+    disc && tier !== 'NM' ? project.sidecar.discs?.[tier] : project.sidecar[kind],
+  );
   // `source` is a new object whenever the song file changes; effects follow
   // these values instead, so a crop does not reload the image.
   const srcPath = $derived(source?.path);
@@ -118,7 +130,7 @@
       const same = (a: ArtCrop, b: ArtCrop) =>
         a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
       const done = disc
-        ? app.art.setDisc(same(c, centreSquare(img.w, img.h)) ? { src } : { src, crop: c })
+        ? app.art.setDisc(same(c, centreSquare(img.w, img.h)) ? { src } : { src, crop: c }, target)
         : app.art.setEyecatch({ src, mode: 'visible', crop: c });
       live = null;
       void done;
@@ -237,13 +249,14 @@
   const choice = $derived(setting === undefined ? '' : setting === null ? NONE : setting.src);
   async function pick(v: string) {
     live = null;
-    if (v === '') await (disc ? app.art.setDisc(undefined) : app.art.setEyecatch(undefined));
+    if (disc && tier !== 'NM') await app.art.setDisc(v === '' ? undefined : { src: v }, tier);
+    else if (v === '') await (disc ? app.art.setDisc(undefined) : app.art.setEyecatch(undefined));
     else if (v === NONE) await (disc ? app.art.setDisc(null) : app.art.setEyecatch(null));
     else await app.art.choose(kind, v);
   }
   async function importHere() {
     const names = await app.art.pickAndImport();
-    if (names.length === 1) await app.art.choose(kind, names[0]!);
+    if (names.length === 1) await pick(names[0]!);
   }
   async function setMode(mode: 'visible' | 'stretch') {
     if (!source || !img || stretch === (mode === 'stretch')) return;
@@ -274,7 +287,7 @@
     if (!source || !img) return;
     live = null;
     void (disc
-      ? app.art.setDisc({ src: source.src })
+      ? app.art.setDisc({ src: source.src }, target)
       : app.art.setEyecatch(defaultEyecatch(source.src, img.w, img.h)));
   }
 
@@ -318,14 +331,33 @@
         : t('art.eyecatch.what', { w: EYECATCH_W, h: EYECATCH_H })}
     </span>
     <div class="tools ez-form">
+      {#if disc}
+        <div class="ez-seg" role="group" aria-label={t('art.disc.tier')}>
+          {#each TIERS as x (x)}
+            <button
+              class:on={tier === x}
+              class:own={x !== 'NM' && !!project.sidecar.discs?.[x]}
+              data-testid="art-disc-tier-{x}"
+              onclick={() => {
+                live = null;
+                tier = x;
+              }}>{x}</button
+            >
+          {/each}
+        </div>
+      {/if}
       <select
         data-testid="art-source"
         aria-label={t(disc ? 'art.disc.image' : 'art.eyecatch.image')}
         value={choice}
         onchange={(e) => void pick(e.currentTarget.value)}
       >
-        <option value="">{t('art.auto')}</option>
-        <option value={NONE}>{t('art.none')}</option>
+        {#if disc && tier !== 'NM'}
+          <option value="">{t('art.disc.sameAsNm')}</option>
+        {:else}
+          <option value="">{t('art.auto')}</option>
+          <option value={NONE}>{t('art.none')}</option>
+        {/if}
         {#each project.images as im (im)}
           <option value={im}>{im}</option>
         {/each}
@@ -467,6 +499,9 @@
     </div>
   </div>
 
+  {#if disc && tier !== 'NM'}
+    <p class="tier-note" data-testid="art-disc-tier-note">{t('art.disc.tierNote', { tier })}</p>
+  {/if}
   <footer>
     {#if source}
       <span class="from">
@@ -538,6 +573,22 @@
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
+  }
+  /* A difficulty with a disc of its own. */
+  .ez-seg button.own::after {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    margin-left: 4px;
+    vertical-align: middle;
+    border-radius: 50%;
+    background: var(--neon);
+  }
+  .tier-note {
+    margin: 0 0 6px;
+    font-size: 12px;
+    color: var(--ink-dim);
   }
   .tools {
     margin-left: auto;

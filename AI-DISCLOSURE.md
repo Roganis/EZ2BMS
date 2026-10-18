@@ -568,6 +568,157 @@ To confirm on the owner's machines and with native speakers:
   AppImage), after the repository is public and the key is set;
 - the log after a real crash.
 
+### A browser preview, and what building it found, 2026-09-25
+
+The owner has no machine to run the app on for now and asked for the
+browser build as a private web page. New area of work: **the hosted
+preview** (`docs/hosted-preview.md`): a build of the browser version as one
+page for claude.ai's Artifact host, with an opening card that says what
+works there and what needs the desktop app, and lets the visitor add the
+browser build's made-up game install (the host passes no query string).
+
+Building it found a bug in the desktop app. **The installed app's content
+security policy (`default-src 'self'`, no `'unsafe-eval'`) forbids the
+functions PixiJS builds from text, and Pixi then refuses to start: the
+playfield showed a WebGL error instead of the chart.** Development runs
+(`pnpm tauri dev`) and every browser test ran without that policy, so
+nothing saw it. The renderer now imports `pixi.js/unsafe-eval` (Pixi's
+versions without generated code), and `vite preview` serves the e2e suite
+under the policy read from `tauri.conf.json`: with the import removed, the
+suite's playfield tests fail. One test helper that built a function from
+text was rewritten to pass data. Both were also seen in the real Linux
+webview: the desktop app built with its web files embedded (as a release
+build is), run under Xvfb on a test song, showed only the WebGL error
+without the import and drew the chart with it.
+
+Also from looking at the app at a tablet's and a phone's size:
+
+- the top bar overflowed below about 1100 px (the desktop allows 960): the
+  chart pills shrank to nothing and the Edit/Play switch was cut off. The
+  name, the time, the zoom, then snap and undo/redo now give way in turn;
+- the open chart's pill is scrolled into view in the pill row;
+- two fingers scroll the chart and pinch its zoom on a touchscreen.
+
+Each has an end-to-end test (`tests/e2e/layout.spec.ts`) that fails
+without it.
+
+To confirm on the owner's machines:
+
+- the playfield draws in an installed build on Windows (WebView2);
+- the preview page opens and runs in the owner's browser (it was checked
+  here in Chromium under a policy like the host's, not on the host itself);
+- two-finger scrolling on a real touchscreen.
+
+### Classic mode keys only notes already there, 2026-09-28
+
+The owner, charting their game's songs in Classic mode, found placing could
+key a slice that did not exist yet: with no note at the spot, EZ2BMS (as
+BmsTWO does) split the sound still playing there and keyed the new
+continuation. The music in autoplay was unchanged, but a lane note sounds
+only when hit, so such a slice changes what the player hears. Their rule:
+charting never writes a note where the background has none. Placing and
+recorded takes now only move a background note already at the spot
+(`edit/classic.ts`, `edit/record.ts`); a split stays the explicit right-click.
+
+They also asked for BmsTWO's magnet, with the picked sound's backing track
+first. `classicMagnet` pulls a placed note onto the nearest background note
+within a measure, that group first, passing over spots the lane cannot
+take; clicking a note picks its sound, as in BmsTWO. The measure's reach and
+the background-only pull differ from BmsTWO (reasons in
+`docs/ez2port-compat.md`). The Korean and Japanese for the changed messages
+are drafts, as the rest.
+
+Tests: unit tests (nothing is keyed where no note is; the tiers; the magnet's
+group first, reach and blocked spots; a property that the magnet never lands
+where nothing can be keyed; the model-based Classic run now also checks that
+keying never changes the note count; a take's presses pulled within half a
+step) and Playwright (a rack click picks the track the magnet prefers; Alt
+placement where no note is adds nothing; a Classic take keys what it lands
+on and counts the rest as silent).
+
+To confirm on the owner's machine: that the magnet feels like BmsTWO's on a
+real song, and whether a measure is the right reach.
+
+The owner also found that imported songs had no disc or eyecatch. The game
+keeps them in `system/disc/` and `system/eyecatch/`, which the import never
+read; the paths are the port's song select's (`select.c`). The import now
+brings both as plain BMPs (`abmToBmp`: the oracle-checked `.abm` decoder,
+then a plain BMP writer), and the Art tab takes `.abm` files. Tested on the
+synthetic game's made-up pictures (unit tests: paths in any case, a tier's
+disc, an unreadable picture said and skipped, every `.abm` version and depth
+kept pixel for pixel; a Rust test that the host decodes the BMP layout
+written; Playwright: the imported song's Art tab draws both, an `.abm`
+dropped in is converted once). Not seen on a real install: the owner's
+`system/disc` names and sizes.
+
+The same day: the Preview tab's loop was silent (the audio thread was never
+given the rendered loop; engine and host tests, the host's failing without
+the fix); every background group can now be reached (the rack takes the
+room beside the lanes, narrows, then scrolls by a bar, a swipe or the
+wheel); and a game song's discs per difficulty come with it, shown on the
+wheel preview as the port's `select.c` shows them and written into packages
+under keys EZ2PORT does not read yet (a request in `ez2port-requests.md`;
+the oracle checks the port reads such a package as before).
+
+### Playing without stutter, 2026-09-28
+
+The owner saw the editor stutter a few seconds into playing. The work was
+measured before it was changed: CPU and allocation profiles of headless
+Chromium playing the demo song and the 50k-note bench, and the same pages in
+WebKitGTK 2.52 under Xvfb (the Linux app's engine, driven by a small script
+outside the repository), with JavaScriptCore's own collector log. What they
+found and what each change saved is in `docs/perf-log.md` (2026-09-28): stem
+strips painted and uploaded every frame, every Graphics layer triangulated
+again, labels laid out afresh, a channel lookup per rack chip, colours
+converted even when unchanged, and the host sending its clock 125 times a
+second, playing or not.
+
+The strips now paint past the screen and slide; moving lines and marks are
+pooled sprites; unchanged layers are not rebuilt; labels keep their objects
+(`render/pool.ts`, `render/renderer.ts`). The clock goes to the page on
+start, stop and seek and every 32 ms while playing (`src-tauri`, and the
+browser build's mock alike).
+
+Tests: unit tests for the pools (a recorded layer replays in order and is
+left alone while unchanged; rectangles; labels kept by their words), the
+whole Playwright suite (the strip test reads the canvas where it now slides
+to), screenshots of the playfield compared with the old build's at four
+spots on three songs (equal within 6 levels in 255), and clippy for the
+host. The clock's new cadence was not run in the desktop app here.
+
+To confirm on the owner's machine: playing is smooth on WebKitGTK and
+WebView2 with a real GPU, strips included.
+
+### A round note skin, 2026-09-30
+
+The owner asked for a round note skin. The game's note styles are whatever
+art its `.pvi` lists under `NoteAniTexture`, and the port has no round one,
+so this is the neon skin's: orbs of one size in every lane (18 design units,
+smaller only where a lane is too narrow), holds as capsules, a round
+selection ring and ghost, chosen in Preferences or the palette and kept in
+the settings (`noteSkin`). The game skin's lanes keep the game's art and a
+bar-shaped ring; Preferences and the palette say so when it is showing. The
+size, the capsule and the orb's look are the assistant's choices, not the
+owner's. A click takes an orb as far past its edge as a bar, not in
+proportion to its height, so a note a sixteenth away can still be placed at
+the default zoom. The Korean and Japanese are drafts, as the rest.
+
+Drawing it found that every hold's body stopped short of its head and its
+end: the body texture's transparent margin was stretched with it. Bodies
+are now baked without that margin.
+
+Tests: unit tests (`noteBox`: the bar unchanged, orbs one size, centred and
+inside every lane of every mode at four window sizes, the click's reach; the
+recorded Graphics' circle) and Playwright (Preferences turn the notes round
+and it survives a reload; a click near an orb's rim selects it and one a
+sixteenth above places a note; a hold's body is there just past its head and
+just short of its end, bar and round; the palette switches it, and says why
+over the game's panel). Screenshots of both skins were looked at in headless
+Chromium.
+
+To confirm on the owner's machine: that the orbs' size and look are what
+they wanted, on WebKitGTK and WebView2.
+
 ---
 
 ## Verification status
@@ -624,7 +775,7 @@ To confirm on the owner's machines and with native speakers:
 | Slicing never changes what autoplay plays                                           | exact model, property test, real mixer                   | Yes, in the container |
 | A chopped stem packages to the port importer's own slices                           | oracle, random grids, resolutions, tempi                 | Yes, in the container |
 | Strips draw each slice where it plays; gestures cut, move and key                   | Playwright, browser build (made-up stem)                 | Yes, in the container |
-| Strips stay smooth while playing on WebKitGTK / WebView2                            | headless Chromium only                                   | **No** - owner        |
+| Strips stay smooth while playing on WebKitGTK / WebView2                            | headless Chromium; WebKitGTK under Xvfb (software GL)    | **No** - owner        |
 | Hovering a slice plays it promptly on a real device                                 | not run (no audio device here)                           | **No** - owner        |
 | A song with long stems reopens from the disk cache (desktop app)                    | Rust tests only                                          | **No** - owner        |
 | The game's `.ezi`/`.ini`/`song.bin` read as EZ2PORT reads them                      | oracle, random files and tables                          | Yes, in the container |
@@ -666,3 +817,20 @@ To confirm on the owner's machines and with native speakers:
 | No screen shows English outside the catalogs, in any language                       | Playwright sweep of every screen (pseudo, ko, ja)        | Yes, in the container |
 | The English is what it was before the catalogs                                      | the suites' text; old vs new lint on random songs        | Yes, in the container |
 | The Korean and Japanese read naturally                                              | not read by a native speaker                             | **No** - owner        |
+| The playfield starts under the desktop app's content policy                         | Playwright, Chromium, the policy from `tauri.conf.json`  | Yes, in the container |
+| The playfield draws in a build with its files embedded (WebKitGTK)                  | built here, run under Xvfb, before and after the fix     | Yes, in the container |
+| First run on the owner's Arch machine (AMD): the chart draws, controls work         | the owner, the `.deb`'s binary on Arch's own libraries   | Yes - owner           |
+| Sound on the owner's Arch machine after the device fallback                         | the owner                                                | Yes - owner           |
+| The AppImage starts on the owner's Arch machine (CLI 2.12, no libwayland-client)    | the owner                                                | Yes - owner           |
+| The game's songs listed for import on the owner's install (the proved executable)   | the owner                                                | Yes - owner           |
+| Classic placing keys only notes already there; the magnet prefers the picked track  | unit tests, a property, Playwright                       | Yes, in the container |
+| The magnet feels right on a real song                                               | not run                                                  | **No** - owner        |
+| A game song's disc and eyecatch come with it, pixel for pixel                       | unit tests, Rust decode test, Playwright (made-up art)   | Yes, in the container |
+| The owner's real discs and eyecatches import and publish as the game shows them     | not run (no install here)                                | **No** - owner        |
+| The preview loop is heard on the owner's machine                                    | engine and host tests; not heard here (no sound device)  | **No** - owner        |
+| Every background group reachable; the rack scrolls by bar, swipe and wheel          | geometry tests, Playwright                               | Yes, in the container |
+| A difficulty's own disc: imported, shown on the wheel, published beside NM's        | unit and oracle tests, Playwright (made-up art)          | Yes, in the container |
+| The playfield draws in an installed build on Windows (WebView2)                     | not run                                                  | **No** - owner        |
+| The browser preview runs on its host                                                | Chromium under a policy like the host's                  | **No** - owner        |
+| Round notes: orbs, capsules, taken where drawn; hold bodies reach their heads       | geometry tests, Playwright, screenshots (Chromium)       | Yes, in the container |
+| The round skin looks as the owner wanted, on WebKitGTK / WebView2                   | not run                                                  | **No** - owner        |

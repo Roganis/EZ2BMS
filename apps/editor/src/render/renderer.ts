@@ -29,6 +29,13 @@ import {
   type StemSlice,
   type TimingMap,
 } from '@ez2bms/chart-core';
+// The desktop app's content security policy (src-tauri/tauri.conf.json:
+// `default-src 'self'`, no 'unsafe-eval') forbids the functions Pixi builds at
+// run time to upload uniforms and shaders, and Pixi then refuses to start: the
+// playfield stays empty. This module swaps in Pixi's eval-free versions. It
+// must be imported before the Application is created. The e2e suite runs
+// under the same policy (vite.config.ts), so dropping it fails every test.
+import 'pixi.js/unsafe-eval';
 import { Application, Container, FillGradient, Graphics, Sprite } from 'pixi.js';
 import { channelHue } from '../colors';
 import { i18n, t } from '../i18n/i18n.svelte';
@@ -37,13 +44,17 @@ import { GameSkinTextures } from './gameskin';
 import {
   computeLayout,
   laneAtX,
+  noteBox,
+  RACK_BAR,
   RACK_LABEL,
   Viewport,
   type LaneGeom,
   type Layout,
+  type NoteBox,
+  type NoteShape,
   type SkinGeometry,
 } from './geometry';
-import { SpritePool, TextPool } from './pool';
+import { RectPool, Shapes, SpritePool, TextPool, tint } from './pool';
 import { hsl, KIND_COLOR, KIND_FILL, NEON, NEON_2, NeonSkin, PAD, type SkinTextures } from './skin';
 import { stripKey, StripPainter } from './strip';
 import { onsetTimes, stripRows, type StripSpec } from './striprows';
@@ -73,6 +84,8 @@ export interface FieldState {
   live: boolean;
   /** The game's own skin for this mode and side; null draws the neon one. */
   skin: GameSkin | null;
+  /** The neon skin's note heads (the game skin's lanes draw its own art). */
+  noteShape: NoteShape;
   /** Classic mode: the rack keeps keyed notes too (as outlines), so keying does not reshuffle it. */
   classic: boolean;
   /** The picked sound; its group's rack column is lit. */
@@ -137,7 +150,7 @@ export class PlayfieldRenderer {
   private tex: SkinTextures | undefined;
   /** The game skin's textures and lane boxes, rebuilt when a different skin arrives. */
   private game: { skin: GameSkin; tex: GameSkinTextures; geom: SkinGeometry } | undefined;
-  /** Note height on screen, for hit testing (the taller of the two skins' notes). */
+  /** The game skin's note height on screen, for hit testing (0 without it). */
   private noteHpx = 0;
   private raf = 0;
   private shownPx = 0;
@@ -159,8 +172,12 @@ export class PlayfieldRenderer {
   onView: ((lo: number, hi: number, layout: Layout) => void) | undefined;
 
   private readonly bg = new Graphics();
-  private readonly grid = new Graphics();
+  private readonly bgShapes = new Shapes(this.bg);
+  /** Snap, beat and measure lines: they move every frame while playing, so sprites. */
+  private readonly grid = new Container();
+  private readonly gridRects = new RectPool(this.grid);
   private readonly marks = new Graphics();
+  private readonly markShapes = new Shapes(this.marks);
   /** Game skin layers: measure lines, the bed (key panel, press beams, target bar), note beams, press glows. */
   private readonly measures = new Container();
   private readonly bed = new Container();
@@ -170,15 +187,49 @@ export class PlayfieldRenderer {
   private readonly notes = new Container();
   private readonly rings = new Container();
   private readonly chips = new Container();
+  /** The judge line, the cursor's handle, the draw tool's ghost. */
   private readonly overlay = new Graphics();
+  private readonly overlayShapes = new Shapes(this.overlay);
+  /** The hold ticks (Edit), over the lane labels' band. */
+  private readonly ticks = new Container();
+  private readonly tickRects = new RectPool(this.ticks);
+  /** A take's ghost notes and the rubber band, over everything but text. */
+  private readonly overlayTop = new Graphics();
+  private readonly overlayTopShapes = new Shapes(this.overlayTop);
   private readonly text = new Container();
   /** Stem strips: their waveforms (one canvas texture each), then lines and marks over them. */
   private readonly stripLayer = new Container();
-  private readonly stripLines = new Graphics();
+  private readonly stripLines = new Container();
+  private readonly stripRects = new RectPool(this.stripLines);
+  /** A fresh hit's arrow on its cut line. */
+  private readonly stripArrows = new Graphics();
+  private readonly stripArrowShapes = new Shapes(this.stripArrows);
   private readonly stripMarks = new Container();
   private readonly stripCross = new SpritePool(this.stripMarks);
   private readonly stripHi = new Graphics();
-  private readonly painters = new Map<string, { painter: StripPainter; sprite: Sprite }>();
+  private readonly stripHiShapes = new Shapes(this.stripHi);
+  /**
+   * Each strip's painter and sprite, and the pulses its canvas was painted
+   * over: row 0 is `from`, its last row `to` (below it on screen), `h` CSS
+   * pixels tall, `ahead` of them above the screen when painted; what it
+   * showed (`base`), the waveform's revision and the zoom it was painted at.
+   */
+  private readonly painters = new Map<
+    string,
+    {
+      painter: StripPainter;
+      sprite: Sprite;
+      from: number;
+      to: number;
+      h: number;
+      ahead: number;
+      base: string;
+      rev: number;
+      zoom: number;
+    }
+  >();
+  /** The pulse at the top of the screen when the strips were last drawn. */
+  private stripTop = NaN;
   private readonly viewIds = new WeakMap<object, number>();
   private viewSeq = 0;
   /** The game skin's field backdrop, black at 0x96 over black (made once). */
@@ -258,6 +309,7 @@ export class PlayfieldRenderer {
       r.holds,
       r.stripLayer,
       r.stripLines,
+      r.stripArrows,
       r.stripMarks,
       r.chips,
       r.chipMarks,
@@ -266,6 +318,8 @@ export class PlayfieldRenderer {
       r.rings,
       r.stripHi,
       r.overlay,
+      r.ticks,
+      r.overlayTop,
       r.text,
     );
     host.appendChild(r.app.canvas);
@@ -332,7 +386,7 @@ export class PlayfieldRenderer {
     const lane = this.laneAt(px);
     const vp = this.vp;
     if (!s || !lane || !vp || !this.tex) return undefined;
-    const tol = Math.max(this.tex.noteH, this.noteHpx) * 0.9;
+    const tol = Math.max(this.tex.reach, this.noteHpx * 0.9);
     const p = vp.pulseOf(py);
     const span = tol / vp.pxPerPulse;
     const near = s.doc.index.inRange(lane.x, p - span, p + span);
@@ -410,6 +464,43 @@ export class PlayfieldRenderer {
     return hit ? { slice: hit, part: 'body' } : undefined;
   }
 
+  /**
+   * The rack's scrollbar, under its group names, when it is wider than its
+   * window: the track and the thumb (screen pixels).
+   */
+  rackBar():
+    | {
+        left: number;
+        width: number;
+        top: number;
+        height: number;
+        thumbLeft: number;
+        thumbWidth: number;
+      }
+    | undefined {
+    const l = this.layout;
+    if (!l || !this.extras || l.rack.content <= l.rack.width + 0.5) return undefined;
+    const r = l.rack;
+    const k = r.width / r.content;
+    return {
+      left: r.left,
+      width: r.width,
+      top: r.labelH,
+      height: Math.max(4, RACK_BAR * l.scale),
+      thumbLeft: r.left + r.scroll * k,
+      thumbWidth: Math.max(12, r.width * k),
+    };
+  }
+
+  /** The rack scroll (design units) that puts the thumb's left edge at screen x. */
+  rackScrollAtThumb(px: number): number {
+    const l = this.layout;
+    const bar = this.rackBar();
+    if (!l || !bar) return 0;
+    const f = (px - bar.left) / Math.max(1, bar.width - bar.thumbWidth);
+    return Math.max(0, Math.min(1, f)) * this.rackMaxScroll;
+  }
+
   /** How far the rack can scroll, design units (0 when it fits). */
   get rackMaxScroll(): number {
     const l = this.layout;
@@ -472,11 +563,7 @@ export class PlayfieldRenderer {
     else animating = true;
 
     const game = this.gameFor(s);
-    const inMode = new Set(s.columns.map((c) => c.x));
-    const offModeXs = doc.index
-      .laneKeys()
-      .filter((x) => x !== 0 && !inMode.has(x))
-      .sort((a, b) => a - b);
+    const offModeXs = this.offModeOf(s);
     if (this.rack.rev !== s.rev || this.rack.classic !== s.classic) {
       // A big chart's rack takes a few ms to regroup; while a drag streams
       // changes, regroup at most every 150 ms (and once more when it settles).
@@ -514,7 +601,7 @@ export class PlayfieldRenderer {
     else animating = true;
     const vp = new Viewport(res, s.cursor, this.shownPx, l.judgeY);
     this.vp = vp;
-    const tex = this.skin.textures([...l.lanes, ...l.offLanes], l.scale);
+    const tex = this.skin.textures([...l.lanes, ...l.offLanes], l.scale, s.noteShape);
     this.tex = tex;
     const [p0, p1] = vp.visible(H);
     const pad = res;
@@ -526,7 +613,7 @@ export class PlayfieldRenderer {
     this.drawMarkers(s, l, vp, p0, p1);
     this.drawBed(s, l, vp, gs, p0, p1);
     this.drawNotes(s, l, vp, tex, gs, p0 - pad, p1 + pad);
-    this.drawStrips(s, l, vp, tex, p0, p1);
+    if (this.drawStrips(s, l, vp, tex, p0, p1)) animating = true;
     this.drawRack(s, l, vp, tex, p0 - pad, p1 + pad);
     this.drawGlow(s, gs);
     this.drawOverlay(s, l, vp, tex, gs);
@@ -536,7 +623,7 @@ export class PlayfieldRenderer {
   }
 
   private drawBackground(s: FieldState, l: Layout, gs: GameView | undefined): void {
-    const g = this.bg;
+    const g = this.bgShapes;
     g.clear();
     const H = l.height;
     const fl = l.field.left;
@@ -595,39 +682,44 @@ export class PlayfieldRenderer {
           alpha: (on ? 0.35 : 0.9) * this.extras,
         });
         if (x1 - x0 >= 18) {
-          const t = this.groupText.next(grp.key.slice(grp.key.lastIndexOf('/') + 1));
-          t.scale.set(Math.min(1.2, l.scale * 0.7));
-          t.alpha = this.extras;
-          t.tint = on ? 0xffffff : 0xa9b3d6;
           // Cut long names to the column rather than let them run over the next.
-          const room = x1 - x0 - 4;
-          if (t.width > room) {
-            const name = t.text;
-            const keep = Math.max(1, Math.floor((name.length * room) / t.width) - 1);
-            t.text = `${name.slice(0, keep)}…`;
-          }
+          const t = this.groupText.next(
+            grp.key.slice(grp.key.lastIndexOf('/') + 1),
+            Math.min(1.2, l.scale * 0.7),
+            x1 - x0 - 4,
+            on ? 0xffffff : 0xa9b3d6,
+          );
+          t.alpha = this.extras;
           t.position.set(x0 + 2, (r.labelH - t.height) / 2);
         }
       }
-      if (r.content > r.width) {
-        // A scrollbar under the labels shows where the window onto the rack is.
-        const k = r.width / r.content;
-        g.rect(r.left + r.scroll * k, r.labelH, r.width * k, 2).fill({
+      const bar = this.rackBar();
+      if (bar) {
+        // Under the names: where the window onto the rack is, to drag.
+        g.rect(bar.left, bar.top, bar.width, bar.height).fill({
+          color: 0x1a2034,
+          alpha: 0.9 * this.extras,
+        });
+        g.roundRect(bar.thumbLeft, bar.top, bar.thumbWidth, bar.height, bar.height / 2).fill({
           color: NEON,
-          alpha: 0.6 * this.extras,
+          alpha: 0.75 * this.extras,
         });
       }
     }
     this.groupText.end();
+    g.commit();
     // Lane labels under the judge line.
     this.laneText.begin();
     for (const lane of [...l.lanes, ...l.offLanes]) {
       // Over the game's key panel only while editing.
       if (gs && !lane.offMode && this.extras < 0.02) continue;
-      const t = this.laneText.next(lane.short);
-      t.tint = lane.offMode ? 0x4b5372 : KIND_COLOR[lane.kind];
+      const t = this.laneText.next(
+        lane.short,
+        Math.min(1.3, l.scale * 0.75),
+        Infinity,
+        lane.offMode ? 0x4b5372 : KIND_COLOR[lane.kind],
+      );
       t.alpha = lane.offMode || gs ? this.extras : 0.85;
-      t.scale.set(Math.min(1.3, l.scale * 0.75));
       t.position.set(lane.left + (lane.width - t.width) / 2, l.judgeY + 14 * l.scale);
     }
     this.laneText.end();
@@ -641,52 +733,49 @@ export class PlayfieldRenderer {
     p1: number,
     skinMeasures: boolean,
   ): void {
-    const g = this.grid;
-    g.clear();
+    // Each line is a pixel row (a 1 px stroke centred on the row's middle, as
+    // a Graphics drew them), the measure lines a hair thicker.
+    const g = this.gridRects;
+    g.begin();
     const res = s.doc.resolution;
     const left = l.field.left - 4;
-    const right = Math.max(
-      l.field.right + 4,
-      ...l.offLanes.map((o) => o.left + o.width),
-      l.rack.left + l.rack.width,
-    );
+    let right = Math.max(l.field.right + 4, l.rack.left + l.rack.width);
+    for (const o of l.offLanes) right = Math.max(right, o.left + o.width);
+    const fw = l.field.right - l.field.left;
     const edit = this.extras;
     // Snap lines (Edit only, when they are far enough apart to read).
     const step = (res * 4) / s.snap;
     if (edit > 0.02 && step * vp.pxPerPulse >= 7) {
-      const triplet = s.snap % 3 === 0;
+      const c = s.snap % 3 === 0 ? NEON_2 : 0xffffff;
       for (let p = Math.ceil(p0 / step) * step; p <= p1; p += step) {
         if (p % res === 0) continue;
-        const y = Math.round(vp.yOf(p)) + 0.5;
-        g.moveTo(l.field.left, y).lineTo(l.field.right, y);
+        g.rect(l.field.left, Math.round(vp.yOf(p)), fw, 1, c, 0.06 * edit);
       }
-      g.stroke({ width: 1, color: triplet ? NEON_2 : 0xffffff, alpha: 0.06 * edit });
     }
     // Beats.
     for (let p = Math.ceil(p0 / res) * res; p <= p1; p += res) {
       if (p % (res * 4) === 0) continue;
-      const y = Math.round(vp.yOf(p)) + 0.5;
-      g.moveTo(l.field.left, y).lineTo(l.field.right, y);
+      g.rect(l.field.left, Math.round(vp.yOf(p)), fw, 1, 0xffffff, 0.05 + 0.1 * edit);
     }
-    g.stroke({ width: 1, color: 0xffffff, alpha: 0.05 + 0.1 * edit });
-    // Measures, numbered in the gutter.
+    // Measures, numbered in the gutter. The game skin draws its own measure
+    // line; ours stays for the gutter and rack.
+    const ma = skinMeasures ? 0.4 * edit : 0.4;
+    const ts = Math.min(1.4, l.scale * 0.8);
     this.measureText.begin();
     const m0 = Math.max(0, Math.ceil(p0 / (res * 4)));
     for (let m = m0; m * res * 4 <= p1; m++) {
-      const y = Math.round(vp.yOf(m * res * 4)) + 0.5;
-      g.moveTo(left, y).lineTo(right, y);
-      const t = this.measureText.next(`#${String(m).padStart(3, '0')}`);
-      t.scale.set(Math.min(1.4, l.scale * 0.8));
+      const y = Math.round(vp.yOf(m * res * 4));
+      g.rect(left, y - 0.25, right - left, 1.5, NEON, ma);
+      const t = this.measureText.next(`#${String(m).padStart(3, '0')}`, ts);
       t.alpha = 0.55 + 0.45 * edit;
-      t.position.set(l.gutter.left + 4 * l.scale, y - t.height - 1);
+      t.position.set(l.gutter.left + 4 * l.scale, y + 0.5 - t.height - 1);
     }
-    // The game skin draws its own measure line; ours stays for the gutter and rack.
-    g.stroke({ width: 1.5, color: NEON, alpha: skinMeasures ? 0.4 * edit : 0.4 });
+    g.end();
     this.measureText.end();
   }
 
   /** The game skin's backdrop and lane borders (Panel::m42a240), into the background graphics. */
-  private drawGameBed(g: Graphics, s: FieldState, l: Layout, gs: GameView): void {
+  private drawGameBed(g: Shapes, s: FieldState, l: Layout, gs: GameView): void {
     const b = gs.skin.backdrop;
     if (b) {
       this.backdrop ??= new FillGradient({
@@ -806,7 +895,7 @@ export class PlayfieldRenderer {
   }
 
   private drawMarkers(s: FieldState, l: Layout, vp: Viewport, p0: number, p1: number): void {
-    const g = this.marks;
+    const g = this.markShapes;
     g.clear();
     this.markText.begin();
     const d = s.doc.data;
@@ -814,8 +903,7 @@ export class PlayfieldRenderer {
     // scroll change and a BPM change at one spot both read.
     const flag = (p: number, label: string, color: number, below = false, alpha = 0.9) => {
       const y = vp.yOf(p);
-      const t = this.markText.next(label);
-      t.scale.set(Math.min(1.3, l.scale * 0.75));
+      const t = this.markText.next(label, Math.min(1.3, l.scale * 0.75), Infinity, 0x05060a);
       const w = t.width + 8;
       const x = l.gutter.right - w - 14 * l.scale;
       const top = below ? y + 1 : y - t.height - 3;
@@ -823,7 +911,6 @@ export class PlayfieldRenderer {
       g.moveTo(x + w, y + 0.5)
         .lineTo(l.field.right + 4, y + 0.5)
         .stroke({ width: 1, color, alpha: alpha / 2 });
-      t.tint = 0x05060a;
       t.position.set(x + 4, top + 2);
     };
     const bpms = [{ y: 0, bpm: d.info.initBpm ?? 120 }, ...d.bpmEvents.filter((e) => e.y > 0)];
@@ -843,8 +930,7 @@ export class PlayfieldRenderer {
       for (const k of this.keptOf(s.doc)) {
         if (k.y < p0 || k.y > p1) continue;
         const y = vp.yOf(k.y);
-        const t = this.markText.next(k.label);
-        t.scale.set(Math.min(1.2, l.scale * 0.65));
+        const t = this.markText.next(k.label, Math.min(1.2, l.scale * 0.65), Infinity, KEPT_COLOR);
         const w = t.width + 6;
         const x = l.gutter.left + 4 * l.scale;
         const a = 0.75 * this.extras;
@@ -852,12 +938,12 @@ export class PlayfieldRenderer {
         g.moveTo(x, y + 0.5)
           .lineTo(l.field.left, y + 0.5)
           .stroke({ width: 1, color: KEPT_COLOR, alpha: 0.5 * a });
-        t.tint = KEPT_COLOR;
         t.alpha = a;
         t.position.set(x + 3, y + 2);
         this.keptHits.push({ x, y: y + 1, w, h: t.height + 2, recs: k.recs });
       }
     this.markText.end();
+    g.commit();
   }
 
   private drawNotes(
@@ -874,7 +960,6 @@ export class PlayfieldRenderer {
     this.ringPool.begin();
     this.beamPool.begin();
     this.chipText.begin();
-    const noteH = tex.noteH;
     for (const lane of [...l.lanes, ...l.offLanes]) {
       if (lane.width < 1) continue;
       const alpha = lane.offMode ? 0.4 * this.extras : 1;
@@ -885,8 +970,12 @@ export class PlayfieldRenderer {
       }
       const head = this.skin.headFor(tex, lane.kind, lane.width);
       const body = this.skin.bodyFor(tex, lane.kind, lane.width);
+      const cap = this.skin.capFor(tex, lane.kind, lane.width);
       const ring = this.skin.ringFor(tex, lane.kind, lane.width);
-      const bw = Math.max(4, Math.round(lane.width * 0.72));
+      const box = noteBox(tex.shape, lane.width, l.scale);
+      const bw = box.bodyW;
+      const bx = lane.left + (lane.width - bw) / 2;
+      const hx = lane.left + box.inset;
       for (const n of s.doc.index.inRange(lane.x, p0, p1)) {
         let y = vp.yOf(n.y);
         if (s.hidden.has(n.id)) {
@@ -897,31 +986,36 @@ export class PlayfieldRenderer {
         const sel = s.selection.has(n.id);
         if (n.l > 0) {
           const ye = vp.yOf(n.y + n.l);
+          // The body is baked without padding above and below, so stretched
+          // it runs from the end to the head and no further.
           const b = this.bodyPool.next(body);
-          b.position.set(lane.left + (lane.width - bw) / 2 - PAD, ye - PAD);
-          b.height = y - ye + 2 * PAD;
+          b.position.set(bx - PAD, ye);
+          b.height = y - ye;
           b.width = bw + 2 * PAD;
           b.alpha = alpha;
-          // The end cap: a thin bar in the body's colour, clearly part of the hold.
-          const tail = this.bodyPool.next(body);
-          tail.position.set(lane.left + (lane.width - bw) / 2 - PAD - 2, ye - 2 - PAD);
-          tail.width = bw + 4 + 2 * PAD;
-          tail.height = 4 + 2 * PAD;
+          const tail = this.bodyPool.next(cap);
+          if (tex.shape === 'round') {
+            // A half disc on the end: the hold is a capsule.
+            tail.position.set(bx - PAD, ye - bw / 2 - PAD);
+          } else {
+            // The end cap: a thin bar in the body's colour, clearly part of the hold.
+            tail.position.set(bx - PAD - 2, ye - 2);
+            tail.width = bw + 4 + 2 * PAD;
+            tail.height = 4;
+          }
           tail.alpha = alpha;
-          tail.tint = 0xffffff;
           if (n.kind !== undefined && n.kind !== 0 && y - ye > 28) {
-            const t = this.chipText.next(this.holdLabel(s, n));
-            t.tint = KIND_COLOR[lane.kind];
+            const t = this.chipText.next(this.holdLabel(s, n), 1, Infinity, KIND_COLOR[lane.kind]);
             t.alpha = 0.9 * alpha;
             t.position.set(lane.left + (lane.width - t.width) / 2, (y + ye) / 2 - t.height / 2);
           }
         }
         const h = this.headPool.next(head);
-        h.position.set(lane.left + 1 - PAD, y - noteH / 2 - PAD);
+        h.position.set(hx - PAD, y - box.h / 2 - PAD);
         h.alpha = alpha;
         if (sel) {
           const r = this.ringPool.next(ring);
-          r.position.set(lane.left + 1 - PAD, y - noteH / 2 - PAD);
+          r.position.set(hx - PAD, y - box.h / 2 - PAD);
         }
       }
     }
@@ -961,15 +1055,15 @@ export class PlayfieldRenderer {
     const line = (y: number, len: number) => {
       if (!beam || Math.abs(len) < 0.5) return;
       for (const lx of [lane.left, lane.left + lane.width - px]) {
-        const sp = this.beamPool.next(len < 0 ? gs.tex.beamUp : gs.tex.beamDown);
-        sp.tint = beam.rgb;
+        const sp = this.beamPool.next(len < 0 ? gs.tex.beamUp : gs.tex.beamDown, beam.rgb);
         sp.alpha = beam.alpha;
         sp.position.set(lx, len < 0 ? y + len : y);
         sp.width = Math.max(1, px);
         sp.height = Math.abs(len);
       }
     };
-    const ring = this.skin.ringFor(this.tex!, lane.kind, lane.width);
+    // The game's notes are bars whatever the neon skin's shape: ring them as bars.
+    const ring = this.skin.frameFor(this.tex!, lane.kind, lane.width);
     for (const n of s.doc.index.inRange(lane.x, p0, p1)) {
       let y = vp.yOf(n.y);
       if (s.hidden.has(n.id)) {
@@ -997,8 +1091,12 @@ export class PlayfieldRenderer {
         foot.width = w;
         foot.height = half;
         if (n.kind !== undefined && n.kind !== 0 && y - yt > 28 && this.extras > 0.02) {
-          const label = this.chipText.next(this.holdLabel(s, n));
-          label.tint = KIND_COLOR[lane.kind];
+          const label = this.chipText.next(
+            this.holdLabel(s, n),
+            1,
+            Infinity,
+            KIND_COLOR[lane.kind],
+          );
           label.alpha = 0.9 * this.extras;
           label.position.set(
             lane.left + (lane.width - label.width) / 2,
@@ -1035,10 +1133,12 @@ export class PlayfieldRenderer {
     tex: SkinTextures,
     p0: number,
     p1: number,
-  ): void {
-    const g = this.stripLines;
-    const hi = this.stripHi;
-    g.clear();
+  ): boolean {
+    const g = this.stripRects;
+    const arrows = this.stripArrowShapes;
+    const hi = this.stripHiShapes;
+    g.begin();
+    arrows.clear();
     hi.clear();
     this.stripText.begin();
     this.stripCross.begin();
@@ -1047,89 +1147,144 @@ export class PlayfieldRenderer {
     const header = RACK_LABEL * l.scale;
     const dpr = this.app.renderer.resolution;
     const shown = this.extras > 0.02;
+    const ex = this.extras;
+    // A strip is painted over the screen and this far past each edge (CSS
+    // pixels): half a screen, as the texture size allows - or, while the
+    // chart plays and the view only moves up, twice that above it. The
+    // painted strip slides with the cursor and is painted again once that
+    // has gone by, rather than every frame: painting and uploading it every
+    // frame was most of the playfield's work (docs/perf-log.md,
+    // 2026-09-28). While the zoom eases, or when the screen moves more than
+    // half the margin in a frame (a jump, a fling), the next frame paints it
+    // again anyway: then only the screen is painted, as before.
+    const top = vp.pulseOf(0);
+    const moved = Math.abs(top - this.stripTop) * vp.pxPerPulse;
+    this.stripTop = top;
+    const most = Math.max(
+      0,
+      Math.min(Math.round(H / 2), Math.floor((this.maxTexture / dpr - H) / 2)),
+    );
+    const [above, below] = s.live ? [2 * most, 0] : [most, most];
+    let settle = false;
+    let painted = false;
+    const res = s.doc.resolution;
     s.strips.forEach((spec, i) => {
       const box = l.strips[i];
       if (!box || box.width < 2 || !shown) return;
       used.add(spec.src);
       const view = spec.view;
-      const lit = new Set<number>();
-      view.slices.forEach((sl, k) => {
-        if (s.selection.has(sl.id) || s.hoverSlice === sl.id) lit.add(k);
-      });
+      let lit = '';
+      if (s.selection.size || s.hoverSlice !== null)
+        view.slices.forEach((sl, k) => {
+          if (s.selection.has(sl.id) || s.hoverSlice === sl.id) lit += `${k},`;
+        });
       // The column, lit when it is the one slicing acts on.
-      g.rect(box.left, 0, box.width, H).fill({
-        color: spec.focused ? NEON : 0xffffff,
-        alpha: (spec.focused ? 0.045 : 0.02) * this.extras,
-      });
-      // The waveform, painted again only when something it shows changed.
+      g.rect(
+        box.left,
+        0,
+        box.width,
+        H,
+        spec.focused ? NEON : 0xffffff,
+        (spec.focused ? 0.045 : 0.02) * ex,
+      );
+      // The waveform, painted again only when something it shows changed or
+      // the screen has moved past what was painted.
       let p = this.painters.get(spec.src);
       if (!p) {
         const painter = new StripPainter();
         const sprite = new Sprite(painter.texture);
         this.stripLayer.addChild(sprite);
-        this.painters.set(spec.src, (p = { painter, sprite }));
+        this.painters.set(
+          spec.src,
+          (p = { painter, sprite, from: 0, to: 0, h: 0, ahead: 0, base: '', rev: -1, zoom: 0 }),
+        );
       }
       const w = Math.max(1, Math.round(box.width));
-      const key = stripKey([
+      const base = stripKey([
         this.viewId(view),
         this.viewId(spec.timeline),
-        s.cursor,
         vp.pxPerBeat,
-        vp.judgeY,
         w,
         H,
         dpr,
-        s.stripsRev,
-        [...lit].join(','),
+        lit,
       ]);
-      if (p.painter.stale(key))
-        p.painter.paint(key, stripRows(spec, vp, H), w, H, dpr, {
+      // Slid by part of a device pixel, a strip's rows are not quite the
+      // pulses beside them: once the view comes to rest (not while it
+      // plays), it is painted again where it stands.
+      const off = vp.yOf(p.from) * dpr;
+      const between = !s.live && Math.abs(off - Math.round(off)) > 1e-3;
+      if (between && moved > 0) settle = true;
+      // Pixels of the strip still painted above the screen.
+      const left = (p.from - top) * vp.pxPerPulse;
+      // Painted now: what it shows has changed, or the screen has come past it.
+      const due = base !== p.base || left < 0 || vp.pulseOf(H) < p.to || (between && moved === 0);
+      // Painted when no other strip was this frame, so strips beside each
+      // other are not all painted in one: more of the waveform has come,
+      // or (playing) the strip is nearly out of room.
+      const soon = p.rev !== s.stripsRev || (s.live && left < p.ahead / 4);
+      if (soon && !due && painted) settle = true;
+      else if (due || soon) {
+        const reach = vp.pxPerBeat === p.zoom && moved < most / 2;
+        const up = reach ? above : 0;
+        const litSet = new Set(lit ? lit.slice(0, -1).split(',').map(Number) : []);
+        const axis = { pulseOf: (y: number) => vp.pulseOf(y - up) };
+        painted = true;
+        p.base = base;
+        p.rev = s.stripsRev;
+        p.zoom = vp.pxPerBeat;
+        p.ahead = up;
+        p.h = H + up + (reach ? below : 0);
+        p.from = axis.pulseOf(0);
+        p.to = axis.pulseOf(p.h);
+        p.painter.paint(`${base}|${p.from}|${p.h}`, stripRows(spec, axis, p.h), w, p.h, dpr, {
           of: (k) => {
             const sl = view.slices[k]!;
             if (sl.keyed) return KIND_COLOR[laneInfo(sl.x)?.kind ?? 'white'];
             return SLICE_TINTS[sl.index % 2]!;
           },
-          lit: (k) => lit.has(k),
+          lit: (k) => litSet.has(k),
         });
+      }
       p.sprite.visible = true;
-      p.sprite.position.set(box.left, 0);
+      // On a whole device pixel, so the rows stay as sharp as they were painted.
+      p.sprite.position.set(box.left, Math.round(vp.yOf(p.from) * dpr) / dpr);
       p.sprite.width = w;
-      p.sprite.height = H;
-      p.sprite.alpha = this.extras;
+      p.sprite.height = p.h;
+      p.sprite.alpha = ex;
 
       // Beats, faintly, to read the stem against the grid.
-      const res = s.doc.resolution;
-      for (let q = Math.ceil(p0 / res) * res; q <= p1; q += res) {
-        const y = Math.round(vp.yOf(q)) + 0.5;
-        g.rect(box.left, y, box.width, 1).fill({ color: 0xffffff, alpha: 0.05 * this.extras });
-      }
+      for (let q = Math.ceil(p0 / res) * res; q <= p1; q += res)
+        g.rect(box.left, Math.round(vp.yOf(q)), box.width, 1, 0xffffff, 0.05 * ex);
       // The cuts: where a sound starts, bright; a continuation, a thin line and the rack's red cross.
       const size = tex.cross.height - 2 * PAD;
-      for (const sl of view.slices) {
-        if (sl.y < p0 - res || sl.y > p1 + res) continue;
+      const slices = view.slices;
+      for (let k = firstAtOrAfter(slices, p0 - res); k < slices.length; k++) {
+        const sl = slices[k]!;
+        if (sl.y > p1 + res) break;
         const y = vp.yOf(sl.y);
         if (y < header) continue;
         if (sl.fresh) {
-          g.rect(box.left, y - 1, box.width, 2).fill({ color: 0xffffff, alpha: 0.9 * this.extras });
-          g.poly([box.left, y - 5, box.left + 7, y, box.left, y + 5]).fill({
+          g.rect(box.left, y - 1, box.width, 2, 0xffffff, 0.9 * ex);
+          arrows.poly([box.left, y - 5, box.left + 7, y, box.left, y + 5]).fill({
             color: 0xffffff,
-            alpha: this.extras,
+            alpha: ex,
           });
         } else {
-          g.rect(box.left, y - 0.5, box.width, 1).fill({
-            color: 0xffffff,
-            alpha: 0.5 * this.extras,
-          });
+          g.rect(box.left, y - 0.5, box.width, 1, 0xffffff, 0.5 * ex);
           const m = this.stripCross.next(tex.cross);
           m.position.set(box.left + box.width - size - PAD - 1, y - size / 2 - PAD);
-          m.alpha = this.extras;
+          m.alpha = ex;
         }
         if (sl.keyed) {
           const info = laneInfo(sl.x);
-          const t = this.stripText.next(info?.short ?? String(sl.x));
-          t.scale.set(Math.min(1.1, l.scale * 0.65));
-          t.tint = KIND_COLOR[info?.kind ?? 'white'];
-          t.alpha = this.extras;
+          const t = this.stripText.next(
+            info?.short ?? String(sl.x),
+            Math.min(1.1, l.scale * 0.65),
+            Infinity,
+            KIND_COLOR[info?.kind ?? 'white'],
+          );
+          t.alpha = ex;
           t.position.set(box.left + 9, y - t.height - 1);
         }
       }
@@ -1140,10 +1295,7 @@ export class PlayfieldRenderer {
         for (const o of onsetTimes(view, spec.onsets, spec.minStrength, t0, t1)) {
           const y = vp.yOf(spec.timeline.pulseAt(o.ms));
           if (y < header) continue;
-          g.rect(box.left + box.width - 7, y - 0.75, 7, 1.5).fill({
-            color: ONSET,
-            alpha: (0.3 + 0.7 * o.strength) * this.extras,
-          });
+          g.rect(box.left + box.width - 7, y - 0.75, 7, 1.5, ONSET, (0.3 + 0.7 * o.strength) * ex);
         }
       }
       // Cuts at onsets, suggested.
@@ -1152,42 +1304,37 @@ export class PlayfieldRenderer {
           if (q < p0 || q > p1) continue;
           const y = vp.yOf(q);
           for (let x = box.left; x < box.left + box.width; x += 5)
-            g.rect(x, y - 0.75, Math.min(3, box.left + box.width - x), 1.5).fill({
-              color: ONSET,
-              alpha: 0.9 * this.extras,
-            });
+            g.rect(x, y - 0.75, Math.min(3, box.left + box.width - x), 1.5, ONSET, 0.9 * ex);
         }
       }
       // Where a cut would go.
       if (s.stripGhost?.strip === i) {
         const y = vp.yOf(s.stripGhost.y);
         for (let x = box.left; x < box.left + box.width; x += 6)
-          g.rect(x, y - 1, Math.min(4, box.left + box.width - x), 2).fill({
-            color: NEON,
-            alpha: this.extras,
-          });
+          g.rect(x, y - 1, Math.min(4, box.left + box.width - x), 2, NEON, ex);
       }
       // The header: the file, its length and tempo.
-      g.rect(box.left, 0, box.width, header).fill({
-        color: spec.focused ? NEON : 0x1a2034,
-        alpha: (spec.focused ? 0.35 : 0.9) * this.extras,
-      });
-      const t = this.stripText.next(spec.label);
-      t.scale.set(Math.min(1.2, l.scale * 0.62));
-      t.tint = spec.focused ? 0xffffff : 0xa9b3d6;
-      t.alpha = this.extras;
-      const room = box.width - 4;
-      if (t.width > room) {
-        const name = t.text;
-        const keep = Math.max(1, Math.floor((name.length * room) / t.width) - 1);
-        t.text = `${name.slice(0, keep)}…`;
-      }
+      g.rect(
+        box.left,
+        0,
+        box.width,
+        header,
+        spec.focused ? NEON : 0x1a2034,
+        (spec.focused ? 0.35 : 0.9) * ex,
+      );
+      const t = this.stripText.next(
+        spec.label,
+        Math.min(1.2, l.scale * 0.62),
+        box.width - 4,
+        spec.focused ? 0xffffff : 0xa9b3d6,
+      );
+      t.alpha = ex;
       t.position.set(box.left + 2, (header - t.height) / 2);
     });
     // The hovered slice's note on its lane, ringed.
     const n = s.hoverSlice !== null ? s.doc.index.get(s.hoverSlice) : undefined;
     if (n && n.x !== 0 && shown) {
-      const lane = [...l.lanes, ...l.offLanes].find((g2) => g2.x === n.x);
+      const lane = l.lanes.find((g2) => g2.x === n.x) ?? l.offLanes.find((g2) => g2.x === n.x);
       if (lane) {
         const y = vp.yOf(n.y);
         hi.rect(lane.left - 2, y - 7, lane.width + 4, 14).stroke({
@@ -1206,9 +1353,48 @@ export class PlayfieldRenderer {
         this.painters.delete(src);
       }
     }
+    g.end();
+    arrows.commit();
+    hi.commit();
     this.stripText.end();
     this.stripCross.end();
+    // One more frame, to paint what came to rest between pixels or waits its turn.
+    return settle;
   }
+
+  /** The largest texture side the strips may use, device pixels (read from WebGL once). */
+  private get maxTexture(): number {
+    if (!this.maxTex) {
+      const gl = (this.app.renderer as { gl?: WebGLRenderingContext }).gl;
+      const most = gl ? Number(gl.getParameter(gl.MAX_TEXTURE_SIZE)) : 0;
+      // A strip a few hundred pixels wide and 8192 tall is a few megabytes.
+      this.maxTex = Math.min(8192, most || 4096);
+    }
+    return this.maxTex;
+  }
+  private maxTex = 0;
+
+  /** Lanes with notes the mode does not play, kept until the chart or the mode's columns change. */
+  private offModeOf(s: FieldState): number[] {
+    const c = this.offCache;
+    if (c.doc !== s.doc || c.version !== s.doc.version || c.columns !== s.columns) {
+      const inMode = new Set(s.columns.map((col) => col.x));
+      c.doc = s.doc;
+      c.version = s.doc.version;
+      c.columns = s.columns;
+      c.xs = s.doc.index
+        .laneKeys()
+        .filter((x) => x !== 0 && !inMode.has(x))
+        .sort((a, b) => a - b);
+    }
+    return c.xs;
+  }
+  private readonly offCache = {
+    doc: undefined as ChartDoc | undefined,
+    version: -1,
+    columns: undefined as readonly Column[] | undefined,
+    xs: [] as number[],
+  };
 
   /** Group the chart's sounds for the rack (BmsTWO's Classic BMS layout). */
   private buildRack(s: FieldState, now: number): void {
@@ -1267,13 +1453,12 @@ export class PlayfieldRenderer {
         if (x < r.left - 0.5 || x + chipW > r.left + r.width + 0.5) return;
         const y = vp.yOf(n.y);
         if (y < r.labelH) return;
-        const ch = s.doc.channel(n.ch);
-        const c = this.chipPool.next(tex.chip);
-        c.position.set(x - PAD, y - chipH / 2 - PAD);
-        c.width = chipW + 2 * PAD;
+        const ch = this.chipOf(s.doc, n.ch);
         const sel = s.selection.has(n.id);
         const hinted = s.classicHint === n.id;
-        c.tint = sel || hinted ? 0xffffff : hsl(channelHue(ch?.name ?? ''), 0.8, 0.62);
+        const c = this.chipPool.next(tex.chip, sel || hinted ? 0xffffff : ch.tint);
+        c.position.set(x - PAD, y - chipH / 2 - PAD);
+        c.width = chipW + 2 * PAD;
         // A keyed note (Classic) stays in its place as a faint outline.
         c.alpha = (hinted ? 1 : ghost ? 0.22 : sel ? 1 : 0.8) * this.extras;
         if (ghost) return;
@@ -1285,7 +1470,7 @@ export class PlayfieldRenderer {
           m.alpha = this.extras;
         }
         if (labels) {
-          const t = this.chipText.next((ch?.name ?? '?').replace(/\.[^.]+$/, '').slice(0, 6));
+          const t = this.chipText.next(ch.label);
           t.alpha = 0.75 * this.extras;
           t.position.set(x + 1, y - t.height - 3);
         }
@@ -1298,6 +1483,38 @@ export class PlayfieldRenderer {
     this.chipText.end();
   }
 
+  /**
+   * A background note's chip colour and label by its channel, kept until the
+   * chart changes: the rack draws one per chip, and ChartDoc.channel looks
+   * through every channel (1 500 on a big keysounded chart).
+   */
+  private chipOf(doc: ChartDoc, id: ChannelId): { tint: number; label: string } {
+    const c = this.chipCache;
+    if (c.doc !== doc || c.version !== doc.version) {
+      c.doc = doc;
+      c.version = doc.version;
+      c.map.clear();
+      c.names.clear();
+      for (const ch of doc.data.channels) c.names.set(ch.id, ch.name);
+    }
+    let v = c.map.get(id);
+    if (!v) {
+      const name = c.names.get(id);
+      v = {
+        tint: hsl(channelHue(name ?? ''), 0.8, 0.62),
+        label: (name ?? '?').replace(/\.[^.]+$/, '').slice(0, 6),
+      };
+      c.map.set(id, v);
+    }
+    return v;
+  }
+  private readonly chipCache = {
+    doc: undefined as ChartDoc | undefined,
+    version: -1,
+    map: new Map<ChannelId, { tint: number; label: string }>(),
+    names: new Map<ChannelId, string>(),
+  };
+
   private drawOverlay(
     s: FieldState,
     l: Layout,
@@ -1305,7 +1522,7 @@ export class PlayfieldRenderer {
     tex: SkinTextures,
     gs: GameView | undefined,
   ): void {
-    const g = this.overlay;
+    const g = this.overlayShapes;
     g.clear();
     const fl = l.field.left - 4;
     const fw = l.field.right - l.field.left + 8;
@@ -1323,7 +1540,12 @@ export class PlayfieldRenderer {
       g.rect(fl, jy - 2.5 * l.scale, fw, 5 * l.scale).fill({ color: NEON, alpha: 0.25 });
       g.rect(fl, jy - 1, fw, 2).fill({ color: 0xffffff, alpha: 0.95 });
     }
-    const noteH = gs ? gs.noteH : tex.noteH;
+    // Ghosts take the skin's note shape: the game's art is bars, of its height.
+    const round = !gs && tex.shape === 'round';
+    const outline = (lane: LaneGeom) =>
+      gs
+        ? { ...noteBox('bar', lane.width, l.scale), h: gs.noteH }
+        : noteBox(tex.shape, lane.width, l.scale);
     // The cursor's handle in the gutter.
     const hx = l.field.left - 5;
     g.poly([hx - 10 * l.scale, jy - 6 * l.scale, hx, jy, hx - 10 * l.scale, jy + 6 * l.scale]).fill(
@@ -1337,40 +1559,45 @@ export class PlayfieldRenderer {
         const y = vp.yOf(s.ghost.y);
         const c = s.ghost.bad ? 0x8a8fa8 : KIND_COLOR[lane.kind];
         if (s.ghost.label) {
-          const t = this.ghostText.next(s.ghost.label);
-          t.tint = s.ghost.bad ? 0xff7a7a : NEON;
-          t.scale.set(Math.min(1.3, l.scale * 0.8));
+          const t = this.ghostText.next(
+            s.ghost.label,
+            Math.min(1.3, l.scale * 0.8),
+            Infinity,
+            s.ghost.bad ? 0xff7a7a : NEON,
+          );
           t.position.set(lane.left + lane.width + 6, y - t.height / 2);
         }
+        const box = outline(lane);
         if (s.ghost.l > 0) {
           const ye = vp.yOf(s.ghost.y + s.ghost.l);
-          g.rect(lane.left + lane.width * 0.14, ye, lane.width * 0.72, y - ye).fill({
+          g.rect(lane.left + (lane.width - box.bodyW) / 2, ye, box.bodyW, y - ye).fill({
             color: c,
             alpha: 0.18,
           });
         }
-        g.roundRect(lane.left + 1, y - noteH / 2, lane.width - 2, noteH, 3).fill({
-          color: c,
-          alpha: 0.35,
-        });
-        g.roundRect(lane.left + 1, y - noteH / 2, lane.width - 2, noteH, 3).stroke({
-          width: 1,
-          color: c,
-          alpha: 0.8,
-        });
+        noteShape(g, lane.left + box.inset, y, box, round)
+          .fill({ color: c, alpha: 0.35 })
+          .stroke({ width: 1, color: c, alpha: 0.8 });
       }
     }
     this.ghostText.end();
-    if (this.extras > 0.02) this.drawHoldTicks(g, s, l, vp);
-    if (s.take) this.drawTake(g, s.take, l, vp, noteH);
+    g.commit();
+    this.tickRects.begin();
+    if (this.extras > 0.02) this.drawHoldTicks(this.tickRects, s, l, vp);
+    this.tickRects.end();
+    const top = this.overlayTopShapes;
+    top.clear();
+    if (s.take) this.drawTake(top, s.take, l, vp, outline, round);
     if (s.marquee) {
       const m = s.marquee;
       const x = Math.min(m.x0, m.x1);
       const y = Math.min(m.y0, m.y1);
-      g.rect(x, y, Math.abs(m.x1 - m.x0), Math.abs(m.y1 - m.y0))
+      top
+        .rect(x, y, Math.abs(m.x1 - m.x0), Math.abs(m.y1 - m.y0))
         .fill({ color: NEON, alpha: 0.07 })
         .stroke({ width: 1, color: NEON, alpha: 0.8 });
     }
+    top.commit();
   }
 
   /** The chart's scroll changes, as flags and on the tick axis, kept until it changes. */
@@ -1489,7 +1716,7 @@ export class PlayfieldRenderer {
    * a short bar across the body, in Edit. Left out where they would crowd
    * closer than 5 px - the label still says how many.
    */
-  private drawHoldTicks(g: Graphics, s: FieldState, l: Layout, vp: Viewport): void {
+  private drawHoldTicks(g: RectPool, s: FieldState, l: Layout, vp: Viewport): void {
     const [p0, p1] = vp.visible(l.height);
     const res = s.doc.resolution;
     for (const lane of l.lanes) {
@@ -1510,10 +1737,7 @@ export class PlayfieldRenderer {
           if (at < p0 || at > p1) continue;
           const y = vp.yOf(at);
           if (Math.abs(y - mid) < 8) continue;
-          g.rect(lane.left + (lane.width - w) / 2, y - 1, w, 2).fill({
-            color: 0xffffff,
-            alpha: 0.6 * this.extras,
-          });
+          g.rect(lane.left + (lane.width - w) / 2, y - 1, w, 2, 0xffffff, 0.6 * this.extras);
         }
       }
     }
@@ -1524,30 +1748,41 @@ export class PlayfieldRenderer {
    * what each would become), holds as a faint bar. Only what is on screen.
    */
   private drawTake(
-    g: Graphics,
+    g: Shapes,
     take: NonNullable<FieldState['take']>,
     l: Layout,
     vp: Viewport,
-    noteH: number,
+    outline: (lane: LaneGeom) => NoteBox,
+    round: boolean,
   ): void {
     const lanes = [...l.lanes, ...l.offLanes];
     take.notes.forEach((n, i) => {
       const lane = lanes.find((g2) => g2.x === n.x);
       if (!lane) return;
+      const box = outline(lane);
       const y = vp.yOf(n.y);
       const ye = n.l > 0 ? vp.yOf(n.y + n.l) : y;
-      if (y < -noteH || ye > l.height + noteH) return;
+      if (y < -box.h || ye > l.height + box.h) return;
       const c = TAKE_COLOR[take.states?.[i] ?? 'ok'];
       if (n.l > 0)
         g.rect(lane.left + lane.width * 0.2, ye, lane.width * 0.6, y - ye).fill({
           color: c,
           alpha: 0.22,
         });
-      g.roundRect(lane.left + 2, y - noteH / 2, lane.width - 4, noteH, 3)
+      // A little inside the head, so a take over the chart's notes shows both.
+      const inner = { ...box, w: box.w - 2, h: box.h - (round ? 2 : 0) };
+      noteShape(g, lane.left + box.inset + 1, y, inner, round)
         .fill({ color: c, alpha: 0.28 })
         .stroke({ width: 1.5, color: c, alpha: 0.95 });
     });
   }
+}
+
+/** A note head's outline centred on `y`, its left edge at `x`: an orb or a bar. */
+function noteShape(g: Shapes, x: number, y: number, box: NoteBox, round: boolean): Shapes {
+  return round
+    ? g.circle(x + box.w / 2, y, box.h / 2)
+    : g.roundRect(x, y - box.h / 2, box.w, box.h, 3);
 }
 
 /** One frame's view of the game skin: design space to the screen, and the port's counters. */
@@ -1607,7 +1842,7 @@ class GameView {
 /** A .pvi colour on a sprite: tint and, for alpha blending, alpha (an additive quad ignores it). */
 function paint(sp: Sprite, blend: SkinBlend, c: { r: number; g: number; b: number; a: number }) {
   sp.blendMode = blend;
-  sp.tint = ((c.r & 255) << 16) | ((c.g & 255) << 8) | (c.b & 255);
+  tint(sp, ((c.r & 255) << 16) | ((c.g & 255) << 8) | (c.b & 255));
   sp.alpha = blend === 'add' ? 1 : (c.a & 255) / 255;
 }
 
@@ -1616,6 +1851,18 @@ function solid(c: { r: number; g: number; b: number; a: number }) {
     color: ((c.r & 255) << 16) | ((c.g & 255) << 8) | (c.b & 255),
     alpha: (c.a & 255) / 255,
   };
+}
+
+/** The index of the first of `items` (sorted by y) at or after `y`. */
+function firstAtOrAfter(items: readonly { y: number }[], y: number): number {
+  let a = 0;
+  let b = items.length;
+  while (a < b) {
+    const m = (a + b) >> 1;
+    if (items[m]!.y < y) a = m + 1;
+    else b = m;
+  }
+  return a;
 }
 
 function fmtBpm(b: number): string {

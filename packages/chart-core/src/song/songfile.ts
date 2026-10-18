@@ -12,7 +12,14 @@ import { said, sayText, type Said } from '../i18n/say';
 import { readBgaSettings, type BgaSettings } from '../publish/bga';
 import { readPlateSettings, type PlateSettings } from '../publish/plate';
 import { readPreviewSettings, type PreviewSettings } from '../publish/preview';
-import { readDiscArt, readEyecatchArt, type DiscArt, type EyecatchArt } from './art';
+import {
+  readDiscArt,
+  readEyecatchArt,
+  readTierDiscs,
+  type DiscArt,
+  type EyecatchArt,
+  type TierDiscs,
+} from './art';
 
 export interface SongFile {
   /** EZ2PORT's key: the package folder's name (1-15 of a-z, 0-9). */
@@ -27,6 +34,8 @@ export interface SongFile {
   plate?: PlateSettings;
   /** The disc's image and crop (absent: the importer's pick from the charts; null: none). */
   disc?: DiscArt | null;
+  /** A tier's own disc (HD/SHD/EX), as the game has them; a tier without one shows `disc`. */
+  discs?: TierDiscs;
   /** The eyecatch's image and framing (absent: the importer's pick; null: none). */
   eyecatch?: EyecatchArt | null;
   /** What the preview is cut from and where (absent: the importer's pick from the first chart). */
@@ -109,6 +118,7 @@ const KNOWN = [
   'classic',
   'plate',
   'disc',
+  'discs',
   'eyecatch',
   'preview',
   'bga',
@@ -186,6 +196,14 @@ export function parseSongFile(text: string): { song: SongFile; warnings: string[
     } else if (k === 'disc') song.disc = art as DiscArt | null;
     else song.eyecatch = art as EyecatchArt | null;
   }
+  if (o.discs !== undefined) {
+    const discs = readTierDiscs(o.discs);
+    if (discs) song.discs = discs;
+    else {
+      warn(said('song.file.art', { field: 'discs' }));
+      song.extra.discs = o.discs;
+    }
+  }
   if (o.source !== undefined) {
     const source = readImportSource(o.source);
     if (source) song.source = source;
@@ -215,6 +233,7 @@ export function serializeSongFile(s: SongFile): string {
   if (s.classic !== undefined) out.classic = s.classic;
   if (s.plate !== undefined) out.plate = s.plate;
   if (s.disc !== undefined) out.disc = s.disc;
+  if (s.discs !== undefined) out.discs = s.discs;
   if (s.eyecatch !== undefined) out.eyecatch = s.eyecatch;
   if (s.preview !== undefined) out.preview = s.preview;
   if (s.bga !== undefined) out.bga = s.bga;

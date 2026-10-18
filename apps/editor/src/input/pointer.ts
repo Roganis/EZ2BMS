@@ -8,6 +8,8 @@
 //   right button              erase what the pointer touches
 //   middle button             pan
 //   Alt+click a note          take its sound as the brush
+//   the rack's scrollbar      drag it (under the group names, when the
+//                             background rack is wider than its window)
 //
 // In a stem strip, whatever the tool: right-click cuts the stem there (on a
 // cut, heals it); drag a cut to move it; click a slice to select it (Shift
@@ -17,10 +19,13 @@
 // strip, or on the lanes for the strip in focus. All of it keeps the sound
 // (chart-core slice/ops.ts refuses what would not).
 //
-// In Classic mode (the host passes `classic`) placing keys the sound playing
-// there instead of the brush, the right button un-keys, heals or splits
-// instead of erasing, drags keep notes at their time, and positions snap to
-// the picked sound's group before the grid.
+// In Classic mode (the host passes `classic`) placing keys a note already in
+// the background instead of adding one with the brush: the magnet pulls the
+// note onto the nearest background note, the picked sound's backing track
+// first (BmsTWO's snap to sample), and a click on a note picks its sound, as
+// BmsTWO's does. The right button un-keys, heals or splits instead of
+// erasing, drags keep notes at their time, and other positions (a hold's
+// end, a cut) snap to the picked sound's group before the grid.
 //
 // Moves and resizes are drafts: the chart shows the result live, Esc puts
 // everything back, and the whole drag is one undo step.
@@ -58,6 +63,8 @@ export interface ToolHost {
   setGhost(g: { x: number; y: number; l: number } | null): void;
   setMarquee(m: { x0: number; y0: number; x1: number; y1: number } | null): void;
   pan(dPulses: number): void;
+  /** Scroll the background rack to this many design units. */
+  setRackScroll(units: number): void;
   say(msg: string): void;
   /** Hear a sound (placing or picking a note). */
   audition(ch: ChannelId): void;
@@ -92,6 +99,8 @@ export interface StripHooks {
 export interface ClassicHooks {
   /** A position snapped to the sound's own notes, or undefined for the grid. */
   snap(p: number, within: number): number | undefined;
+  /** Where a note placed on lane x near p goes: a background note to key, or undefined (none near). */
+  magnet(x: number, p: number): number | undefined;
   place(x: number, y: number, l: number): void;
   right(note: NoteRec | undefined, y: number): void;
   /** Whether notes may go where a drag would put them (their time never changes). */
@@ -117,6 +126,7 @@ type Gesture =
   | { kind: 'marquee'; x0: number; y0: number; base: Set<NoteId> }
   | { kind: 'erase'; ids: Set<NoteId>; draft: Draft }
   | { kind: 'pan'; lastY: number }
+  | { kind: 'rackbar'; grab: number }
   | { kind: 'cut'; id: NoteId; strip: number; from: number; y: number }
   | { kind: 'slices'; ids: NoteId[]; y: number; sx: number; sy: number; moved: boolean };
 
@@ -146,6 +156,12 @@ export class PointerTool {
     const toSound = h.classic?.snap(p, s / 2);
     if (toSound !== undefined) return toSound;
     return Math.max(0, Math.round(p / s) * s);
+  }
+
+  /** Where a note placed on lane x goes: in Classic mode where the magnet pulls it, else snapped. */
+  private placeAt(h: ToolHost, x: number, p: number, free: boolean): number {
+    const m = free ? undefined : h.classic?.magnet(x, p);
+    return m ?? this.snap(h, p, free);
   }
 
   /** Where a cut goes: the grid, the stem's onsets with Shift, anywhere with Alt. */
@@ -216,6 +232,21 @@ export class PointerTool {
       this.g = { kind: 'pan', lastY: py };
       return;
     }
+    const bar = e.button === 0 ? r.rackBar() : undefined;
+    if (
+      bar &&
+      px >= bar.left &&
+      px <= bar.left + bar.width &&
+      py >= bar.top - 3 &&
+      py <= bar.top + bar.height + 3
+    ) {
+      // On the thumb: drag it from where it was taken; beside it: jump there.
+      const on = px >= bar.thumbLeft && px <= bar.thumbLeft + bar.thumbWidth;
+      const grab = on ? px - bar.thumbLeft : bar.thumbWidth / 2;
+      h.setRackScroll(r.rackScrollAtThumb(px - grab));
+      this.g = { kind: 'rackbar', grab };
+      return;
+    }
     const strip = h.strips?.at(px);
     if (strip !== undefined && h.strips) {
       this.stripDown(e, h, h.strips, strip);
@@ -266,6 +297,8 @@ export class PointerTool {
       }
       if (!sel.has(note.id)) h.doc.setSelection(additive ? [...sel, note.id] : [note.id], note.id);
       if (!additive) h.audition(note.ch);
+      // Classic: the note clicked is the backing track the magnet pulls to next.
+      if (h.classic && !additive) h.setBrush(note.ch);
       const orig = [...h.doc.selection.ids]
         .map((id) => h.doc.index.get(id))
         .filter((n): n is NoteRec => !!n)
@@ -294,7 +327,7 @@ export class PointerTool {
       return;
     }
     if (!additive) h.doc.setSelection([]);
-    const y0 = this.snap(h, p, e.altKey);
+    const y0 = this.placeAt(h, lane.x, p, e.altKey);
     this.g = { kind: 'place', x: lane.x, y0, l: 0 };
     h.setGhost({ x: lane.x, y: y0, l: 0 });
   }
@@ -322,7 +355,7 @@ export class PointerTool {
         );
         const lane = r.laneAt(px);
         if (h.tool === 'draw' && lane && !r.noteAt(px, py) && !e.shiftKey) {
-          h.setGhost({ x: lane.x, y: this.snap(h, p, e.altKey), l: 0 });
+          h.setGhost({ x: lane.x, y: this.placeAt(h, lane.x, p, e.altKey), l: 0 });
         } else h.setGhost(null);
         return;
       }
@@ -380,6 +413,9 @@ export class PointerTool {
         g.lastY = py;
         return;
       }
+      case 'rackbar':
+        h.setRackScroll(r.rackScrollAtThumb(px - g.grab));
+        return;
     }
   }
 

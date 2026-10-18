@@ -23,8 +23,9 @@ import { parseSongTitles, type SongTitle } from '../../ez2data/songtext';
 import { said, sayText, type Said } from '../../i18n/say';
 import type { Tier } from '../../model/types';
 import { MODES, type ModeId } from '../../modes/ids';
+import { DISC_TIERS, type DiscTier } from '../../song/art';
 import { errorSaid } from '../said-error';
-import { gamePath, type EzSongSource, type EzTables } from './import';
+import { gamePath, type EzSongSource, type EzTables, type GameArtFile } from './import';
 import { eziResolve, parseEzi } from './ezi';
 
 export interface GameFs {
@@ -195,6 +196,82 @@ export async function openGame(
   };
 }
 
+/** An executable found beside (or set for) a game folder. */
+export interface ExeCandidate {
+  name: string;
+  bytes: Uint8Array;
+}
+
+/** What one candidate holds. */
+export interface ExeCheck {
+  name: string;
+  /** Its .ez/.ezi/.ini key tables are there and verify (they carry digests). */
+  keys: boolean;
+  /**
+   * Its song.bin tables decrypt the game's own song.bin to "EZSL" - or
+   * undefined when every song.bin is plaintext and there is nothing to prove.
+   */
+  songdb: boolean | undefined;
+}
+
+export interface ExePick {
+  /** The one to read the tables from, if any holds them. */
+  exe?: ExeCandidate;
+  checks: ExeCheck[];
+}
+
+/**
+ * Which executable holds this game's tables. Only the key tables carry a
+ * digest; song.bin's have none, and any Windows program of the era maps
+ * their address, so reading "an executable with that address" read another
+ * program's bytes and every mode's song.bin said the wrong magic (the
+ * owner's install, 2026-09-28). Each candidate is proved instead: on the
+ * game's own encrypted song.bin (it must decrypt to "EZSL", the port's own
+ * check) and on the key digests. Both right wins, then the song tables, then
+ * the keys; earlier candidates win ties (the one set by the user comes first).
+ */
+export async function pickExe(fs: GameFs, candidates: ExeCandidate[]): Promise<ExePick> {
+  const sample = await encryptedSongdb(fs);
+  const checks = candidates.map((c): ExeCheck => {
+    let keys = false;
+    try {
+      keyTableFromExe(c.bytes, 'ez');
+      keys = true;
+    } catch {
+      // Not this executable's, or not one at all.
+    }
+    let songdb: boolean | undefined;
+    if (sample) {
+      try {
+        readSongdb(sample, c.bytes);
+        songdb = true;
+      } catch {
+        songdb = false;
+      }
+    }
+    return { name: c.name, keys, songdb };
+  });
+  const score = (k: ExeCheck) => (k.songdb === true ? 2 : 0) + (k.keys ? 1 : 0);
+  let best = -1;
+  checks.forEach((k, i) => {
+    if (score(k) > 0 && (best < 0 || score(k) > score(checks[best]!))) best = i;
+  });
+  return { ...(best >= 0 ? { exe: candidates[best]! } : {}), checks };
+}
+
+/** The first mode's song.bin that is encrypted (a plaintext one proves nothing). */
+async function encryptedSongdb(fs: GameFs): Promise<Uint8Array | undefined> {
+  const system = await fs.list('system');
+  for (const m of MODES) {
+    const dir = system.find((d) => d.toLowerCase() === m.portName.toLowerCase());
+    if (!dir) continue;
+    const b = await findIn(fs, `system/${dir}`, 'song.bin');
+    const bytes = b && (await fs.read(b));
+    if (bytes && bytes.length >= 4 && decodeCp949(bytes.subarray(0, 4)) !== 'EZSL') return bytes;
+  }
+  return undefined;
+}
+
 const bpmOf = (e: SongEntry) => e.steps.find((s) => s.level > 0)?.b ?? e.steps[0].b;
 
 /**
@@ -252,6 +329,8 @@ export async function ezSongSource(game: Game, song: GameSong): Promise<EzSongSo
     }
     listings.set(d.toLowerCase(), { real, names: real ? await fs.list(real) : [] });
   }
+  const art = await gameArt(fs, song.key, song.dir);
+  const hasArt = !!(art.disc || art.discs || art.eyecatch);
   const locate = (path: string): string | undefined => {
     const slash = path.lastIndexOf('/');
     const l = listings.get(path.slice(0, slash).toLowerCase());
@@ -270,7 +349,82 @@ export async function ezSongSource(game: Game, song: GameSong): Promise<EzSongSo
     ...(song.title ? { title: song.title } : {}),
     locate,
     shipped: game.sound,
+    ...(hasArt ? { art } : {}),
   };
+}
+
+/**
+ * Where the game keeps a song's discs and eyecatch, as EZ2PORT's song select
+ * looks for them (tools/ez2play/select.c, select_refresh and select_eyecatch):
+ * `system/disc/<key>` - the NM face - and a tier's own `<key>-hd`, `-shd`,
+ * `-ex`, and `system/eyecatch/<key>`. The game names them `.bmp` and ships
+ * `.abm` (vfs.c resolves one to the other), so both are looked for.
+ */
+export function gameArtPaths(key: string): {
+  disc: string[];
+  discs: Record<DiscTier, string[]>;
+  eyecatch: string[];
+} {
+  const both = (stem: string) => [`${stem}.abm`, `${stem}.bmp`];
+  return {
+    disc: both(`system/disc/${key}`),
+    discs: {
+      HD: both(`system/disc/${key}-hd`),
+      SHD: both(`system/disc/${key}-shd`),
+      EX: both(`system/disc/${key}-ex`),
+    },
+    eyecatch: both(`system/eyecatch/${key}`),
+  };
+}
+
+/** The song's disc, tier discs and eyecatch files, matched in any case; by the table's key, else the folder's. */
+async function gameArt(
+  fs: GameFs,
+  key: string,
+  dir: string,
+): Promise<NonNullable<EzSongSource['art']>> {
+  const listings = new Map<string, { real: string; names: string[] } | null>();
+  const listing = async (folder: string) => {
+    const k = folder.toLowerCase();
+    if (!listings.has(k)) {
+      let real = '';
+      for (const seg of folder.split('/')) {
+        const hit = (await fs.list(real)).find((n) => n.toLowerCase() === seg.toLowerCase());
+        if (!hit) {
+          listings.set(k, null);
+          return null;
+        }
+        real = real ? `${real}/${hit}` : hit;
+      }
+      listings.set(k, { real, names: await fs.list(real) });
+    }
+    return listings.get(k)!;
+  };
+  const find = async (paths: string[]): Promise<GameArtFile | undefined> => {
+    for (const path of paths) {
+      const slash = path.lastIndexOf('/');
+      const l = await listing(path.slice(0, slash));
+      const name = path.slice(slash + 1).toLowerCase();
+      const hit = l?.names.find((n) => n.toLowerCase() === name);
+      if (!hit) continue;
+      const real = `${l!.real}/${hit}`;
+      const bytes = await fs.read(real);
+      if (bytes) return { path: real, bytes };
+    }
+    return undefined;
+  };
+  const keys = [...new Set([key, dir])];
+  const paths = keys.map(gameArtPaths);
+  const out: NonNullable<EzSongSource['art']> = {};
+  const disc = await find(paths.flatMap((p) => p.disc));
+  if (disc) out.disc = disc;
+  for (const tier of DISC_TIERS) {
+    const f = await find(paths.flatMap((p) => p.discs[tier]));
+    if (f) (out.discs ??= {})[tier] = f;
+  }
+  const eyecatch = await find(paths.flatMap((p) => p.eyecatch));
+  if (eyecatch) out.eyecatch = eyecatch;
+  return out;
 }
 
 /** A GameFs over a map of game-relative paths (the synthetic game, tests). */

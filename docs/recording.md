@@ -18,7 +18,7 @@ takes a press so that what you play lands where you meant it.
    it would become:
    - green: it will be placed;
    - red: the lane already has a note there (a take never overwrites);
-   - grey: in a Classic song, nothing is sounding there to key.
+   - grey: in a Classic song, no background note there to key.
 
    The panel also shows how the presses sat against the grid (mean and
    median, early and late), which is what a latency setting needs.
@@ -30,12 +30,14 @@ takes a press so that what you play lands where you meant it.
 What a press becomes:
 
 - **In a song charted in Classic mode** (the song's Classic switch), a press
-  keys the background sound playing at that spot: a note already there, or
-  a split of a sound playing through. The music stays exactly as it was:
-  each keying is checked like a Classic edit and refused if it would change
-  the sound. Only background sounds are taken, never another lane's. A
-  press is silent while recording, because the music already holds that
-  sound.
+  keys a note already in the background: the nearest one within half a grid
+  step, the picked sound's backing track first (the magnet, as placing by
+  hand). A take never cuts a sound to make a note of its own, so a press
+  with no background note that near is counted as having nothing to key.
+  The music stays exactly as it was: each keying is checked like a Classic
+  edit and refused if it would change the sound. Only background notes are
+  taken, never another lane's. A press is silent while recording, because
+  the music already holds that sound.
 - **In any other song**, a press is a note with the brush sound, which it
   plays on its lane as you press.
 - **ScratchMix** records as EZ2PORT plays it: a key alone is nothing, the

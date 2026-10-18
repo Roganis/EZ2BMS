@@ -34,8 +34,16 @@ export const RACK_LABEL = 16;
 /** A stem strip's width and the gap between strips (BmsTWO's wide sound column is 64). */
 export const STRIP_W = 64;
 const STRIP_GAP = 6;
-/** The rack never takes more than this share of the window; a wider one scrolls sideways. */
+/**
+ * The rack takes the window's width beside the lanes (at least this share of
+ * it); a rack wider than that first narrows its sub-lanes, to RACK_SUB_MIN,
+ * and only then scrolls sideways - with many sounds, the owner could not see
+ * every group (2026-09-28).
+ */
 const RACK_SHARE = 0.4;
+export const RACK_SUB_MIN = 7;
+/** The scrollbar under the group names, design units tall. */
+export const RACK_BAR = 5;
 /** The judge line, in design units above the bottom edge. */
 const JUDGE_FROM_BOTTOM = 64;
 
@@ -130,10 +138,16 @@ export function computeLayout(i: LayoutInput): Layout {
   const nStrips = i.strips ?? 0;
   const stripUnits = nStrips ? (nStrips * (STRIP_W + STRIP_GAP) + 6) * i.extras : 0;
   const groups = i.rackGroups;
-  const contentUnits = groups.length
+  const fullUnits = groups.length
     ? groups.reduce((w, g) => w + g.subLanes * RACK_SUB, 0) + RACK_GAP * (groups.length - 1)
     : 0;
-  const shownUnits = Math.min(contentUnits, (RACK_SHARE * i.width) / scale);
+  // The room beside everything else at full scale, or the share if that is more.
+  const besides = GUTTER + laneUnits + 12 + offUnits + stripUnits + 12 + 16;
+  const room = Math.max((RACK_SHARE * i.width) / scale, i.width / scale - besides);
+  // Narrower sub-lanes before a scrollbar.
+  const narrow = fullUnits > room ? Math.max(RACK_SUB_MIN / RACK_SUB, room / fullUnits) : 1;
+  const contentUnits = fullUnits * narrow;
+  const shownUnits = Math.min(contentUnits, room);
   const rackUnits = (shownUnits + (groups.length ? 12 : 0)) * i.extras;
   const need = GUTTER + laneUnits + 12 + offUnits + stripUnits + rackUnits + 16;
   // Shrink to fit a narrow window rather than overflow it.
@@ -191,8 +205,61 @@ export function computeLayout(i: LayoutInput): Layout {
     offLanes,
     gutter: { left: Math.max(0, fieldLeft - GUTTER * s), right: fieldLeft - 6 * s },
     strips,
-    rack: rackGeom(x, s * i.extras, groups, contentUnits, shownUnits, i.rackScroll ?? 0),
+    rack: rackGeom(x, s * i.extras, narrow, groups, contentUnits, shownUnits, i.rackScroll ?? 0),
     design: boxes ? { x0, judgeY: i.skin!.judgeY } : null,
+  };
+}
+
+/**
+ * The neon skin's note heads. `bar` spans the lane, a short slab like the
+ * game's own notes; `round` is an orb of one size in every lane, so a chord
+ * reads as a row of equal dots whatever the lanes' widths, and a hold is a
+ * capsule. The game skin draws notes in its own art and ignores this.
+ */
+export type NoteShape = 'bar' | 'round';
+
+export const NOTE_SHAPES: readonly NoteShape[] = ['bar', 'round'];
+
+/** Where a note's head and hold body sit in a lane, screen pixels. */
+export interface NoteBox {
+  /** From the lane's left edge to the head's. */
+  inset: number;
+  w: number;
+  /** Centred on the note's line. */
+  h: number;
+  /** A hold body's width, centred in the lane. */
+  bodyW: number;
+  /** How far above or below the note's line a pointer still takes it. */
+  reach: number;
+}
+
+/** A bar's height and an orb's diameter, design units. */
+const BAR_H = 9;
+const ORB_D = 18;
+
+export function noteBox(shape: NoteShape, laneWidth: number, scale: number): NoteBox {
+  const barH = Math.max(6, Math.round(BAR_H * scale));
+  if (shape === 'round') {
+    // 18 of the narrowest key's 26 keeps a gap each side; the off-mode
+    // gutter's lanes are narrower still, and shrink it.
+    const d = Math.max(4, Math.min(Math.round(ORB_D * scale), Math.floor(laneWidth) - 4));
+    return {
+      inset: (laneWidth - d) / 2,
+      w: d,
+      h: d,
+      bodyW: Math.max(4, Math.round(d * 0.72)),
+      // The bar's slack past the edge, not the bar's 0.9 of the height: an
+      // orb is twice as tall, and a click that far off it would take it
+      // instead of placing a note beside it.
+      reach: d / 2 + 0.4 * barH,
+    };
+  }
+  return {
+    inset: 1,
+    w: Math.max(4, laneWidth - 2),
+    h: barH,
+    bodyW: Math.max(4, Math.round(laneWidth * 0.72)),
+    reach: 0.9 * barH,
   };
 }
 
@@ -235,6 +302,7 @@ export class Viewport {
 function rackGeom(
   left: number,
   k: number,
+  narrow: number,
   groups: readonly { key: string; subLanes: number }[],
   contentUnits: number,
   shownUnits: number,
@@ -249,11 +317,12 @@ function rackGeom(
     width,
     content,
     scroll,
-    sub: RACK_SUB * k,
+    sub: RACK_SUB * narrow * k,
     labelH: RACK_LABEL * k,
     groups: groups.map((g) => {
-      const geom = { key: g.key, left: at, width: g.subLanes * RACK_SUB * k, subLanes: g.subLanes };
-      at += geom.width + RACK_GAP * k;
+      const width = g.subLanes * RACK_SUB * narrow * k;
+      const geom = { key: g.key, left: at, width, subLanes: g.subLanes };
+      at += width + RACK_GAP * narrow * k;
       return geom;
     }),
   };

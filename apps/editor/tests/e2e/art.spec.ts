@@ -3,6 +3,7 @@
 // browser build cuts with a canvas (the desktop app with ez2bms-media, whose
 // bytes chart-core's art.oracle test checks against EZ2PORT's importer).
 
+import { synthArt } from '@ez2bms/chart-core';
 import { expect, test, type Page } from '@playwright/test';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the ?e2e hook is the live App */
@@ -153,4 +154,83 @@ test('an image dropped on the art page is imported and can be chosen', async ({ 
   await expect.poll(() => lit(page, 'disc')).toBeGreaterThan(0.5);
   // 300 px across shrinks to the 256 disc: nothing to warn about.
   await expect(page.getByTestId('art-disc')).not.toContainText('Upscaled');
+});
+
+test("the game's own .abm pictures come in as BMPs, once", async ({ page }) => {
+  await openArt(page);
+  // A made-up picture in the game's format (chart-core dev/synthgame.ts).
+  const abm = [...synthArt(64, 64, 5, 'abm')];
+  const first = await page.evaluate(async (bytes) => {
+    const a = (window as unknown as W).__ez2bms;
+    await a.backend.writeBytes('/game-art/GameDisc.abm', Uint8Array.from(bytes), false);
+    return a.art.import(['/game-art/GameDisc.abm']);
+  }, abm);
+  expect(first).toEqual(['GameDisc.bmp']);
+  await expect(page.getByText('Imported 1 image')).toBeVisible();
+  // The same picture again is the same file, not a copy.
+  const again = await page.evaluate(() =>
+    (window as unknown as W).__ez2bms.art.import(['/game-art/GameDisc.abm']),
+  );
+  expect(again).toEqual(['GameDisc.bmp']);
+  const files = await page.evaluate(async () => {
+    const a = (window as unknown as W).__ez2bms;
+    const b = await a.backend.readFile(`${a.project.dir}/GameDisc.bmp`);
+    return { head: String.fromCharCode(b[0], b[1]), images: a.project.images as string[] };
+  });
+  expect(files.head).toBe('BM');
+  expect(files.images.filter((f) => /gamedisc/i.test(f))).toEqual(['GameDisc.bmp']);
+  const source = page.getByTestId('art-disc').getByTestId('art-source');
+  await source.selectOption('GameDisc.bmp');
+  await expect(page.getByTestId('art-disc')).toContainText('64x64');
+  await expect.poll(() => lit(page, 'disc')).toBeGreaterThan(0.2);
+});
+
+test('a difficulty gets its own disc, published beside the NM one', async ({ page }) => {
+  await openArt(page);
+  const card = page.getByTestId('art-disc');
+  const source = card.getByTestId('art-source');
+  await card.getByTestId('art-disc-tier-HD').click();
+  await expect(source).toHaveValue('');
+  await expect(source.locator('option').first()).toHaveText('Same as NM');
+  await expect(card.getByTestId('art-disc-tier-note')).toContainText("HD's disc");
+  // Without its own, HD shows the NM disc: the jacket.
+  await expect(card).toContainText('jacket.bmp');
+  await source.selectOption('banner.bmp');
+  await expect
+    .poll(async () => (await songFile(page)).discs)
+    .toEqual({ HD: { src: 'banner.bmp' } });
+  await expect(card.getByTestId('art-disc-tier-HD')).toHaveClass(/own/);
+  await expect(card).toContainText('banner.bmp');
+  // NM's is untouched, and back to "Same as NM" takes HD's away.
+  await card.getByTestId('art-disc-tier-NM').click();
+  await expect(card).toContainText('jacket.bmp');
+  await card.getByTestId('art-disc-tier-HD').click();
+  await source.selectOption('');
+  await expect.poll(async () => (await songFile(page)).discs).toBeUndefined();
+  await source.selectOption('banner.bmp');
+
+  await page.evaluate(() =>
+    (window as unknown as W).__ez2bms.settings.set('songsRoot', '/ez2port/songs'),
+  );
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+Shift+P');
+  await page.getByTestId('publish-go').click();
+  await expect(page.getByTestId('publish-done')).toContainText(/Published neonparade/);
+  await page.getByTestId('publish-close').click();
+  const out = await page.evaluate(async () => {
+    const a = (window as unknown as W).__ez2bms;
+    const dir = '/ez2port/songs/neonparade';
+    const expected = await a.art.packageArt(a.project);
+    const got: Uint8Array = await a.backend.readFile(`${dir}/disc-hd.abm`);
+    const want: Uint8Array = expected.discsAbm.HD;
+    const nm: Uint8Array = expected.discAbm;
+    return {
+      ini: (await a.backend.readText(`${dir}/song.ini`)) as string,
+      same: got.length === want.length && got.every((v, i) => v === want[i]),
+      differs: want.length !== nm.length || want.some((v, i) => v !== nm[i]),
+    };
+  });
+  expect(out.ini).toContain('Disc = disc.abm\nDisc.HD = disc-hd.abm\n');
+  expect(out.same).toBe(true);
+  expect(out.differs).toBe(true);
 });

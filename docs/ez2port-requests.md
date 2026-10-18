@@ -232,6 +232,28 @@ Found while EZ2BMS transcribed the input layer (M7); both are small.
   frame, which would turn a release bounce into a press) would fix it.
   EZ2BMS keeps the port's behaviour for now, so the two agree.
 
+## 12. A disc for each difficulty in a package
+
+**What it's for.** The game's own songs have a disc per difficulty
+(`system\disc\<key>-hd`, `-shd`, `-ex`), and the song select shows the
+tier's while the disc swings past half a turn (`select.c`, `bigdisc` and
+`bigdisc_nm`). A package has one `Disc` for every tier (`select.c`: "one
+disc for every tier of a package"), so an imported song's HD disc is lost
+on the wheel. The owner noticed (2026-09-28).
+
+**What to add.** In `usersongs.c`, read `[Assets] Disc.HD`, `Disc.SHD` and
+`Disc.EX` (file names in the package, like `Disc`), and have
+`ez2_usersongs_asset(key, "Disc.HD")` answer them; in `select.c`, ask for
+the tier's before the package's `Disc` when loading `bigdisc`, keeping
+`Disc` as the NM face.
+
+**What EZ2BMS writes already.** `disc-hd.abm` (and `-shd`, `-ex`) beside
+`disc.abm`, under those keys, for a song that has them. Build 1582 ignores
+them (its `[Assets]` keys are matched whole), which the oracle test of a
+published package checks.
+
+**Detection:** none needed; the files are there for the build that reads them.
+
 ## For information: scores that can't reach 100%
 
 This is not a bug in the port: it reproduces the original. EZ2BMS's lint warns

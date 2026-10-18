@@ -21,7 +21,8 @@ import { modeNames, type ModeId } from '../modes/ids';
 import { modeDef, type Column } from '../modes/registry';
 import { compileChart, type ChartPlan, type SampleLookup } from './chart-plan';
 import { KeysoundRegistry, type KeysoundDef } from './keysounds';
-import { chartIniText, eziText, songIniText, type Eol } from './text';
+import { chartIniText, eziText, songIniText, type Eol, type SongIniFile } from './text';
+import { DISC_TIERS, type DiscTier } from '../song/art';
 
 export const CONVERTER = 'EZ2BMS 0.2.0';
 
@@ -44,6 +45,12 @@ export interface SongMeta {
   songnameAbm?: Uint8Array;
   /** The disc (256x256) and the eyecatch (1024x512), already encoded as .abm. */
   discAbm?: Uint8Array;
+  /**
+   * A tier's own disc, as .abm. EZ2PORT shows one disc for every tier of a
+   * package (select.c); these go in as `disc-hd.abm` and friends under
+   * `[Assets] Disc.HD` (ez2port-requests.md), which it ignores until then.
+   */
+  discsAbm?: Partial<Record<DiscTier, Uint8Array>>;
   eyecatchAbm?: Uint8Array;
   /** The package has a preview.ssf (rendered by the host, not in `files`). */
   preview?: boolean;
@@ -145,7 +152,7 @@ export function compileSong(
   }
   // The names the port's importer gives them (ez2/bmson.c), so a package
   // reads the same whoever made it.
-  const assets: { disc?: string; songname?: string; eyecatch?: string; preview?: string } = {};
+  const assets: SongIniFile['assets'] = {};
   if (meta.songnameAbm) {
     files.push({ path: 'songname.abm', bytes: meta.songnameAbm });
     assets.songname = 'songname.abm';
@@ -153,6 +160,13 @@ export function compileSong(
   if (meta.discAbm) {
     files.push({ path: 'disc.abm', bytes: meta.discAbm });
     assets.disc = 'disc.abm';
+    for (const tier of DISC_TIERS) {
+      const bytes = meta.discsAbm?.[tier];
+      if (!bytes) continue;
+      const path = `disc-${tier.toLowerCase()}.abm`;
+      files.push({ path, bytes });
+      (assets.discs ??= {})[tier] = path;
+    }
   }
   if (meta.eyecatchAbm) {
     files.push({ path: 'eyecatch.abm', bytes: meta.eyecatchAbm });

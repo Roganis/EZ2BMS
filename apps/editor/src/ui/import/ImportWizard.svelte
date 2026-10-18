@@ -87,8 +87,13 @@
         {#if im.loadingGame}
           <p class="hint">{t('import.reading')}</p>
         {:else if im.gameError}
-          <p class="warn">{im.gameError}</p>
-          <button class="ez-btn" onclick={() => void im.loadGame()}>{t('import.readAgain')}</button>
+          <!-- One row of the list's grid, so the button does not take the list's stretching row. -->
+          <div class="error">
+            <p class="warn">{im.gameError}</p>
+            <button class="ez-btn" onclick={() => void im.loadGame()}
+              >{t('import.readAgain')}</button
+            >
+          </div>
         {/if}
         <ul>
           {#each im.songs as s (s.dir)}
@@ -412,6 +417,11 @@
     grid-template-rows: auto auto 1fr auto;
     gap: 8px;
     min-height: 0;
+  }
+  .list .error {
+    display: grid;
+    gap: 8px;
+    justify-items: start;
   }
   .list ul {
     list-style: none;

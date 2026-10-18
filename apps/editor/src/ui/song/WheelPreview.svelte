@@ -7,7 +7,7 @@
   // through. Placement and motion are the port's own arithmetic
   // (chart-core ez2data/selectwheel.ts); the masks are the user's game's
   // (skin/select.ts), neon stand-ins without them.
-  import { modeDef, plateSpecFor, wheelWantsPreview, type Tier } from '@ez2bms/chart-core';
+  import { discFor, modeDef, plateSpecFor, wheelWantsPreview, type Tier } from '@ez2bms/chart-core';
   import {
     NO_ART,
     SCREEN_H,
@@ -74,12 +74,18 @@
       });
     return () => (live = false);
   });
+  const keyOf = (a: { path?: string; job: unknown } | undefined) =>
+    a?.path ? JSON.stringify({ path: a.path, job: a.job }) : '';
   const artOf = (kind: 'disc' | 'eyecatch') => {
     void project.images;
-    const a = project.art[kind];
-    return a?.path ? JSON.stringify({ path: a.path, job: a.job }) : '';
+    return keyOf(project.art[kind]);
   };
-  const discKey = $derived(artOf('disc'));
+  // The tier's own disc where it has one, and the NM face it swings from.
+  const discKey = $derived.by(() => {
+    void project.images;
+    return keyOf(discFor(project.art, tier));
+  });
+  const nmKey = $derived(artOf('disc'));
   const eyecatchKey = $derived(artOf('eyecatch'));
   function cut(key: string, set: (p: Picture | null) => void): () => void {
     let live = true;
@@ -97,6 +103,8 @@
     return () => (live = false);
   }
   $effect(() => cut(discKey, (p) => (disc = p)));
+  let nm = $state.raw<Picture | null>(null);
+  $effect(() => cut(nmKey === discKey ? '' : nmKey, (p) => (nm = p)));
   $effect(() => cut(eyecatchKey, (p) => (eyecatch = p)));
 
   let others = $state.raw<(Picture | null)[]>([]);
@@ -158,7 +166,7 @@
   let view = $state<'wheel' | 'eyecatch'>('wheel');
   let sound = $state(true);
   const entries = $derived<WheelEntry[]>([
-    { plate, disc, thumb: null },
+    { plate, disc, nm, thumb: null },
     ...(alone ? [] : others.map((p) => ({ plate: p, disc: null, thumb: null }))),
   ]);
   const count = $derived(entries.length);

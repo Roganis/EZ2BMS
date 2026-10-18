@@ -51,13 +51,18 @@ export const help = {
   'cmd.help.updates': 'Check for updates',
   'cmd.help.report': 'Copy a problem report (version, errors, the end of the log)',
   'cmd.help.logs': 'Open the log folder',
-  'cmd.app.preferences': 'Preferences (language, updates)',
+  'cmd.app.preferences': 'Preferences (language, note skin, updates)',
 
   'prefs.label': 'Preferences',
   'prefs.language': 'Language',
   'prefs.languageAuto': 'As the system ({name})',
   'prefs.languageHint':
     'Korean and Japanese are first translations, drafted by an AI: corrections are welcome.',
+  'prefs.noteSkin': 'Note skin',
+  'prefs.noteBar': 'Bars',
+  'prefs.noteRound': 'Round',
+  'prefs.noteSkinGame':
+    "The game's own panel draws its notes in its own art: these show where it is off (the EZ2PORT tab).",
   'prefs.updates': 'Look for a new version at start (once a day)',
   'prefs.close': 'Close',
 } satisfies Record<string, string>;

@@ -222,6 +222,51 @@ export function encodeAbm(rgb: Uint8Array, w: number, h: number): Uint8Array {
   return out;
 }
 
+/** Encode top-down RGBA (w*h*4) as a plain 24-bit bottom-up BMP (alpha dropped). */
+export function encodeBmp(rgba: Uint8Array, w: number, h: number): Uint8Array {
+  if (w <= 0 || h <= 0 || rgba.length < w * h * 4)
+    throw new AbmError('RGBA buffer smaller than w*h*4');
+  const row = w * 3;
+  const pad = (4 - (row % 4)) % 4;
+  const body = (row + pad) * h;
+  const out = new Uint8Array(HEADER + body);
+  const dv = new DataView(out.buffer);
+  out[0] = 0x42;
+  out[1] = 0x4d;
+  dv.setUint32(2, HEADER + body, true);
+  dv.setUint32(OFF_DATASTART, HEADER, true);
+  dv.setUint32(0x0e, 40, true);
+  dv.setInt32(OFF_WIDTH, w, true);
+  dv.setInt32(OFF_HEIGHT, h, true);
+  out[0x1a] = 1;
+  dv.setUint16(OFF_BPP, 24, true);
+  dv.setUint32(0x22, body, true);
+  let o = HEADER;
+  for (let y = h - 1; y >= 0; y--) {
+    const src = y * w * 4;
+    for (let x = 0; x < w; x++) {
+      out[o + x * 3] = rgba[src + x * 4 + 2]!;
+      out[o + x * 3 + 1] = rgba[src + x * 4 + 1]!;
+      out[o + x * 3 + 2] = rgba[src + x * 4]!;
+    }
+    o += row + pad;
+  }
+  return out;
+}
+
+/**
+ * The game's art as an image any program opens: an .abm decoded (every
+ * version and the shipped files' quirks, as decodeAbm reads them) and written
+ * as a plain 24-bit BMP, black kept black - the colour key is the game's
+ * drawing, not the picture. A file that is a plain BMP already comes back as
+ * it is (older installs keep some art as .bmp).
+ */
+export function abmToBmp(data: Uint8Array): Uint8Array {
+  if (data.length >= 2 && data[0] === 0x42 && data[1] === 0x4d) return data;
+  const img = decodeAbm(data);
+  return encodeBmp(img.rgba, img.width, img.height);
+}
+
 /** 64-bit FNV-1a as a 16-digit hex string (the oracle's image fingerprint). */
 export function fnv1a64Hex(p: Uint8Array): string {
   let h = 0xcbf29ce484222325n;

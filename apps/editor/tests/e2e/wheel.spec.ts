@@ -57,6 +57,34 @@ test('the disc rests at the focus and turns a whole turn per tier', async ({ pag
   await expect(wheel(page)).toHaveAttribute('data-angle', '0');
 });
 
+test('a tier with its own disc shows it once the swing passes half a turn', async ({ page }) => {
+  await openWheel(page);
+  // HD's own disc: a black picture, against NM's bright jacket.
+  await page.evaluate(async () => {
+    const a = (window as unknown as W).__ez2bms;
+    const c = new OffscreenCanvas(64, 64);
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, 64, 64);
+    const bytes = new Uint8Array(
+      await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer(),
+    );
+    await a.backend.writeBytes(`${a.project.dir}/black.png`, bytes, false);
+    await a.project.rescan();
+    await a.art.setDisc({ src: 'black.png' }, 'HD');
+  });
+  await expect.poll(() => brightness(page, 463, 221, 20)).toBeGreaterThan(40);
+  const nm = await brightness(page, 463, 221, 20);
+  await page.getByTestId('wheel-tier-HD').click();
+  await expect(wheel(page)).toHaveAttribute('data-angle', '360');
+  await expect.poll(() => brightness(page, 463, 221, 20)).toBeLessThan(nm - 20);
+  // Back on NM: the jacket again.
+  await page.locator('.screen').focus();
+  await page.keyboard.press('1');
+  await expect(wheel(page)).toHaveAttribute('data-angle', '0');
+  await expect.poll(() => brightness(page, 463, 221, 20)).toBeGreaterThan(nm - 5);
+});
+
 test('the preview plays once the wheel stands still, and a step stops it', async ({ page }) => {
   await openWheel(page);
   // Entered on this song: the game previews it on the first frame.

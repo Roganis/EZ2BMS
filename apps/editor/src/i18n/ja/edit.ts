@@ -36,12 +36,12 @@ export const edit: Record<keyof typeof en, string> = {
   'notes.stopPulses': 'STOPの長さはパルス数で指定します',
   'notes.scrollRate': 'スクロール変速は0より大きい倍率で指定します（例：1.5）',
 
-  'classic.on': 'クラシックモード：ノーツを置くと、そこで鳴っている音をキー音化します',
+  'classic.on': 'クラシックモード：ノーツを置くと、そこに既にあるBGMのノーツをキー音化します',
   'classic.off': 'クラシックモードオフ：ノーツには選んだサウンドを使います',
   'classic.label':
-    '{sound}{n, plural, =1 {} other {（{i}/{n}）}}{state, select, bad { - 音が変わります} slice { · スライス} other {}}',
-  'classic.nothingHere': 'ここは無音',
-  'classic.nothingToKey': 'そこにはキー音化できる音が鳴っていません',
+    '{sound}{n, plural, =1 {} other {（{i}/{n}）}}{state, select, bad { - 音が変わります} other {}}',
+  'classic.nothingHere': 'ここにはキー音化できるノーツなし',
+  'classic.nothingToKey': 'そこにはキー音化できるBGMのノーツがありません',
   'classic.cantKey': 'キー音化できません：{reason}',
   'classic.cantUnkey': 'クラシックモードではできません：{reason}',
   'classic.soundStarts': 'そこはサウンドの開始位置です。クラシックモードでは削除しません',
@@ -210,7 +210,7 @@ export const edit: Record<keyof typeof en, string> = {
   'cmd.timing.scroll': 'カーソル位置にスクロール変速を設定…',
   'cmd.timing.stopPrompt': 'ここにSTOP…',
 
-  'cmd.view.classic': 'クラシックモードのオン/オフ（鳴っている音をキー音化）',
+  'cmd.view.classic': 'クラシックモードのオン/オフ（そこにあるBGMのノーツをキー音化）',
   'cmd.classic.next': 'クラシック：次のキー音候補',
   'cmd.classic.prev': 'クラシック：前のキー音候補',
   'cmd.classic.resetAll': 'クラシック：全ノーツをBGMに戻す',

@@ -3,6 +3,8 @@
 // Windows) and record the numbers in docs/perf-log.md before building UI on
 // top of Pixi. Query parameters: ?notes=20000&lanes=16&speed=1&density=8,
 // where density is notes per beat (1000 puts ~5k sprites on screen at once).
+// As in render/renderer.ts: the webviews' policy forbids Pixi's generated code.
+import 'pixi.js/unsafe-eval';
 import { Application, Container, Graphics, Sprite, type Texture } from 'pixi.js';
 
 const params = new URLSearchParams(location.search);

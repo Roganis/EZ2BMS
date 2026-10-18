@@ -20,8 +20,13 @@ titles as text, only the plate images; without the manifest a song goes by
 its folder name.
 
 The tables and charts are encrypted with keys that live in your unpacked
-EZ2AC executable, the one set on the EZ2PORT panel. If none is set, EZ2BMS
-looks for an `.exe` in the game folder that holds the keys, as EZ2PORT does.
+EZ2AC executable. EZ2BMS tries the one set on the EZ2PORT panel first, then
+every `.exe` in the game folder, and proves each: the chart keys against
+their digests, and the song tables by decrypting the game's own `song.bin`,
+which must then begin with `EZSL` (song.bin's tables have no digest, and any
+program of the era has memory at their address, so an address alone proves
+nothing). When none decrypts `song.bin`, the import says which files it
+tried; choose your unpacked executable on the EZ2PORT panel.
 Nothing of the game is kept by EZ2BMS: it reads your files when you import.
 
 What a song becomes:
@@ -37,6 +42,8 @@ What a song becomes:
 | the `.ini`                                         | judgement and gauge (`judgement_deltas`, `life_deltas`); with no `.ini`, the engine's defaults                                                   |
 | the level in `song.bin`                            | the chart's level (the `.ini`'s when the table has none)                                                                                         |
 | the song's version bank in `song.bin` (1st ... TT) | its category (otherwise CUSTOM)                                                                                                                  |
+| `system/disc/<key>.abm`                            | the song's disc (`disc.bmp`); a tier's own disc (`<key>-hd` ...) when the song has no NM face                                                    |
+| `system/eyecatch/<key>.abm`                        | the song's eyecatch (`eyecatch.bmp`), taken whole                                                                                                |
 
 The new song gets a **new key**. Publishing under the game's own key would
 replace that song on the wheel, so the key comes from the title with a
@@ -47,6 +54,16 @@ Scroll-speed changes become the chart's own (`x_scroll_events`): the Play
 view scrolls with them, the Timing panel edits them, and they publish. Each
 keeps the track and second word it had, so a cabinet export writes the same
 record back.
+
+The disc and the eyecatch live outside the song's `sound/` folder, where the
+port's song select finds them (either name case; `.abm`, or `.bmp` in older
+installs). They become plain BMPs in the song folder, the same pixels, and
+the song manager's Art tab uses them (a difficulty's own disc under its
+button on the disc card, and on the wheel preview at that difficulty): all
+are already the size the game
+draws, so publishing cuts them to what they were. The Art tab also takes a
+`.abm` from the game folder for any song, and makes it a `.bmp` as it comes
+in.
 
 Nothing is dropped, and Issues says what will not publish:
 

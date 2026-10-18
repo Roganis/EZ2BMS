@@ -17,7 +17,7 @@ import { buildGroups } from '../src/sound/grouping';
 import { soundUsage } from '../src/sound/usage';
 import { planSoundRename } from '../src/sound/rename';
 import { audible, fingerprint } from '../src/publish/audible';
-import { classicCandidates } from '../src/edit/classic';
+import { classicCandidates, classicMagnet } from '../src/edit/classic';
 import { writeEzff } from '../src/io/ez/ezff';
 import { importEzSong } from '../src/io/ez/import';
 import { convertBms } from '../src/io/bms/convert';
@@ -138,14 +138,17 @@ describe('50k notes, 1500 grouped sounds: workbench and Classic mode', () => {
     report.audibleOneSound = one;
     const [, all] = time(() => fingerprint(doc.data, samples));
     report.fingerprintWhole = all;
-    // Hovering: the first call builds Classic's cached analysis, the rest reuse it.
+    // Hovering: the magnet, then what is there to key (the first call builds
+    // Classic's cached analysis, the rest reuse it).
     const env = { samples, brush: 1 };
-    const [, first] = time(() => classicCandidates(doc, 11, res * 64 + res / 8, 0, env));
+    const hover = (x: number, p: number) =>
+      classicCandidates(doc, x, classicMagnet(doc, p, { lane: x, brush: 1 }) ?? p, 0, env);
+    const [, first] = time(() => hover(11, res * 64 + res / 8));
     report.hoverFirst = first;
     const hovers: number[] = [];
     for (let i = 0; i < 60; i++) {
       const y = res * (80 + i * 37) + ((i * 13) % 8) * (res / 8);
-      hovers.push(time(() => classicCandidates(doc, 11 + (i % 5), y, 0, env))[1]);
+      hovers.push(time(() => hover(11 + (i % 5), y))[1]);
     }
     hovers.sort((a, b) => a - b);
     report.hoverMedian = hovers[hovers.length >> 1]!;
@@ -353,7 +356,7 @@ describe('takes at full size', () => {
     const samples = () => ({ frames: 300 * 44100 });
     const classicNotes = Array.from({ length: 300 }, (_, i) => ({
       x: 11 + (i % 5),
-      y: i * 480 + (i % 2 ? 120 : 0),
+      y: i * 480 + (i % 2 ? 240 : 0),
       l: 0,
       offsetMs: 0,
     }));

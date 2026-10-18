@@ -8,6 +8,7 @@ export default ts.config(
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
+      '**/dist-hosted/**',
       '**/target/**',
       'third_party/**',
       'src-tauri/gen/**',

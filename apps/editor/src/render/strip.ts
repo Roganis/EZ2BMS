@@ -37,11 +37,6 @@ export class StripPainter {
   /** CSS colours made so far (painting makes the same few, row after row). */
   private readonly styles = new Map<number, string>();
 
-  /** Whether what `key` describes differs from what is painted. */
-  stale(key: string): boolean {
-    return key !== this.key;
-  }
-
   paint(
     key: string,
     rows: readonly (StripRow | null)[],

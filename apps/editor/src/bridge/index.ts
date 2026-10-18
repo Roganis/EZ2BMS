@@ -2,6 +2,7 @@ import { synthGame, SYNTH_EZ_TABLES } from '@ez2bms/chart-core';
 import { tauriBackend } from './tauri';
 import type { Backend } from './types';
 import { demoFiles } from './demo';
+import { pageFlags } from './flags';
 import { DEMO_GAME, demoSkinFiles } from './demo-skin';
 import { webBackend } from './web';
 
@@ -17,7 +18,7 @@ function exposePad(b: Backend): Backend {
 /** The desktop backend inside Tauri, the in-memory one anywhere else. */
 export function createBackend(): Backend {
   if ('__TAURI_INTERNALS__' in window) return tauriBackend();
-  const q = new URLSearchParams(location.search);
+  const q = pageFlags();
   const files = demoFiles(q.has('modes'), q.has('bench'));
   // ?crashed: the start after a run that died without closing.
   const crashed = q.has('crashed');

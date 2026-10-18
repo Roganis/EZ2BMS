@@ -77,6 +77,34 @@ fn triggers_sound_immediately_and_a_lane_press_cuts_the_last_one() {
 }
 
 #[test]
+fn a_sound_added_to_the_bank_sounds_once_the_thread_has_it() {
+    // The host's rendered preview: a sample the playing schedule does not
+    // list. Triggered before set_samples it is silent (the owner's "Play the
+    // loop" made no sound); after, it plays, and the events are untouched.
+    let rate = 44_100;
+    let (engine, mut r) = Engine::with_renderer(rate);
+    r.limiter = false;
+    let bank = vec![ramp(rate, 1000)];
+    engine
+        .set_schedule(Arc::new(Schedule::new(rate, bank.clone(), vec![ev(0, NO_CHOKE)]).unwrap()))
+        .unwrap();
+    let preview =
+        VoiceStart { sample: 1, pos: 0, to: 1000, key: lane_voice(255), gain_l: 1.0, gain_r: 1.0 };
+    let mut buf = vec![0.0; 2 * 64];
+    assert!(engine.trigger(preview));
+    r.render(&mut buf, 0);
+    assert!(buf.iter().all(|&x| x == 0.0), "not in the thread's list: nothing");
+    engine.set_samples(vec![bank[0].clone(), ramp(rate, 1000)]).unwrap();
+    assert_eq!(engine.schedule().events().len(), 1);
+    assert!(engine.trigger(preview));
+    r.render(&mut buf, 0);
+    assert_eq!(left(&buf)[10], 0.01, "now it sounds");
+    // A sample of another rate is refused, and what was there stays.
+    assert!(engine.set_samples(vec![ramp(48_000, 10)]).is_err());
+    assert_eq!(engine.schedule().samples().len(), 2);
+}
+
+#[test]
 fn a_new_schedule_while_playing_keeps_position_and_voices() {
     let rate = 44_100;
     let (engine, mut r) = Engine::with_renderer(rate);

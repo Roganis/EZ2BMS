@@ -5,6 +5,7 @@
 // comment in song.ini, so values are cleaned of it.
 
 import type { JudgementDeltas, LifeDeltas, Tier } from '../model/types';
+import { DISC_TIERS, type DiscTier } from '../song/art';
 
 export type Eol = '\n' | '\r\n';
 
@@ -75,7 +76,14 @@ export interface SongIniFile {
   source?: string;
   converter: string;
   charts: { portMode: string; tier: Tier; level: number; stem: string }[];
-  assets: { disc?: string; songname?: string; eyecatch?: string; preview?: string };
+  assets: {
+    disc?: string;
+    /** A tier's own disc (ez2port-requests.md: the port reads `Disc` only, so far). */
+    discs?: Partial<Record<DiscTier, string>>;
+    songname?: string;
+    eyecatch?: string;
+    preview?: string;
+  };
   bga?: { file: string; startMs: number };
   /** EZ2BMS's own section (the port reads no section it does not know). */
   songId?: string;
@@ -96,6 +104,8 @@ export function songIniText(s: SongIniFile, eol: Eol = '\n'): string {
     lines.push(`${c.portMode}.${c.tier} = ${Math.round(c.level)} ; ${c.stem}.ez`);
   lines.push('', '[Assets]');
   if (s.assets.disc) lines.push(`Disc = ${s.assets.disc}`);
+  for (const tier of DISC_TIERS)
+    if (s.assets.discs?.[tier]) lines.push(`Disc.${tier} = ${s.assets.discs[tier]}`);
   if (s.assets.songname) lines.push(`Songname = ${s.assets.songname}`);
   if (s.assets.eyecatch) lines.push(`Eyecatch = ${s.assets.eyecatch}`);
   if (s.assets.preview) lines.push(`Preview = ${s.assets.preview}`);

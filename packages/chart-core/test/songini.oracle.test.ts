@@ -165,6 +165,7 @@ describe.skipIf(!ORACLE)("readSongIni against the port's merge", () => {
         category: 38,
         songnameAbm: new Uint8Array(10),
         discAbm: new Uint8Array(10),
+        discsAbm: { HD: new Uint8Array(10), EX: new Uint8Array(10) },
         eyecatchAbm: new Uint8Array(10),
         songId: 'abcd-1234',
       },
@@ -172,6 +173,11 @@ describe.skipIf(!ORACLE)("readSongIni against the port's merge", () => {
     );
     const ini = new TextDecoder().decode(plan.files.find((f) => f.path === 'song.ini')!.bytes);
     expect(ini).toContain('[EZ2BMS]\nSongId = abcd-1234');
+    // A tier's own disc: in the package, named where the port can learn to read it.
+    expect(ini).toContain('Disc = disc.abm\nDisc.HD = disc-hd.abm\nDisc.EX = disc-ex.abm\n');
+    expect(plan.files.map((f) => f.path)).toEqual(
+      expect.arrayContaining(['disc-hd.abm', 'disc-ex.abm']),
+    );
     const got = withTmpDir((dir) => {
       mkdirSync(join(dir, 'lanes'));
       for (const f of plan.files) writeFileSync(join(dir, 'lanes', f.path), f.bytes);
@@ -184,6 +190,7 @@ describe.skipIf(!ORACLE)("readSongIni against the port's merge", () => {
     expect(e.levels).toEqual([4, 0, 0, 0]);
     expect(e.groups).toEqual([38]);
     expect(e.assets.Songname).toBe('lanes/songname.abm');
+    // Build 1582 reads the one disc, whatever else [Assets] says.
     expect(e.assets.Disc).toBe('lanes/disc.abm');
     expect(e.assets.Eyecatch).toBe('lanes/eyecatch.abm');
     expect(readSongIni(ini).ez2bms).toEqual({ SongId: 'abcd-1234' });

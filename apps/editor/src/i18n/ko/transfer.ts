@@ -6,6 +6,12 @@ import type { transfer as en } from '../en/transfer';
 export const transfer: Record<keyof typeof en, string> = {
   'import.game.noRoot': '먼저 EZ2PORT 패널에서 EZ2AC 데이터 폴더를 설정하세요',
   'import.game.noSongs': '곡을 찾지 못했습니다. sound/와 system/이 들어 있는 폴더인지 확인하세요.',
+  'import.game.exeNone':
+    '게임 폴더의 .exe 중 song.bin을 복호화하는 파일이 없습니다({files} 확인함). EZ2PORT 패널에서 언팩한 EZ2AC 실행 파일을 선택하세요.',
+  'import.game.exeSetWrong':
+    'EZ2PORT 패널에서 선택한 실행 파일({file})로 song.bin을 복호화할 수 없고, 게임 폴더의 다른 파일도 마찬가지입니다. 언팩하지 않은 파일이거나 다른 버전의 EZ2AC일 수 있습니다.',
+  'import.game.exeNoFiles':
+    '게임 폴더에 .exe가 없고 song.bin은 암호화되어 있습니다. EZ2PORT 패널에서 언팩한 EZ2AC 실행 파일을 선택하세요.',
 
   'import.label': '곡 가져오기',
   'import.title': '가져오기',
@@ -58,6 +64,7 @@ export const transfer: Record<keyof typeof en, string> = {
   'import.clash': '{dir}에 이미 {file} 파일이 있습니다',
   'import.noDest': '새 곡을 둘 곳을 고르세요',
   'import.copyFailed': '키음 {n}개를 복사하지 못했습니다: {file}',
+  'import.artFailed': '곡은 가져왔지만 그림은 넣지 못했습니다: {files}',
   'import.done': '채보 {n}개를 가져왔습니다 - 옮기지 못한 내용은 문제 탭에 있습니다',
   'import.failed': '가져오지 못했습니다: {error}',
 

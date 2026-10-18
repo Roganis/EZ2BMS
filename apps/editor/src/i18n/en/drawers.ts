@@ -214,6 +214,7 @@ export const drawers = {
   // P1 and P2: the cabinet's player sides.
   'cmd.view.side': 'Swap P1 / P2 view',
   'cmd.view.gameSkin': 'Game skin on / off',
+  'cmd.view.noteSkin': 'Note skin: bars / round',
   'cmd.view.left': 'Show / hide sounds',
   // Keysounds: the sounds the notes play.
   'cmd.view.workbench': 'Keysound workbench',

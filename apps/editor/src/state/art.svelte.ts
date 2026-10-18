@@ -4,7 +4,9 @@
 // published - and the .abm files a publish writes, the title plate with them.
 
 import {
+  DISC_TIERS,
   PublishError,
+  abmToBmp,
   defaultEyecatch,
   encodeAbm,
   findImage,
@@ -13,12 +15,14 @@ import {
   songMeta,
   type ArtJob,
   type DiscArt,
+  type DiscTier,
+  type Tier,
   type EyecatchArt,
   type PlateCheck,
   type PlateSettings,
   type PlateSpec,
 } from '@ez2bms/chart-core';
-import { baseName, joinPath, type ArtPixels, type PlatePixels } from '../bridge';
+import { baseName, joinPath, type ArtPixels, type Imported, type PlatePixels } from '../bridge';
 import { errorText, t } from '../i18n/i18n.svelte';
 import type { App } from './app.svelte';
 import type { Project } from './project.svelte';
@@ -30,10 +34,15 @@ export type ArtKind = 'disc' | 'eyecatch';
 export interface PackageArt {
   songnameAbm?: Uint8Array;
   discAbm?: Uint8Array;
+  /** A tier's own disc (the game's HD/SHD/EX discs); see chart-core SongMeta.discsAbm. */
+  discsAbm?: Partial<Record<DiscTier, Uint8Array>>;
   eyecatchAbm?: Uint8Array;
 }
 
-export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'bmp'];
+/** What the Art tab takes: pictures, and the game's own .abm (made a BMP as it comes in). */
+export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'bmp', 'abm'];
+
+const ABM = /\.abm$/i;
 
 /** An image's size as the webview decodes it (turned upright, as the host turns it). */
 export async function imageSize(bytes: Uint8Array): Promise<{ w: number; h: number }> {
@@ -67,9 +76,20 @@ export class ArtState {
     return imageSize(await this.app.backend.readFile(joinPath(p.dir, path)));
   }
 
-  /** Set (or with undefined, give back to the charts; with null, turn off) the disc. */
-  async setDisc(v: DiscArt | null | undefined): Promise<void> {
-    await this.set('disc', v);
+  /**
+   * Set (or with undefined, give back to the charts; with null, turn off) the
+   * disc - or, for a tier, its own disc (undefined or null: the NM disc again).
+   */
+  async setDisc(v: DiscArt | null | undefined, tier: Tier = 'NM'): Promise<void> {
+    if (tier === 'NM') return this.set('disc', v);
+    const p = this.app.project;
+    if (!p) return;
+    const discs = { ...p.sidecar.discs };
+    if (v) discs[tier] = v;
+    else delete discs[tier];
+    if (Object.keys(discs).length) p.sidecar.discs = discs;
+    else delete p.sidecar.discs;
+    await p.saveSidecar();
   }
 
   async setEyecatch(v: EyecatchArt | null | undefined): Promise<void> {
@@ -110,7 +130,14 @@ export class ArtState {
     if (!p || !paths.length) return [];
     let names: string[];
     try {
-      const res = await this.app.backend.importFiles(p.dir, paths, 'image');
+      const plain = paths.filter((f) => !ABM.test(f));
+      const res = [
+        ...(plain.length ? await this.app.backend.importFiles(p.dir, plain, 'image') : []),
+        ...(await this.importAbm(
+          p.dir,
+          paths.filter((f) => ABM.test(f)),
+        )),
+      ];
       names = res.flatMap((r) => (r.name ? [r.name] : []));
       const copied = res.filter((r) => r.name && !r.reused).length;
       const skipped = res.filter((r) => r.error);
@@ -141,6 +168,42 @@ export class ArtState {
         await this.choose('eyecatch', first).catch(() => undefined);
     }
     return names;
+  }
+
+  /**
+   * The game's .abm pictures into the song folder as plain BMPs (chart-core
+   * abmToBmp), which the host's image reader and the webview both open. As
+   * the host's copy does: the same picture already there is reused, another
+   * file of that name is never replaced (`name (2).bmp`).
+   */
+  private async importAbm(dir: string, paths: string[]): Promise<Imported[]> {
+    const out: Imported[] = [];
+    if (!paths.length) return out;
+    // The names taken, for this call only: nothing renders from it.
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const there = new Set((await this.app.backend.list(dir)).map((e) => e.name.toLowerCase()));
+    for (const from of paths) {
+      try {
+        const bmp = abmToBmp(await this.app.backend.readFile(from));
+        const stem = baseName(from).replace(ABM, '');
+        let name = `${stem}.bmp`;
+        let reused = false;
+        for (let n = 2; there.has(name.toLowerCase()); n++) {
+          const old = await this.app.backend.readFile(joinPath(dir, name)).catch(() => undefined);
+          if (old && old.length === bmp.length && old.every((b, i) => b === bmp[i])) {
+            reused = true;
+            break;
+          }
+          name = `${stem} (${n}).bmp`;
+        }
+        if (!reused) await this.app.backend.writeBytes(joinPath(dir, name), bmp, false);
+        there.add(name.toLowerCase());
+        out.push({ from, name, reused, error: null });
+      } catch (e) {
+        out.push({ from, name: null, reused: false, error: errorText(e) });
+      }
+    }
+    return out;
   }
 
   /** The song's title and subtitle as every chart shares them. */
@@ -237,6 +300,15 @@ export class ArtState {
         throw new PublishError(t(disc ? 'art.disc.failed' : 'art.eyecatch.failed', { error }));
       });
       out[kind === 'disc' ? 'discAbm' : 'eyecatchAbm'] = encodeAbm(px.rgb, px.w, px.h);
+    }
+    for (const tier of DISC_TIERS) {
+      const a = art.discs?.[tier];
+      if (!a) continue;
+      if (!a.path) throw new PublishError(t('art.disc.missing', { file: a.src }));
+      const px = await this.pixels(p, a.path, a.job).catch((e: unknown) => {
+        throw new PublishError(t('art.disc.failed', { error: errorText(e) }));
+      });
+      (out.discsAbm ??= {})[tier] = encodeAbm(px.rgb, px.w, px.h);
     }
     return out;
   }

@@ -48,6 +48,7 @@
       },
       setMarquee: (m) => (marquee = m),
       pan: (d) => (v.cursor = Math.max(0, v.cursor + d)),
+      setRackScroll: (u) => (v.rackScroll = u),
       say: (m) => toast(m, 'warn'),
       audition: (ch) => {
         const name = slot.doc.channel(ch)?.name;
@@ -58,6 +59,7 @@
         ? {
             classic: {
               snap: (p, within) => app.classic.snap(slot.doc, p, within),
+              magnet: (x, p) => app.classic.magnet(slot.doc, x, p),
               place: (x, y, l) => {
                 if (app.classic.key(slot.doc, x, y, l)) {
                   const name = slot.doc.channel(v.brush ?? -1)?.name;
@@ -126,7 +128,60 @@
     return { src, box: { left, top: b.header + 4 } };
   });
 
+  // Touch: one finger is the tool, as the mouse; two scroll the chart and
+  // pinch its zoom (the speed dial in Play), since a touchscreen has no
+  // wheel. A second finger landing cancels whatever the first one began, and
+  // nothing is drawn again until every finger is lifted.
+  // Not state: nothing on screen reads the fingers.
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  const touches = new Map<number, { x: number; y: number }>();
+  let gesture: { y: number; dist: number } | null = null;
+
+  function twoFingers(): { y: number; dist: number } {
+    const [a, b] = [...touches.values()] as [{ x: number; y: number }, { x: number; y: number }];
+    return { y: (a.y + b.y) / 2, dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)) };
+  }
+
+  /** True when the event belongs to a two-finger gesture (and is handled). */
+  function touchDown(e: PointerEvent): boolean {
+    if (e.pointerType !== 'touch') return false;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touches.size === 2) {
+      const h = host_();
+      if (h && tool.busy) tool.cancel(h);
+      ghost = null;
+      marquee = null;
+      gesture = twoFingers();
+    }
+    return gesture !== null;
+  }
+
+  function touchMove(e: PointerEvent): boolean {
+    if (e.pointerType !== 'touch' || !touches.has(e.pointerId)) return false;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!gesture) return false;
+    if (touches.size === 2 && renderer) {
+      const g = twoFingers();
+      // Fingers moving down pull the chart down: later measures come into view.
+      v.cursor = Math.max(0, v.cursor + (g.y - gesture.y) / renderer.pxPerPulse);
+      const f = g.dist / gesture.dist;
+      if (v.mode === 'play') v.speed = Math.max(50, Math.min(999, Math.round(v.speed * f)));
+      else v.zoom = Math.max(12, Math.min(1200, v.zoom * f));
+      gesture = g;
+    }
+    return true;
+  }
+
+  function touchUp(e: PointerEvent): boolean {
+    if (e.pointerType !== 'touch') return false;
+    touches.delete(e.pointerId);
+    if (!gesture) return false;
+    if (touches.size === 0) gesture = null;
+    return true;
+  }
+
   function onDown(e: PointerEvent) {
+    if (touchDown(e)) return;
     const h = host_();
     if (!h) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -134,6 +189,7 @@
   }
 
   function onUp(e: PointerEvent) {
+    if (touchUp(e)) return;
     const h = host_();
     if (h) tool.up(e, h);
   }
@@ -176,13 +232,14 @@
     const y = Math.max(0, Math.round(v.cursor / step) * step);
     const there = d.index.at(x, y);
     if (classicOn) {
-      // Classic: the key un-keys what is there, or keys what is sounding.
+      // Classic: the key un-keys what is there, or keys the background note
+      // nearest the cursor (within half a step; the picked sound's first).
       if (there.length)
         app.classic.unkey(
           d,
           there.map((n) => n.id),
         );
-      else app.classic.key(d, x, y, 0);
+      else app.classic.key(d, x, app.classic.magnet(d, x, v.cursor, step / 2) ?? y, 0);
       return;
     }
     if (there.length)
@@ -296,6 +353,7 @@
       hidden: app.play.hidden,
       live: v.playing,
       skin: app.skin.current,
+      noteShape: app.settings.data.noteSkin,
       classic: classicOn,
       classicHint: classicOn && ghost ? app.classic.hint : null,
       brush: v.brush,
@@ -325,8 +383,13 @@
   function onWheel(e: WheelEvent) {
     e.preventDefault();
     if (!renderer) return;
-    // Shift+wheel over the rack scrolls it sideways (it can be wider than its share).
-    if (e.shiftKey && renderer.overRack(e.offsetX)) {
+    // Over the rack, a sideways swipe (a touchpad, a tilting wheel), Shift+wheel
+    // or the wheel over its names and scrollbar scroll it sideways: it can be
+    // wider than its window.
+    const bar = renderer.rackBar();
+    const overNames = !!bar && e.offsetY <= bar.top + bar.height + 3;
+    const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+    if (renderer.overRack(e.offsetX) && (e.shiftKey || sideways || overNames)) {
       const d = (e.deltaX || e.deltaY) * (e.deltaMode === 1 ? 40 : 1);
       const scale = renderer.currentLayout?.scale ?? 1;
       v.rackScroll = Math.max(0, Math.min(renderer.rackMaxScroll, v.rackScroll + d / scale));
@@ -344,6 +407,7 @@
   }
 
   function onMove(e: PointerEvent) {
+    if (touchMove(e)) return;
     v.hoverLane = renderer?.laneAt(e.offsetX)?.x ?? null;
     const kept = v.mode === 'edit' ? renderer?.keptAt(e.offsetX, e.offsetY) : undefined;
     keptTip = kept
@@ -374,7 +438,8 @@
     onpointerdown={onDown}
     onpointermove={onMove}
     onpointerup={onUp}
-    onpointercancel={() => {
+    onpointercancel={(e) => {
+      if (touchUp(e)) return;
       const h = host_();
       if (h) tool.cancel(h);
     }}

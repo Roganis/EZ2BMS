@@ -36,11 +36,11 @@ export const play = {
   // One recording, as a take in a studio.
   'record.take': 'Take',
   'record.notes': '{n, plural, one {{n} note} other {{n} notes}}',
-  // Classic mode: a press keys the background sound playing there.
-  'record.classic': 'Classic: keys what plays',
+  // Classic mode: a press keys the background note already where it lands.
+  'record.classic': 'Classic: keys the notes already there',
   'record.ok': '{n} to place',
   'record.clash': '{n} on notes already there',
-  // Classic mode: presses where no background sound plays.
+  // Classic mode: presses with no background note within half a grid step.
   'record.silent': '{n} with nothing to key',
   'record.statsTitle': 'How the presses sat against the grid (after the input offset)',
   // {mean} and {median} are signed (+1.5, -3.0).

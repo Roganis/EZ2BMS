@@ -4,7 +4,7 @@ What each release of EZ2BMS brings. The milestones behind it are in the
 README's checklist; what has been checked on real machines is in
 AI-DISCLOSURE.md.
 
-## 0.2.0 - not yet released
+## 0.2.0 - 2026-10-18
 
 The first release: everything from the chart editor to the cabinet, in
 English, Korean and Japanese.
@@ -17,8 +17,9 @@ English, Korean and Japanese.
 - Hear and judge the chart exactly as EZ2PORT will: the same compile, voice
   rules, judgement, holds and gauge; test play with EZ2PORT's keys or your
   controller; F5 runs it in EZ2PORT itself.
-- Keysound workbench, and Classic mode: placing a note keys the sound
-  already playing there, so charting over a finished mix never changes it.
+- Keysound workbench, and Classic mode: placing a note keys a note already
+  in the background, pulled there by a magnet as in BmsTWO, so charting over
+  a finished mix never changes it.
 - Stems: waveform strips on the tick axis, cut by hand, to the grid or at
   detected onsets, slices dragged onto lanes; long stems cached on disk.
 - Record mode: play along and the presses become notes, with latency
@@ -51,3 +52,63 @@ English, Korean and Japanese.
   AppImage; the `.deb` points to the release page).
 - A log on your machine: after a run that did not close, the next start
   offers it; About shows the version and copies a report for a bug.
+- A round note skin: orbs instead of bars, holds as capsules, chosen in
+  Preferences (Ctrl+,) or from the palette ("Note skin"). Clicks take a
+  note where it is drawn. The game's own panel keeps its note art.
+
+### Fixed before release
+
+- The playfield draws in the installed app. The app's security policy
+  forbids code built from text, which the drawing library used, so the
+  chart area stayed empty with a WebGL message; it now uses the library's
+  version without it. The browser tests now run under the same policy.
+- Narrow windows: the top bar keeps the chart buttons and the Edit/Play
+  switch in view down to the smallest window (960 px), hiding the name,
+  time and zoom first; the open chart's button is scrolled into view.
+- Touchscreens: two fingers scroll the chart and pinch its zoom.
+- The AppImage starts on up-to-date distributions (Arch with Mesa 26): it
+  no longer carries its own libwayland-client, which was too old for the
+  system's graphics drivers and made it abort at start.
+- Importing from the game folder finds the right executable: each `.exe`
+  is proved on the game's own song.bin, where another program with memory
+  at the right address used to be taken and every mode's song.bin failed.
+  When none fits, the message names the files it tried.
+- Sound on Linux when ALSA's default device does not open (an ALSA
+  configuration line newer alsa-lib rejects): the other outputs are tried,
+  PipeWire's and PulseAudio's first, and the message names each one's error.
+- A browser preview of the editor, to share as a web page
+  ([docs/hosted-preview.md](docs/hosted-preview.md)).
+- Classic mode never writes a note of its own. Placing where the background
+  had no note used to cut the sound playing there and key the new slice:
+  the song sounded the same in autoplay, but not to a player who presses
+  early, late or not at all. Now only a background note already at the spot
+  is keyed, and a magnet like BmsTWO's pulls the note onto one: the backing
+  track of the last note keyed or clicked first, then any, within a measure.
+  Clicking a note picks its sound. Recorded takes follow the same rule
+  (within half a grid step). Splitting stays the right-click.
+- A song imported from the game comes with its disc and eyecatch. The game
+  keeps them outside the song's folder (`system/disc`, `system/eyecatch`),
+  where the import did not look, so the song manager had none. The Art tab
+  also takes the game's `.abm` pictures now.
+- The song manager's Preview plays its loop. The rendered loop went into the
+  sound bank but not to the audio thread, which found nothing to play until
+  the chart was next edited; a newly loaded sound had the same gap.
+- Every background group can be reached. The rack beside the lanes now takes
+  all the room there, narrows its sub-lanes before it hides any, and
+  scrolls the rest with a bar under the group names you can drag, a
+  touchpad's sideways swipe, Shift+wheel, or the wheel over the names. It
+  used to stop at 40% of the window and scroll only with Shift+wheel.
+- A disc for each difficulty. A game song's HD, SHD and EX discs come with
+  it; the wheel preview turns from the NM face to the difficulty's as the
+  game does; the Art tab's disc card has a button per difficulty. Published
+  songs carry them too, for EZ2PORT to show once it reads them (it shows the
+  NM disc for every difficulty of a package so far).
+- Smoother playing. The stem strips were painted again on every frame, the
+  lines and flags rebuilt and the labels laid out afresh, leaving garbage
+  the page had to stop and collect; the playfield now does a third to a half
+  of the work per frame and leaves about a quarter of the garbage. The sound
+  engine's clock also reaches the page less often, and not at all while
+  nothing plays.
+- A hold's body runs from its end to its head. It used to stop short of
+  both, by about a third of the hold at each end, leaving gaps that made a
+  hold look like two notes and a bar.

@@ -26,7 +26,7 @@ export const shell: Record<keyof typeof en, string> = {
   'top.speed': 'ハイスピード',
   'top.zoom': 'ズーム',
   'top.classicTitle':
-    'クラシックモード：ノーツを置くと、その位置で鳴っているサウンドがキー音になります（Ctrl+Shift+K）',
+    'クラシックモード：ノーツを置くと、その位置に既にあるBGMのノーツがキー音になります（Ctrl+Shift+K）',
   'top.classic': 'クラシック',
   'top.undo': '元に戻す（Ctrl+Z）',
   'top.redo': 'やり直し（Ctrl+Shift+Z）',

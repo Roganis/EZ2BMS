@@ -39,9 +39,11 @@ const pixels = (page: Page, a: number, b: number) =>
       const f = (window as unknown as W).__ez2bmsField;
       const p = f.painters.get('stem_pad.wav');
       const canvas = p.painter.source.resource as HTMLCanvasElement;
-      const k = canvas.height / f.currentLayout.height;
-      const y0 = Math.max(0, Math.round(f.yOf(b) * k));
-      const y1 = Math.min(canvas.height, Math.round(f.yOf(a) * k));
+      // The canvas is painted past the screen's edges and slid with the
+      // cursor: its rows sit where the strip's sprite is.
+      const k = canvas.height / p.sprite.height;
+      const y0 = Math.max(0, Math.round((f.yOf(b) - p.sprite.y) * k));
+      const y1 = Math.min(canvas.height, Math.round((f.yOf(a) - p.sprite.y) * k));
       const img = canvas.getContext('2d')!.getImageData(0, y0, canvas.width, y1 - y0).data;
       let n = 0;
       const sum = [0, 0, 0];

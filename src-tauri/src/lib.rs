@@ -17,7 +17,7 @@ mod update;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::ipc::{Channel, Response};
@@ -511,15 +511,39 @@ fn audio_now(audio: State<'_, Arc<Audio>>) -> u64 {
     audio.engine.now_ns()
 }
 
-/// The clock every 8 ms until the page opens another stream or goes away.
+/// How often the clock goes to the page while playing (see audio_clock_stream).
+const CLOCK_EVERY: Duration = Duration::from_millis(32);
+
+/// The clock to the page until it opens another stream or goes away: at
+/// once when playing starts, stops or seeks (a new generation, looked for
+/// every 8 ms), then every CLOCK_EVERY while playing, and not at all while
+/// stopped. Tauri hands a small channel message to the page as a script the
+/// webview compiles and runs on the page's main thread, between its frames;
+/// the 125 a second this used to send, stopped or not, were work every frame
+/// shared. The page places the speaker by extrapolating the last message at
+/// the device rate (AudioClient.songMsAtHost), which a message 32 ms old
+/// does as well as a fresh one: the sample clock is what it follows.
 #[tauri::command]
 fn audio_clock_stream(audio: State<'_, Arc<Audio>>, on_clock: Channel<ClockDto>) {
     let audio = audio.inner().clone();
     let me = CLOCK_STREAM.fetch_add(1, Ordering::SeqCst) + 1;
     std::thread::spawn(move || {
+        let mut sent: Option<(bool, u64, Instant)> = None;
         while CLOCK_STREAM.load(Ordering::SeqCst) == me {
-            if on_clock.send(audio.clock()).is_err() {
-                break;
+            let c = audio.clock();
+            let due = match sent {
+                None => true,
+                Some((playing, generation, at)) => {
+                    playing != c.playing
+                        || generation != c.generation
+                        || (c.playing && at.elapsed() >= CLOCK_EVERY)
+                }
+            };
+            if due {
+                sent = Some((c.playing, c.generation, Instant::now()));
+                if on_clock.send(c).is_err() {
+                    break;
+                }
             }
             std::thread::sleep(Duration::from_millis(8));
         }

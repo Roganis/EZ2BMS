@@ -134,6 +134,13 @@ export const song = {
   'art.disc.name': 'Disc',
   'art.disc.what': '{w}x{h} - spins on the song wheel',
   'art.disc.image': 'Disc image',
+  // The difficulty whose disc is shown (NM, HD, SHD, EX): the game has one per difficulty.
+  'art.disc.tier': 'Difficulty',
+  // A difficulty without a disc of its own shows the NM one.
+  'art.disc.sameAsNm': 'Same as NM',
+  // Under the disc of a difficulty other than NM. {tier}: HD, SHD or EX.
+  'art.disc.tierNote':
+    "{tier}'s disc on the song select. EZ2PORT shows a published song's NM disc for every difficulty until it reads these.",
   'art.disc.crop': 'Disc crop: drag to move, arrow keys to nudge, + and - to zoom',
   'art.disc.off': 'No disc: turned off for this song.',
   'art.disc.empty':

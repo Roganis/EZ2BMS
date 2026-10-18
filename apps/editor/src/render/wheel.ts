@@ -56,8 +56,13 @@ export const NO_ART: WheelArt = {
 export interface WheelEntry {
   /** Its title plate, 256x32 RGB on black; a song without one has no row (as in the port). */
   plate: Picture | null;
-  /** The focused disc: a package has one for every tier. Without it the focus draws as a thumb. */
+  /** The focused disc, the tier's own where it has one. Without it the focus draws as a thumb. */
   disc: Picture | null;
+  /**
+   * The NM face, when the tier shows another: the disc shows it for the
+   * first half-turn of its swing (select.c: `180 > sw_angle ? nm_face : bigdisc`).
+   */
+  nm?: Picture | null;
   /**
    * The thumb drawn while the disc flies along the arc - system\discsmall\<key>,
    * which a package never has: the port asks the game tree, not the package.
@@ -231,10 +236,11 @@ export class WheelPainter {
       return;
     }
     // THE FOCUS: the base twice, turning; the art (the NM face below 180
-    // degrees - a package's is the same disc); the ring still.
+    // degrees, the tier's own past it); the ring still.
     this.mask(g, art.discMask, dx, dy, p.size, s.angle, b, 'base');
     this.mask(g, art.discMask, dx, dy, p.size, s.angle, b, 'base');
-    blit(g, e!.disc!, dx, dy, p.size, p.size, s.angle, 'lighter', b);
+    const face = s.angle < 180 && e!.nm ? e!.nm : e!.disc!;
+    blit(g, face, dx, dy, p.size, p.size, s.angle, 'lighter', b);
     this.mask(g, art.shapeMask, dx, dy, p.size, 0, b, 'ring');
   }
 

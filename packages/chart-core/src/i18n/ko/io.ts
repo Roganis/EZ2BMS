@@ -66,6 +66,8 @@ export const io: Record<keyof typeof en, string> = {
   'ez.encrypted': '암호화되어 있습니다. 복호화 키는 언팩한 EZ2AC 실행 파일 안에 있습니다 ({why})',
   'ez.encrypted.no-exe':
     '암호화되어 있습니다. 복호화 키는 언팩한 EZ2AC 실행 파일 안에 있습니다 (지정된 실행 파일이 없습니다)',
+  'ez.art.unreadable':
+    '게임의 {file}을(를) 읽을 수 없습니다 ({error}). 이 곡에는 그 그림이 들어가지 않습니다',
   'ez.key':
     '곡 키는 {key}입니다: "{orig}", "{derived}" 모두 게임이 쓰는 키여서, 그중 하나로 배포하면 해당 곡을 대체하게 됩니다',
 

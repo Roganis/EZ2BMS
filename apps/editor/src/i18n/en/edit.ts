@@ -32,15 +32,16 @@ export const edit = {
   'notes.scrollRate': 'a scroll speed is a multiplier above 0, like 1.5',
 
   // To key: make a note on a lane play the sound that was playing in the background there.
-  'classic.on': 'Classic mode: placing a note keys the sound playing there',
+  'classic.on': 'Classic mode: placing a note keys the background note already there',
   'classic.off': 'Classic mode off: notes use the picked sound',
   // What a note at the pointer would key, by the pointer and in the status bar: the sound's
-  // file, which of the candidates it is ({i} of {n}), and whether keying it would change how
-  // the chart sounds (bad) or cut a slice of the sound (slice).
+  // file, which of the notes there it is ({i} of {n}), and whether keying it would change how
+  // the chart sounds (bad).
   'classic.label':
-    '{sound}{n, plural, =1 {} other { ({i}/{n})}}{state, select, bad { - would change the sound} slice { · slice} other {}}',
-  'classic.nothingHere': 'nothing sounds here',
-  'classic.nothingToKey': 'Nothing sounds there to key',
+    '{sound}{n, plural, =1 {} other { ({i}/{n})}}{state, select, bad { - would change the sound} other {}}',
+  // By the pointer: no note in the background here (Classic mode keys only notes already there).
+  'classic.nothingHere': 'no note here to key',
+  'classic.nothingToKey': 'No background note there to key',
   'classic.cantKey': "Can't key that: {reason}",
   'classic.cantUnkey': "Can't do that in Classic mode: {reason}",
   'classic.soundStarts': 'That is where a sound starts - Classic mode never removes one',
@@ -224,7 +225,7 @@ export const edit = {
   'cmd.timing.scroll': 'Set scroll speed at the cursor…',
   'cmd.timing.stopPrompt': 'STOP here…',
 
-  'cmd.view.classic': 'Classic mode on / off (key the sound playing there)',
+  'cmd.view.classic': 'Classic mode on / off (key the background note there)',
   'cmd.classic.next': 'Classic: next sound to key',
   'cmd.classic.prev': 'Classic: previous sound to key',
   'cmd.classic.resetAll': 'Classic: reset all notes to the background',

@@ -78,6 +78,10 @@ export const io = {
   'ez.encrypted': 'it is encrypted, and the keys are in the unpacked EZ2AC executable ({why})',
   'ez.encrypted.no-exe':
     'it is encrypted, and the keys are in the unpacked EZ2AC executable (none is set)',
+  // The game's disc or eyecatch picture ({file}, a path in the game folder) could not be
+  // read; the song comes across without it.
+  'ez.art.unreadable':
+    "The game's {file} could not be read ({error}); the song has no picture from it",
   // A song's key names its folder; {orig} and {derived} are keys the game already uses.
   'ez.key':
     'The song\'s key is {key}: "{orig}" and "{derived}" are the game\'s own, and publishing under one would replace that song',

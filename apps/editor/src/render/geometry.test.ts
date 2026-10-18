@@ -1,6 +1,15 @@
 import { columnsFor, modeDef } from '@ez2bms/chart-core';
 import { describe, expect, it } from 'vitest';
-import { computeLayout, laneAtX, RACK_GAP, RACK_SUB, STRIP_W, Viewport } from './geometry';
+import {
+  computeLayout,
+  laneAtX,
+  noteBox,
+  RACK_GAP,
+  RACK_SUB,
+  RACK_SUB_MIN,
+  STRIP_W,
+  Viewport,
+} from './geometry';
 
 const layout = (
   mode: Parameters<typeof modeDef>[0],
@@ -60,22 +69,35 @@ describe('playfield geometry', () => {
     expect(hi).toBeGreaterThan(960);
   });
 
-  it('lays rack groups side by side and scrolls a rack wider than its share', () => {
-    const groups = Array.from({ length: 40 }, (_, i) => ({ key: `g${i}`, subLanes: 1 + (i % 3) }));
+  it('lays rack groups side by side, in the room beside the lanes, narrowing before it scrolls', () => {
+    const many = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ key: `g${i}`, subLanes: 1 + (i % 3) }));
     const base = {
       width: 1200,
       height: 480,
       columns: columnsFor(modeDef('5k'), 'P1'),
       offModeXs: [],
     };
-    const l = computeLayout({ ...base, rackGroups: groups, extras: 1 });
-    const g = l.rack.groups;
-    expect(g[1]!.left).toBeCloseTo(g[0]!.left + (1 * RACK_SUB + RACK_GAP) * l.scale, 9);
-    expect(g[0]!.width).toBeCloseTo(RACK_SUB * l.scale, 9);
-    // Forty groups do not fit in 40% of the window: it shows a part and scrolls.
-    expect(l.rack.width).toBeLessThanOrEqual(0.4 * 1200 + 1);
-    expect(l.rack.content).toBeGreaterThan(l.rack.width);
-    const far = computeLayout({ ...base, rackGroups: groups, rackScroll: 1e9, extras: 1 });
+    // A few groups: full width, side by side, no scrolling.
+    const few = computeLayout({ ...base, rackGroups: many(4), extras: 1 });
+    const g = few.rack.groups;
+    expect(g[1]!.left).toBeCloseTo(g[0]!.left + (1 * RACK_SUB + RACK_GAP) * few.scale, 9);
+    expect(g[0]!.width).toBeCloseTo(RACK_SUB * few.scale, 9);
+    expect(few.rack.content).toBeCloseTo(few.rack.width, 9);
+    // Forty groups: more than the old 40% share - all the room right of the
+    // lanes - with narrower sub-lanes, and everything shown.
+    const forty = computeLayout({ ...base, rackGroups: many(40), extras: 1 });
+    expect(forty.rack.width).toBeGreaterThan(0.4 * 1200);
+    expect(forty.rack.left + forty.rack.width).toBeLessThanOrEqual(1200);
+    expect(forty.rack.sub).toBeLessThan(RACK_SUB * forty.scale);
+    expect(forty.rack.sub).toBeGreaterThanOrEqual(RACK_SUB_MIN * forty.scale - 1e-9);
+    expect(forty.rack.content).toBeCloseTo(forty.rack.width, 6);
+    expect(forty.scale).toBe(few.scale);
+    // Two hundred: as narrow as they go, and the rest scrolls.
+    const lots = computeLayout({ ...base, rackGroups: many(200), extras: 1 });
+    expect(lots.rack.sub).toBeCloseTo(RACK_SUB_MIN * lots.scale, 9);
+    expect(lots.rack.content).toBeGreaterThan(lots.rack.width);
+    const far = computeLayout({ ...base, rackGroups: many(200), rackScroll: 1e9, extras: 1 });
     expect(far.rack.scroll).toBeCloseTo(far.rack.content - far.rack.width, 6);
     const last = far.rack.groups.at(-1)!;
     expect(last.left + last.width).toBeCloseTo(far.rack.left + far.rack.width, 6);
@@ -121,5 +143,58 @@ describe('playfield geometry', () => {
       extras: 0,
     });
     expect(play.strips.every((g) => g.width === 0)).toBe(true);
+  });
+});
+
+describe('note heads', () => {
+  it('keeps the bar as it was: the lane less a pixel each side, 9 tall', () => {
+    const b = noteBox('bar', 30, 1);
+    expect(b).toMatchObject({ inset: 1, w: 28, h: 9, bodyW: 22 });
+    expect(b.reach).toBeCloseTo(8.1, 6);
+    expect(noteBox('bar', 60, 2).h).toBe(18);
+    // Never thinner than 6 pixels.
+    expect(noteBox('bar', 18, 0.6).h).toBe(6);
+  });
+
+  it('draws round heads one size in every lane, centred, inside it', () => {
+    for (const m of ['5k-only', 'scratch', 'ruby', '5k', '7k', '10k', '14k'] as const) {
+      for (const [w, h] of [
+        [1440, 900],
+        [700, 900],
+        [1920, 1080],
+        [960, 480],
+      ] as const) {
+        const l = layout(m, 'P1', w, h);
+        const boxes = l.lanes.map((g) => ({ g, b: noteBox('round', g.width, l.scale) }));
+        const d = boxes[0]!.b.w;
+        for (const { g, b } of boxes) {
+          expect(b.w, `${m} ${w}x${h}`).toBe(d);
+          expect(b.h).toBe(b.w);
+          // Centred, with at least two pixels to spare each side.
+          expect(b.inset).toBeCloseTo((g.width - b.w) / 2, 6);
+          expect(b.inset).toBeGreaterThanOrEqual(2 - 1e-9);
+          // The hold body is narrower than the head, so the head reads over it.
+          expect(b.bodyW).toBeLessThan(b.w);
+        }
+      }
+    }
+  });
+
+  it('shrinks an orb only where the lane is too narrow for it', () => {
+    expect(noteBox('round', 30, 1).w).toBe(18);
+    expect(noteBox('round', 46, 1).w).toBe(18);
+    // The off-mode gutter's 22.
+    expect(noteBox('round', 22, 1)).toMatchObject({ w: 18, inset: 2 });
+    expect(noteBox('round', 15, 1)).toMatchObject({ w: 11, h: 11, inset: 2 });
+    // Play hides that gutter by narrowing it to nothing.
+    expect(noteBox('round', 0, 1).w).toBe(4);
+  });
+
+  it('takes a click as far past an orb as past a bar, not twice as far', () => {
+    for (const scale of [0.6, 1, 1.5, 2.25]) {
+      const bar = noteBox('bar', 30 * scale, scale);
+      const orb = noteBox('round', 30 * scale, scale);
+      expect(orb.reach - orb.h / 2).toBeCloseTo(bar.reach - bar.h / 2, 6);
+    }
   });
 });

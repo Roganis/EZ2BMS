@@ -1,9 +1,11 @@
 // Importing songs (the wizard, state/importer.svelte.ts): a song of the
-// made-up EZ2AC folder (?game: chart-core dev/synthgame.ts), a Shift-JIS BMS
+// made-up EZ2AC folder (?game: chart-core dev/synthgame.ts) with its disc and
+// eyecatch, a Shift-JIS BMS
 // folder with a #RANDOM, and one written beside its BMS files. The reading
 // itself is chart-core's and tested there (ez-import, bms); this is the
 // path from the start screen to an open song, and what Issues then says.
 
+import { SONGDB_TABLE_VA, synthPe } from '@ez2bms/chart-core';
 import { expect, test, type Page } from '@playwright/test';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the ?e2e hook is the live App */
@@ -59,6 +61,46 @@ test('a song of the EZ2AC folder becomes a song folder: charts, keysounds, key, 
     return String.fromCharCode(...b.subarray(0, 4));
   });
   expect(riff).toBe('RIFF');
+  // The game's disc and eyecatch (system/disc, system/eyecatch) as plain BMPs,
+  // named by the song file - and drawn in the song manager's Art tab.
+  const art = await page.evaluate(async () => {
+    const a = (window as unknown as W).__ez2bms;
+    const head = async (f: string) =>
+      String.fromCharCode(...(await a.backend.readFile(`/songs/Alpha Song/${f}`)).subarray(0, 2));
+    return {
+      disc: a.project.sidecar.disc,
+      discs: a.project.sidecar.discs,
+      eyecatch: a.project.sidecar.eyecatch,
+      heads: [await head('disc.bmp'), await head('disc-hd.bmp'), await head('eyecatch.bmp')],
+      images: a.project.images,
+    };
+  });
+  expect(art).toEqual({
+    disc: { src: 'disc.bmp' },
+    discs: { HD: { src: 'disc-hd.bmp' } },
+    eyecatch: { src: 'eyecatch.bmp', mode: 'stretch' },
+    heads: ['BM', 'BM', 'BM'],
+    images: ['disc-hd.bmp', 'disc.bmp', 'eyecatch.bmp'],
+  });
+  await page.getByTestId('open-song').click();
+  await page.getByTestId('song-tab-art').click();
+  for (const card of ['disc', 'eyecatch'] as const) {
+    await expect(page.getByTestId(`art-${card}`)).not.toContainText('not in the song folder');
+    await expect
+      .poll(() =>
+        page
+          .getByTestId(`art-${card}`)
+          .getByTestId('art-preview')
+          .evaluate((c: HTMLCanvasElement) => {
+            const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+            let n = 0;
+            for (let i = 0; i < d.length; i += 16) if (d[i]! + d[i + 1]! + d[i + 2]! > 60) n++;
+            return n / (d.length / 16);
+          }),
+      )
+      .toBeGreaterThan(0.2);
+  }
+  await page.keyboard.press('Escape');
   // What could not come across is in Issues, until forgotten.
   await page.getByTestId('lint').click();
   const issues = page.getByTestId('issues');
@@ -90,6 +132,44 @@ async function stageBms(page: Page, dir: string) {
     [dir, bms(body)] as const,
   );
 }
+
+test('an executable that does not decrypt song.bin is passed over, and named when it is the only one', async ({
+  page,
+}) => {
+  await page.goto('/?e2e&game');
+  const write = (path: string, bytes: number[]) =>
+    page.evaluate(
+      ([path, bytes]) =>
+        (window as unknown as W).__ez2bms.backend.writeBytes(
+          path,
+          new Uint8Array(bytes as number[]),
+          false,
+        ),
+      [path, bytes] as const,
+    );
+  // Another program beside the game, listed before the real one, mapping the
+  // table address with other bytes: it was taken before, and every song.bin
+  // then said the wrong magic. Now it is passed over.
+  await write('/game/a-launcher.exe', [
+    ...synthPe([{ va: SONGDB_TABLE_VA, bytes: new Uint8Array(64).fill(0x5a) }]),
+  ]);
+  // No executable chosen on the EZ2PORT panel ("let EZ2PORT find it").
+  await page.evaluate(() => (window as unknown as W).__ez2bms.settings.set('exe', null));
+  await page.getByTestId('import').click();
+  const w = page.getByTestId('import-wizard');
+  await expect(w.getByTestId('import-song')).toHaveCount(2);
+  // The one chosen on the EZ2PORT panel (the made-up game's) no longer holds
+  // the tables, and nothing else does: it says which, and what to do. (A new
+  // page: the wizard keeps the game it read.)
+  await page.goto('/?e2e&game');
+  await write('/game/ez2ac_unpacked.exe', [0x4d, 0x5a, 0, 0]);
+  await page.getByTestId('import').click();
+  await expect(w).toContainText('ez2ac_unpacked.exe');
+  await expect(w).toContainText('does not decrypt song.bin');
+  // "Read again" stays a button, not the list's whole height.
+  const again = (await w.getByRole('button', { name: 'Read again' }).boundingBox())!;
+  expect(again.height).toBeLessThan(60);
+});
 
 test('a Shift-JIS BMS folder imports with the random value chosen', async ({ page }) => {
   await page.goto('/?e2e');

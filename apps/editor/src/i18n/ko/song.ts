@@ -128,6 +128,10 @@ export const song: Record<keyof typeof en, string> = {
   'art.disc.name': '디스크',
   'art.disc.what': '{w}x{h} - 선곡 화면에서 회전',
   'art.disc.image': '디스크 이미지',
+  'art.disc.tier': '난이도',
+  'art.disc.sameAsNm': 'NM과 같음',
+  'art.disc.tierNote':
+    '곡 선택 화면의 {tier} 디스크입니다. EZ2PORT가 이를 읽기 전까지는 배포한 곡의 모든 난이도에 NM 디스크가 표시됩니다.',
   // Crop is 크롭: 자르기 is the glossary's chop.
   'art.disc.crop': '디스크 크롭: 드래그로 이동, 방향키로 미세 조정, +/- 키로 확대·축소',
   'art.disc.off': '디스크 없음: 이 곡에서는 껐습니다.',

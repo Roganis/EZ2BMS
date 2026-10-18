@@ -4,6 +4,12 @@ export const transfer = {
   // The game folder, read the same way for import and export (state/game.ts).
   'import.game.noRoot': 'Set your EZ2AC data folder on the EZ2PORT panel first',
   'import.game.noSongs': 'No songs found: is this the folder with sound/ and system/ in it?',
+  'import.game.exeNone':
+    'No .exe in the game folder decrypts its song.bin (tried {files}). Choose your unpacked EZ2AC executable on the EZ2PORT panel.',
+  'import.game.exeSetWrong':
+    'The executable chosen on the EZ2PORT panel ({file}) does not decrypt song.bin, and nothing else in the game folder does: it may be the packed one, or another version of EZ2AC.',
+  'import.game.exeNoFiles':
+    'No .exe in the game folder, and song.bin is encrypted: choose your unpacked EZ2AC executable on the EZ2PORT panel.',
 
   'import.label': 'Import a song',
   'import.title': 'Import',
@@ -67,6 +73,9 @@ export const transfer = {
   // {file}: the first that failed, followed by ... when there are more.
   'import.copyFailed':
     '{n, plural, one {{n} keysound} other {{n} keysounds}} could not be copied: {file}',
+  // The game's disc or eyecatch picture could not be written into the new song folder; {files}
+  // names each with the reason.
+  'import.artFailed': 'Imported, but its pictures could not be written: {files}',
   'import.done':
     'Imported {n, plural, one {{n} chart} other {{n} charts}} - Issues says what could not come across',
   'import.failed': 'Import failed: {error}',
