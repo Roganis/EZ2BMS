@@ -4,7 +4,7 @@ What each release of EZ2BMS brings. The milestones behind it are in the
 README's checklist; what has been checked on real machines is in
 AI-DISCLOSURE.md.
 
-## 0.2.0 - not yet released
+## 0.2.0 - 2026-10-18
 
 The first release: everything from the chart editor to the cabinet, in
 English, Korean and Japanese.
